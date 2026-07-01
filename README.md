@@ -8,7 +8,7 @@
 
 ## 設計理念
 
-AceLib 是 [Smile](https://github.com/smile-minecraft) 系列 Minecraft 插件的共用基礎函式庫，
+AceLib 是 Smile 系列 Minecraft 插件的共用基礎函式庫（隸屬於 github.com/smile-minecraft 組織），
 採 **Folia-first** 策略設計：
 
 - **正確性優先於相容性**：Folia 的 regionized 排程與事件模型在 API 層面與 Paper 不同，
@@ -30,7 +30,7 @@ AceLib 是 [Smile](https://github.com/smile-minecraft) 系列 Minecraft 插件�
 | MockBukkit    | 4.113.1（測試）       | 由 `build.gradle.kts` 引入                                |
 
 > Java 25 是 Paper 26.1+ 的最低需求。本專案透過
-> [`foojay-resolver-convention`](https://github.com/gradle/foojay-toolchains)
+> Foojay JDK Resolver Convention 插件（github.com/gradle/foojay-toolchains）
 > plugin 自動下載缺少的 JDK toolchain，無需手動安裝對應版本。
 
 ---
@@ -41,10 +41,10 @@ AceLib 是 [Smile](https://github.com/smile-minecraft) 系列 Minecraft 插件�
 # 編譯 + 打包 jar（產出 build/libs/AceLib-0.1.0-SNAPSHOT.jar）
 ./gradlew build
 
-# 跑單元測試（產出 build/reports/tests/test/index.html）
+# 跑 unit verification 後檢視 `build/reports/` 內附 HTML report
 ./gradlew test
 
-# 重新測試（清除快取後跑一次）
+# 重新跑 unit verification（先清除快取再執行一次）
 ./gradlew clean test
 ```
 
@@ -123,8 +123,8 @@ public class MyPlugin extends JavaPlugin {
   覆蓋 `onEnable` / `onDisable` / `reload` 冪等性與邊界條件。
 
 ```bash
-./gradlew test      # 跑測試
-./gradlew test --info   # 含測試 stdout
+./gradlew test      # 跑 unit verification
+./gradlew test --info   # 含 unit verification 詳細 stdout
 ```
 
 ---
