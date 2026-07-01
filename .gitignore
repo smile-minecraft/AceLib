@@ -1,0 +1,36 @@
+# Build output
+build/
+target/
+out/
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+nbproject/
+nbbuild/
+nbdist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Agent memory (do not commit local L1 memory)
+.opencode/
+
+# Local secrets
+*.env
+.env
