@@ -1,6 +1,9 @@
 package com.smile.acelib.platform;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,5 +62,88 @@ class PlatformDetectorTest {
         assertEquals("Folia", Platform.FOLIA.getDisplayName());
         assertEquals("Paper", Platform.PAPER.getDisplayName());
         assertEquals("Unknown", Platform.UNKNOWN.getDisplayName());
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 1 新增測試：isFolia/isPaper classpath 偵測 + 版本偵測 + capability
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("isFoliaClasspathAvailable() 在測試 classloader（僅含 Paper）下回傳 false")
+    void isFoliaClasspathAvailable_falseOnTestClassloader() {
+        // MockBukkit 提供 org.bukkit.Bukkit 但不提供 Folia RegionizedServer
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        assertFalse(detector.isFoliaClasspathAvailable(),
+            "測試 classloader 找不到 Folia marker，必須 false");
+    }
+
+    @Test
+    @DisplayName("isFoliaClasspathAvailable() 在空 classloader 下回傳 false")
+    void isFoliaClasspathAvailable_falseOnEmptyClassloader() {
+        ClassLoader empty = new ClassLoader(null) {};
+        PlatformDetector detector = new PlatformDetector(empty);
+        assertFalse(detector.isFoliaClasspathAvailable());
+    }
+
+    @Test
+    @DisplayName("isPaperClasspathAvailable() 在測試 classloader（MockBukkit 提供 Bukkit）下回傳 true")
+    void isPaperClasspathAvailable_trueOnTestClassloader() {
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        assertTrue(detector.isPaperClasspathAvailable(),
+            "測試 classloader 應找到 org.bukkit.Bukkit");
+    }
+
+    @Test
+    @DisplayName("isPaperClasspathAvailable() 在空 classloader 下回傳 false")
+    void isPaperClasspathAvailable_falseOnEmptyClassloader() {
+        ClassLoader empty = new ClassLoader(null) {};
+        PlatformDetector detector = new PlatformDetector(empty);
+        assertFalse(detector.isPaperClasspathAvailable());
+    }
+
+    @Test
+    @DisplayName("detectMinecraftVersion(null) null-safe 回傳 'unknown'，不丟例外")
+    void detectMinecraftVersion_nullServer_returnsUnknown() {
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        assertDoesNotThrow(() -> {
+            String v = detector.detectMinecraftVersion(null);
+            assertEquals("unknown", v, "null server 必須回傳 'unknown'");
+        });
+    }
+
+    @Test
+    @DisplayName("detectJavaVersion() 不為 null、非空白")
+    void detectJavaVersion_nonBlank() {
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        String v = detector.detectJavaVersion();
+        assertNotNull(v, "detectJavaVersion 不可回傳 null");
+        assertFalse(v.trim().isEmpty(), "detectJavaVersion 不可回傳空白字串");
+        // 寬鬆斷言：可能是 "unknown"（理論上 System.getProperty 永不失敗）或實際版本字串
+        assertTrue(v.equals("unknown") || v.matches(".*\\d+.*"),
+            "detectJavaVersion 應為 unknown 或包含版本數字；實際: " + v);
+    }
+
+    @Test
+    @DisplayName("detectCapability(FOLIA) 與 PlatformCapability.forPlatform(FOLIA) 等價")
+    void detectCapability_matchesFactory() {
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        // 不依賴 classpath 實際結果：測試 factory 與 detectCapability 一致性
+        assertEquals(PlatformCapability.forPlatform(Platform.FOLIA),
+            detector.detectCapability(Platform.FOLIA));
+        assertEquals(PlatformCapability.forPlatform(Platform.PAPER),
+            detector.detectCapability(Platform.PAPER));
+        assertEquals(PlatformCapability.forPlatform(Platform.UNKNOWN),
+            detector.detectCapability(Platform.UNKNOWN));
+        // FOLIA 不等於 PAPER
+        assertNotEquals(
+            detector.detectCapability(Platform.FOLIA),
+            detector.detectCapability(Platform.PAPER));
+    }
+
+    @Test
+    @DisplayName("detectCapability(null) 必須拋例外")
+    void detectCapability_null_throws() {
+        PlatformDetector detector = new PlatformDetector(getClass().getClassLoader());
+        assertThrows(NullPointerException.class, () -> detector.detectCapability(null));
     }
 }
