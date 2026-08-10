@@ -235,6 +235,18 @@ public class AceLibPlugin extends JavaPlugin {
         }
         SafeSchedulerImpl oldScheduler = this.scheduler;
         DiagnosticsService oldDiagnostics = this.diagnostics;
+
+        // 解除已綁定的 SafeEventRegistry lifecycle；放在 scheduler / diagnostics
+        // teardown 之前，避免 listener 在 scheduler 模組標記 FAILED 之後才被
+        // dispatch（此時 recorder sink 已清除，會丟 NPE）。
+        // AceLibEvents.unbind 內部會呼叫 SafeEventRegistryImpl.onPluginDisable，
+        // 後者真的解除 Bukkit HandlerList 上的 bridge listener。
+        try {
+            com.smile.acelib.event.AceLibEvents.unbind(this);
+        } catch (Throwable t) {
+            logFine("AceLibEvents.unbind failed (ignored): " + t.getMessage());
+        }
+
         this.ready = false;
         this.server = null;
         this.platformDetector = null;
