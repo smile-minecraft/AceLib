@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
@@ -80,6 +81,17 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private final Set<ScheduledTask> tracked = ConcurrentHashMap.newKeySet();
     private final AtomicLong fallbackTick = new AtomicLong(0L);
     private volatile boolean disabled = false;
+    /**
+     * 錯誤紀錄 sink（Phase 14 wiring）。
+     *
+     * <p>當 {@code DiagnosticsService} 透過 {@link #setRecordSink(BiConsumer)}
+     * 注入後，每次 {@link #recorder} 收到一筆紀錄，scheduler 都會以
+     * {@code (code, detail)} 形式回呼 sink；讓 scheduler 錯誤可被導向
+     * diagnostics 的節流路徑。此欄位為 {@code volatile}，支援
+     * {@code setRecordSink}/{@code clearRecordSink} 的 race-free 切換；
+     * sink 本身拋例外不會影響 scheduler 主流程或 recorder 記錄。</p>
+     */
+    private volatile BiConsumer<String, String> recordSink;
 
     /**
      * 建構子。
@@ -128,7 +140,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     public ScheduledTask runForPlayer(Player player, Runnable runnable) {
         Objects.requireNonNull(player, "player");
         if (!player.isOnline()) {
-            recorder.record(TaskErrorRecord.cancelled(
+            recordAndNotify(TaskErrorRecord.cancelled(
                 TaskType.PLAYER, ERR_PLAYER_OFFLINE,
                 "player is offline (uuid=" + safeUuid(player) + ")"));
             return new NoOpScheduledTask(plugin, TaskType.PLAYER);
@@ -141,7 +153,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         Objects.requireNonNull(player, "player");
         // 離線檢查先於 IAE 檢查：實務上「目標已失效」比「引數錯誤」更貼近使用者直覺
         if (!player.isOnline()) {
-            recorder.record(TaskErrorRecord.cancelled(
+            recordAndNotify(TaskErrorRecord.cancelled(
                 TaskType.PLAYER_LATER, ERR_PLAYER_OFFLINE,
                 "player is offline (uuid=" + safeUuid(player) + ")"));
             return new NoOpScheduledTask(plugin, TaskType.PLAYER_LATER);
@@ -154,7 +166,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     public ScheduledTask runForEntity(Entity entity, Runnable runnable) {
         Objects.requireNonNull(entity, "entity");
         if (entity.isDead() || !entity.isValid()) {
-            recorder.record(TaskErrorRecord.cancelled(
+            recordAndNotify(TaskErrorRecord.cancelled(
                 TaskType.ENTITY, ERR_ENTITY_INVALID,
                 "entity is dead/invalid (type=" + entity.getType() + ")"));
             return new NoOpScheduledTask(plugin, TaskType.ENTITY);
@@ -167,7 +179,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         Objects.requireNonNull(location, "location");
         Chunk chunk = location.getChunk();
         if (chunk == null || !chunk.isLoaded()) {
-            recorder.record(TaskErrorRecord.cancelled(
+            recordAndNotify(TaskErrorRecord.cancelled(
                 TaskType.LOCATION, ERR_CHUNK_UNAVAILABLE,
                 "chunk not loaded (world=" + safeWorld(location) + ")"));
             return new NoOpScheduledTask(plugin, TaskType.LOCATION);
@@ -245,6 +257,39 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     }
 
     /**
+     * 設定錯誤紀錄 sink（Phase 14 diagnostics wiring）。
+     *
+     * <p>注入後，每次內部 {@link #recorder} 收到一筆 {@link TaskErrorRecord}，
+     * scheduler 都會以 {@code (code, detail)} 形式回呼 sink；通常由
+     * {@link com.smile.acelib.diagnostics.DiagnosticsService DiagnosticsService}
+     * 透過 {@code bindScheduler} 自動注入，後續 plugins 也能以自訂 sink
+     * 整合（例如發送自訂 alert）。</p>
+     *
+     * <p>重複呼叫會覆蓋前一個 sink；傳入 {@code null} 等同於
+     * {@link #clearRecordSink()}。sink 拋例外會被吞掉，不影響 scheduler 主流程
+     * 與 recorder 記錄。</p>
+     *
+     * @param sink 錯誤 sink；可為 null
+     * @since Phase 14 (Plan §十九)
+     */
+    public void setRecordSink(BiConsumer<String, String> sink) {
+        this.recordSink = sink;
+    }
+
+    /**
+     * 解除錯誤紀錄 sink（Phase 14 diagnostics wiring）。
+     *
+     * <p>通常由 {@link com.smile.acelib.diagnostics.DiagnosticsService
+     * DiagnosticsService} 在 {@code bindScheduler(null)} 或 plugin onDisable
+     * 時呼叫，確保 disable 後的 sink 不會繼續被觸發。</p>
+     *
+     * @since Phase 14 (Plan §十九)
+     */
+    public void clearRecordSink() {
+        this.recordSink = null;
+    }
+
+    /**
      * 取得目前已追蹤的任務數量（測試與診斷用）。
      *
      * @return tracked task 數量
@@ -278,7 +323,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         Objects.requireNonNull(runnable, "runnable");
 
         if (disabled) {
-            recorder.record(TaskErrorRecord.cancelled(
+            recordAndNotify(TaskErrorRecord.cancelled(
                 type, ERR_PLUGIN_DISABLED, "scheduler is disabled"));
             return new NoOpScheduledTask(plugin, type);
         }
@@ -293,7 +338,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
             } else if (capability.globalScheduler()) {
                 task = dispatchPaper(wrapped, delayTicks, periodTicks, async);
             } else {
-                recorder.record(TaskErrorRecord.cancelled(
+                recordAndNotify(TaskErrorRecord.cancelled(
                     type, ERR_PLATFORM_UNSUPPORTED,
                     "platform capability does not include regionScheduling nor globalScheduler"));
                 return new NoOpScheduledTask(plugin, type);
@@ -303,7 +348,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
             return scheduled;
         } catch (Throwable t) {
             // dispatch 階段失敗（Folia API 不存在、IllegalStateException、Refl 錯誤等）
-            recorder.record(TaskErrorRecord.threw(
+            recordAndNotify(TaskErrorRecord.threw(
                 type, ERR_PLATFORM_UNSUPPORTED,
                 "dispatch failed: " + safeMessage(t), t));
             return new NoOpScheduledTask(plugin, type);
@@ -470,9 +515,28 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         try {
             user.run();
         } catch (Throwable t) {
-            recorder.record(TaskErrorRecord.threw(
+            recordAndNotify(TaskErrorRecord.threw(
                 type, ERR_TASK_EXCEPTION,
                 "user task threw exception: " + safeMessage(t), t));
+        }
+    }
+
+    /**
+     * 統一寫入 {@link #recorder} 並通知 {@link #recordSink}。
+     *
+     * <p>sink 為 {@code null} 時退化成裸 {@code recorder.record(...)}（既有行為）。
+     * sink 拋例外時<strong>不</strong>冒到 caller，避免污染 scheduler 主流程
+     * 或 recorder 內部狀態。</p>
+     */
+    private void recordAndNotify(TaskErrorRecord record) {
+        recorder.record(record);
+        BiConsumer<String, String> sink = this.recordSink;
+        if (sink != null && record != null) {
+            try {
+                sink.accept(record.code(), record.detail());
+            } catch (Throwable ignore) {
+                // sink 失敗不應影響 scheduler；保留既有錯誤紀錄語意
+            }
         }
     }
 

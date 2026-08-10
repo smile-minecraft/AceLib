@@ -9,6 +9,7 @@ import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -257,5 +258,75 @@ class SafeSchedulerErrorTest {
         assertEquals("ACELIB-SCHED-001", rec.code());
         assertNotNull(rec.cause());
         assertNotNull(rec.detail());
+    }
+
+    // -----------------------------------------------------------------
+    // Phase 14：recordSink hook（讓 DiagnosticsService 可訂閱錯誤流）
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("setRecordSink 後，recorder.record 自動觸發 sink.accept(code, detail)")
+    void setRecordSink_invokedOnRecord() {
+        AtomicInteger called = new AtomicInteger(0);
+        String[] lastCode = new String[1];
+        String[] lastDetail = new String[1];
+        scheduler.setRecordSink((code, detail) -> {
+            called.incrementAndGet();
+            lastCode[0] = code;
+            lastDetail[0] = detail;
+        });
+
+        scheduler.runGlobal(() -> { throw new RuntimeException("user-boom"); });
+        server.getScheduler().performTicks(1L);
+
+        assertTrue(called.get() >= 1,
+            "sink 必須被呼叫至少一次（任務拋錯 → SCHED-001 → sink）");
+        assertEquals("ACELIB-SCHED-001", lastCode[0]);
+        assertNotNull(lastDetail[0]);
+        assertTrue(lastDetail[0].contains("user-boom") || lastDetail[0].contains("RuntimeException"),
+            "sink detail 應包含錯誤訊息，實際: " + lastDetail[0]);
+    }
+
+    @Test
+    @DisplayName("clearRecordSink 後，sink 不再被呼叫（unbind 安全）")
+    void clearRecordSink_disablesCallback() {
+        AtomicInteger called = new AtomicInteger(0);
+        scheduler.setRecordSink((code, detail) -> called.incrementAndGet());
+        scheduler.clearRecordSink();
+
+        scheduler.runGlobal(() -> { throw new RuntimeException("x"); });
+        server.getScheduler().performTicks(1L);
+
+        assertEquals(0, called.get(),
+            "clearRecordSink 後 sink 必須不被呼叫，實際: " + called.get());
+    }
+
+    @Test
+    @DisplayName("setRecordSink(null) 等同 clear：sink 不再被呼叫")
+    void setRecordSinkNull_disablesCallback() {
+        AtomicInteger called = new AtomicInteger(0);
+        scheduler.setRecordSink((code, detail) -> called.incrementAndGet());
+        scheduler.setRecordSink(null);
+
+        scheduler.runLater(() -> {}, 1L);
+        server.getScheduler().performTicks(2L);
+
+        assertEquals(0, called.get(),
+            "setRecordSink(null) 後 sink 必須不被呼叫，實際: " + called.get());
+    }
+
+    @Test
+    @DisplayName("sink 拋例外不影響 scheduler 主流程與 recorder")
+    void sinkThrowing_doesNotBreakScheduler() {
+        scheduler.setRecordSink((code, detail) -> {
+            throw new RuntimeException("sink-boom");
+        });
+
+        // scheduler 主流程仍應正常運作；任務拋錯仍記錄 SCHED-001
+        scheduler.runGlobal(() -> { throw new RuntimeException("user-boom"); });
+        server.getScheduler().performTicks(1L);
+
+        assertTrue(scheduler.getRecorder().contains("ACELIB-SCHED-001"),
+            "sink 拋例外不應阻擋 recorder 記錄錯誤");
     }
 }

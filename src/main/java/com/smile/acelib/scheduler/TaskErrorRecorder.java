@@ -6,6 +6,9 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 排程錯誤紀錄器。
@@ -14,9 +17,22 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  * 內部以 {@link Deque}（容量預設 100）保存最近的錯誤紀錄，
  * 當超出容量時自動淘汰最舊的紀錄（FIFO）。</p>
  *
+ * <h2>Recorder-level sink（Phase 14 wiring）</h2>
+ * <p>{@link #setRecordSink(Consumer)} 注入一個 {@link Consumer} 後，
+ * <strong>每次</strong> {@link #record(TaskErrorRecord)} 被呼叫
+ * （包含 {@link SafeSchedulerImpl} 內部以及外部直接呼叫
+ * {@code scheduler.getRecorder().record(...)}）都會同步回呼 listener。
+ * 這讓 {@link com.smile.acelib.diagnostics.DiagnosticsService} 可訂閱
+ * 完整錯誤流，無論錯誤來自 scheduler 內部或外部 caller。</p>
+ *
+ * <p>sink 拋例外<strong>不</strong>冒到 caller，也不會影響 recorder 寫入；
+ * 例外會以 {@link Level#FINE} 級別寫入 plugin logger（便於追蹤但不污染主流程）。</p>
+ *
  * <h2>執行緒安全</h2>
  * <p>所有 {@code public} 方法皆為 thread-safe，可於 Folia 多 region 並行環境下
- * 直接使用。底層採用 {@link ConcurrentLinkedDeque} 達成 lock-free 操作。</p>
+ * 直接使用。底層採用 {@link ConcurrentLinkedDeque} 達成 lock-free 操作。
+ * {@code recordSink} 為 {@code volatile}，支援 {@code setRecordSink}/
+ * {@code clearRecordSink} 的 race-free 切換。</p>
  *
  * <h2>容量策略</h2>
  * <p>預設容量為 {@value #DEFAULT_CAPACITY} 筆。當 {@link #record(TaskErrorRecord)}
@@ -39,8 +55,20 @@ public final class TaskErrorRecorder {
     /** 預設保留容量（Plan §七 Phase 2 規格：100 筆）。 */
     public static final int DEFAULT_CAPACITY = 100;
 
+    /** Plugin logger name（sink 失敗時輸出 FINE-level 訊息）。 */
+    private static final Logger LOGGER = Logger.getLogger("AceLib");
+
     private final int capacity;
     private final Deque<TaskErrorRecord> deque = new ConcurrentLinkedDeque<>();
+    /**
+     * Recorder-level sink（Phase 14 wiring）。
+     *
+     * <p>由 {@link #setRecordSink(Consumer)} 注入；每次 {@link #record}
+     * 寫入一筆紀錄後同步回呼 listener。為 {@code volatile}，支援
+     * race-free 的切換；sink 拋例外會被吞掉並以 {@link Level#FINE}
+     * 級別 log，不影響 recorder 主流程。</p>
+     */
+    private volatile Consumer<TaskErrorRecord> recordSink;
 
     /**
      * 使用預設容量（{@value #DEFAULT_CAPACITY}）建立實例。
@@ -68,6 +96,10 @@ public final class TaskErrorRecorder {
      * <p>若寫入後總筆數超過容量，最舊的一筆會被淘汰。
      * 若傳入 {@code null} 則為 no-op（避免上游 NPE）。</p>
      *
+     * <p>若已透過 {@link #setRecordSink(Consumer)} 注入 recorder-level sink，
+     * 此方法會在寫入 deque 後同步回呼 listener（{@code record} 不為 null 時）。
+     * sink 拋例外<strong>不會</strong>冒到 caller，也不會影響 recorder 寫入。</p>
+     *
      * @param record 要寫入的紀錄；可為 null（no-op）
      */
     public void record(TaskErrorRecord record) {
@@ -79,6 +111,63 @@ public final class TaskErrorRecorder {
         while (deque.size() > capacity) {
             deque.pollFirst();
         }
+        notifySink(record);
+    }
+
+    /**
+     * 內部 sink 通知：依目前 volatile 引用取值，避免 race 期間 listener 被換掉。
+     */
+    private void notifySink(TaskErrorRecord record) {
+        Consumer<TaskErrorRecord> sink = this.recordSink;
+        if (sink == null) {
+            return;
+        }
+        try {
+            sink.accept(record);
+        } catch (Throwable t) {
+            // sink 拋例外不影響 recorder；保留既有錯誤紀錄語意
+            LOGGER.log(Level.FINE,
+                "TaskErrorRecorder recordSink threw (ignored): " + t.getMessage(), t);
+        }
+    }
+
+    /**
+     * 注入 recorder-level sink（Phase 14 diagnostics wiring）。
+     *
+     * <p>注入後，每次 {@link #record(TaskErrorRecord)} 寫入一筆紀錄
+     * （無論來源是 {@link SafeSchedulerImpl} 內部或外部 caller 直接呼叫
+     * {@code scheduler.getRecorder().record(...)}）都會同步回呼 sink，
+     * 讓 {@link com.smile.acelib.diagnostics.DiagnosticsService} 之類的
+     * observer 可接收到完整錯誤流。</p>
+     *
+     * <p>重複呼叫會覆蓋前一個 sink；傳入 {@code null} 等同於
+     * {@link #clearRecordSink()}。sink 拋例外會被吞掉並以
+     * {@link Level#FINE} 級別 log，不會影響 recorder 寫入或主流程。</p>
+     *
+     * <p>此方法為 {@code volatile} 寫入，多執行緒環境下 sink 切換為
+     * race-free（happens-before 透過 volatile 保證）。</p>
+     *
+     * @param sink 觀察者；可為 null
+     * @see #clearRecordSink()
+     * @since Phase 14 (Plan §十九)
+     */
+    public void setRecordSink(Consumer<TaskErrorRecord> sink) {
+        this.recordSink = sink;
+    }
+
+    /**
+     * 解除 recorder-level sink（Phase 14 diagnostics wiring）。
+     *
+     * <p>通常由 {@link com.smile.acelib.diagnostics.DiagnosticsService
+     * DiagnosticsService} 在 {@code bindScheduler(null)} 或 plugin onDisable
+     * 時呼叫，確保 disable 後的 listener 不會繼續被觸發。</p>
+     *
+     * <p>呼叫後，{@link #record(TaskErrorRecord)} 不會再回呼任何 listener。</p>
+     *
+     * @since Phase 14 (Plan §十九)
+     */
+    public void clearRecordSink() {
+        this.recordSink = null;
     }
 
     /**

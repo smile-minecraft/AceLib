@@ -30,7 +30,21 @@ public enum Platform {
     Platform(String displayName) {
         this.displayName = displayName;
         // 於 enum 建構期計算 capability，確保每個 enum value 都有確定的 profile
-        this.capability = PlatformCapability.forPlatform(this);
+        //
+        // 注意：不可在此呼叫 PlatformCapability.forPlatform(this)。
+        // Java enum 靜態初始化是依宣告順序呼叫 constructor：建構 PAPER 時
+        // `Platform.PAPER` 靜態欄位本身尚未被賦值（仍是 null），factory
+        // 內的 `p == Platform.PAPER` reference 比較會回 false，導致
+        // PAPER 落入「全 false」保守降級，capability profile 與實際不符。
+        // 改以 `name()`（已在 constructor 內可安全讀取的字串）分流，
+        // 即可完全規避此 enum 初始化順序問題，語意與 factory 等價。
+        this.capability = switch (name()) {
+            case "FOLIA" -> new PlatformCapability(true, true, true, true);
+            case "PAPER" -> new PlatformCapability(false, true, true, false);
+            case "UNKNOWN" -> new PlatformCapability(false, false, false, false);
+            // 新增列舉值時保守降級（與 PlatformCapability.forPlatform 預設行為一致）
+            default -> new PlatformCapability(false, false, false, false);
+        };
     }
 
     /**
