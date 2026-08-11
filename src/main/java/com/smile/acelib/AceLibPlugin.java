@@ -1,16 +1,35 @@
 package com.smile.acelib;
 
+import com.smile.acelib.data.DataStore;
+import com.smile.acelib.data.JsonCodec;
+import com.smile.acelib.data.JsonCodecImpl;
+import com.smile.acelib.data.JsonFileDataStore;
+import com.smile.acelib.data.SchemaVersion;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
+import com.smile.acelib.player.PlayerDataService;
+import com.smile.acelib.player.PlayerStateException;
 import com.smile.acelib.scheduler.SafeSchedulerImpl;
+import java.nio.file.Path;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Server;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -87,6 +106,25 @@ public class AceLibPlugin extends JavaPlugin {
      * instance（{@link DiagnosticsService} 本身支援 unbind 查詢）。</p>
      */
     private volatile DiagnosticsService diagnostics;
+    /**
+     * 當前綁定的 {@link PlayerDataService}。
+     *
+     * <p>於 onEnable 建立並 register Bukkit
+     * {@code PlayerJoinEvent}/{@code PlayerQuitEvent} listener 將事件委派給 service。
+     * onDisable 時 shutdown service（flush dirty 資料、reject new work、清除 in-flight
+     * tracking），reload 時 shutdown + 重建（保留既有 API 語意）。</p>
+     *
+     * <p>未 onEnable 時為 null；onEnable 之前呼叫 {@link #getPlayerDataService()}
+     * 必須回傳 null（safe-default）。</p>
+     */
+    private volatile PlayerDataService playerDataService;
+    /**
+     * 當前 {@link PlayerDataService} 使用的 listener。
+     * 持有 reference 是為了 onDisable 時可透過 {@link HandlerList#unregister(Listener)}
+     * 確保 listener 不殘留於 Bukkit HandlerList。
+     */
+    private volatile PlayerLifecycleListener playerLifecycleListener;
+    private volatile boolean playerLifecycleRegistered;
 
     /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
@@ -132,6 +170,9 @@ public class AceLibPlugin extends JavaPlugin {
      */
     volatile Runnable reloadNewSchedulerConstructionFailureHook = null;
 
+    /** Package-private test seam for a controlled player-service shutdown failure. */
+    volatile Runnable reloadPlayerShutdownFailureHook = null;
+
     public AceLibPlugin() {
         // 預先放一個 uninitialized facade，避免 getApi() 在 onEnable 前�例外
         this.api = AceLibApi.uninitialized();
@@ -158,6 +199,7 @@ public class AceLibPlugin extends JavaPlugin {
         Server s = getServer();
         PlatformDetector d = new PlatformDetector(getClass().getClassLoader());
         onEnable(s, d, Clock.system());
+        onPluginReady();
     }
 
     /**
@@ -222,6 +264,10 @@ public class AceLibPlugin extends JavaPlugin {
             () -> ready,
             () -> reload()
         );
+
+        // 建立玩家資料服務與事件 listener；註冊延後到 Bukkit 確認 plugin enabled。
+        bindPlayerDataService(s);
+
         this.ready = true;
         logInfo("AceLib {0} enabled on {1} (capability={2})",
             api.getVersion(), api.getPlatform().getDisplayName(), capability);
@@ -235,6 +281,8 @@ public class AceLibPlugin extends JavaPlugin {
         }
         SafeSchedulerImpl oldScheduler = this.scheduler;
         DiagnosticsService oldDiagnostics = this.diagnostics;
+        PlayerDataService oldPlayerService = this.playerDataService;
+        PlayerLifecycleListener oldListener = this.playerLifecycleListener;
 
         // 解除已綁定的 SafeEventRegistry lifecycle；放在 scheduler / diagnostics
         // teardown 之前，避免 listener 在 scheduler 模組標記 FAILED 之後才被
@@ -245,6 +293,26 @@ public class AceLibPlugin extends JavaPlugin {
             com.smile.acelib.event.AceLibEvents.unbind(this);
         } catch (Throwable t) {
             logFine("AceLibEvents.unbind failed (ignored): " + t.getMessage());
+        }
+
+        // 先 unregister Bukkit listener 再 shutdown service。
+        // 順序理由：listener unregister 後 Bukkit 不再 dispatch join/quit；
+        // shutdown service 會 flush dirty 並 terminate；此後即使有人持有
+        // service reference 也無法新增工作。
+        if (oldListener != null) {
+            HandlerList.unregisterAll(oldListener);
+            this.playerLifecycleListener = null;
+        }
+        this.playerLifecycleRegistered = false;
+        if (oldPlayerService != null) {
+            try {
+                oldPlayerService.shutdown();
+            } catch (PlayerStateException failure) {
+                logSevereWithCode(failure.getCode(),
+                    "player data shutdown failed during plugin disable: " + failure.getMessage());
+            } finally {
+                this.playerDataService = null;
+            }
         }
 
         this.ready = false;
@@ -362,6 +430,22 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
+     * 取得當前綁定的 {@link PlayerDataService}（玩家資料服務）。
+     *
+     * <p>於 onEnable 建立；reload 時 shutdown 舊 service + 建立新 service；onDisable
+     * 時 shutdown。呼叫端可用此 service 查詢 / 修改玩家資料，或測試驗證 lifecycle
+     * 整合。</p>
+     *
+     * <p>onEnable 之前回傳 null；onDisable 之後回傳 null。reload 失敗時可能仍
+     * 回傳既有 service（recoverable failure，service 仍可用）。</p>
+     *
+     * @return 當前 {@link PlayerDataService}；可能為 null（plugin 未啟用）
+     */
+    PlayerDataService getPlayerDataService() {
+        return playerDataService;
+    }
+
+    /**
      * 重新偵測平台並發佈新 API 實例（Phase 14：既有 diagnostics reference in-place 重綁）。
      *
      * <h2>交易式失敗語意（M-14-04）</h2>
@@ -410,6 +494,8 @@ public class AceLibPlugin extends JavaPlugin {
 
         SafeSchedulerImpl oldScheduler = this.scheduler;
         DiagnosticsService ds = this.diagnostics;
+        PlayerDataService oldPlayerService = this.playerDataService;
+        PlayerLifecycleListener oldListener = this.playerLifecycleListener;
 
         // -----------------------------------------------------------------
         // Phase A：解除舊 scheduler（recorder listener + onPluginDisable）
@@ -479,9 +565,9 @@ public class AceLibPlugin extends JavaPlugin {
         // 避免留下「scheduler reference 雖未 commit、但 diagnostics 內容已
         // 是新平台」的 partial commit 假狀態。
         // -----------------------------------------------------------------
+        DiagnosticsMetadataSnapshot oldMeta = ds == null ? null : DiagnosticsMetadataSnapshot.capture(ds);
         if (ds != null) {
             // 1. 快照既有 metadata（reload 前值）；rollback 時以此還原
-            DiagnosticsMetadataSnapshot oldMeta = DiagnosticsMetadataSnapshot.capture(ds);
             try {
                 ds.rebindPlugin(AceLibVersion.VERSION, reDetected, reCapability);
                 ds.setReady(true);
@@ -504,6 +590,41 @@ public class AceLibPlugin extends JavaPlugin {
         // -----------------------------------------------------------------
         // Phase D：commit（全部階段成功才執行）
         // -----------------------------------------------------------------
+        if (oldPlayerService != null) {
+            try {
+                if (reloadPlayerShutdownFailureHook != null) {
+                    reloadPlayerShutdownFailureHook.run();
+                }
+                oldPlayerService.shutdown();
+            } catch (Throwable failure) {
+                rollbackReload(newScheduler, ds, oldMeta, oldScheduler);
+                if (oldListener != null) {
+                    HandlerList.unregisterAll(oldListener);
+                }
+                this.playerLifecycleRegistered = false;
+                this.ready = false;
+                if (ds != null) {
+                    try {
+                        ds.setReady(false);
+                    } catch (Throwable readyFailure) {
+                        logFine("reload player failure: diagnostics degrade failed: "
+                            + readyFailure.getMessage());
+                    }
+                }
+                String code = failure instanceof PlayerStateException playerFailure
+                    ? playerFailure.getCode() : "ACELIB-PLAYER-003";
+                logSevereWithCode(code,
+                    "reload: player data shutdown failed; plugin degraded without commit. Cause: "
+                        + failure);
+                return false;
+            }
+        }
+        if (oldListener != null) {
+            HandlerList.unregisterAll(oldListener);
+        }
+        this.playerLifecycleRegistered = false;
+        bindPlayerDataService(this.server);
+
         this.scheduler = newScheduler;
         this.api = AceLibApi.ready(
             AceLibVersion.VERSION,
@@ -512,6 +633,7 @@ public class AceLibPlugin extends JavaPlugin {
             () -> ready,
             () -> reload()
         );
+        onPluginReady();
         logInfo("AceLib reloaded on {0}", reDetected.getDisplayName());
         return true;
     }
@@ -747,5 +869,138 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private void logSevereWithCode(String code, String message) {
         safeLogger().log(Level.SEVERE, "[" + code + "] " + message);
+    }
+
+    // ---------------------------------------------------------------------
+    // PlayerDataService lifecycle binding
+    // ---------------------------------------------------------------------
+
+    /**
+     * 建立並綁定 {@link PlayerDataService} 與其 listener。
+     *
+     * <p>綁定內容：</p>
+     * <ol>
+     *   <li>於 {@code plugins/<pluginFolder>/player-data.json} 建立
+     *       {@link JsonFileDataStore}（不存在則自動 init；存在則 migrate）</li>
+     *   <li>建立 {@link PlayerDataService}，內部 serial executor 為單一 daemon
+     *       thread；對 store 的 root()/save() 存取皆序列化</li>
+     *   <li>準備 {@link PlayerLifecycleListener}，供 enabled plugin 完成 Bukkit
+     *       {@code PlayerJoinEvent}/{@code PlayerQuitEvent} 註冊（MONITOR priority）</li>
+     * </ol>
+     *
+     * <p>listener <strong>不持有 Player reference</strong> — 僅以 UUID + name 快照
+     * 委派 service，避免跨執行緒保留 Bukkit entity reference。</p>
+     *
+     * @param server 當前 server；不可為 null
+     */
+    private void bindPlayerDataService(Server server) {
+        Objects.requireNonNull(server, "server");
+        // 使用 plugin.getDataFolder() 確保路徑正確（測試環境下可能為自訂路徑）
+        Path dataFile;
+        try {
+            dataFile = getDataFolder().toPath().resolve("player-data.json");
+        } catch (Throwable t) {
+            // 非標準環境下 getDataFolder 可能不可用；fallback 維持可預期的 plugin 路徑
+            logFine("bindPlayerDataService: getDataFolder failed, using fallback path: "
+                + t.getMessage());
+            dataFile = Path.of("plugins", "AceLib", "player-data.json");
+        }
+
+        // 建立 DataStore（init 時若檔案不存在則新建；存在則讀取既有資料）
+        DataStore playerStore;
+        try {
+            JsonCodec codec = new JsonCodecImpl();
+            playerStore = new JsonFileDataStore("acelib-player-data", dataFile,
+                SchemaVersion.V1_0, codec);
+            playerStore.init();
+        } catch (Throwable t) {
+            logSevereWithCode("ACELIB-PLAYER-006",
+                "bindPlayerDataService: failed to initialize DataStore at "
+                    + dataFile + ": " + t.getMessage());
+            // DataStore 建立失敗時保留 plugin 其他功能，但不暴露半初始化的 service。
+            this.playerDataService = null;
+            this.playerLifecycleListener = null;
+            return;
+        }
+
+        // 建立 service（內部 serial executor 為單一 daemon thread）
+        PlayerDataService service = new PlayerDataService(playerStore,
+            createPlayerIoExecutor());
+        PlayerLifecycleListener listener = new PlayerLifecycleListener(service);
+        this.playerDataService = service;
+        this.playerLifecycleListener = listener;
+    }
+
+    /**
+     * Completes listener registration after Bukkit has marked this plugin enabled.
+     * Package-private so lifecycle tests can exercise the same idempotent seam
+     * without invoking MockBukkit's automatic enable path.
+     */
+    synchronized void onPluginReady() {
+        if (!isEnabled() || playerLifecycleRegistered || server == null
+                || playerLifecycleListener == null) {
+            return;
+        }
+        server.getPluginManager().registerEvents(playerLifecycleListener, this);
+        playerLifecycleRegistered = true;
+    }
+
+    /**
+     * 建立 PlayerDataService 的 io executor — 使用 cached thread pool，daemon
+     * threads，任務快速結束後 thread 可回收。
+     */
+    private java.util.concurrent.ExecutorService createPlayerIoExecutor() {
+        final AtomicLong counter = new AtomicLong(0);
+        ThreadFactory tf = new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r, "acelib-player-io-"
+                    + counter.incrementAndGet());
+                t.setDaemon(true);
+                return t;
+            }
+        };
+        return Executors.newCachedThreadPool(tf);
+    }
+
+    // ---------------------------------------------------------------------
+    // Bukkit event listener — join/quit 委派給 PlayerDataService
+    // ---------------------------------------------------------------------
+
+    /**
+     * {@link PlayerJoinEvent} / {@link PlayerQuitEvent} listener。
+     *
+     * <p>僅以 {@link UUID} + name 快照呼叫對應 service API；listener 本身
+     * <strong>不保留 Player reference</strong>。priority 為 {@link EventPriority#MONITOR} —
+     * 表示我們只在事件流程最後觀察，不取消亦不修改事件。</p>
+     *
+     * <p>於 onDisable / reload 時透過 {@link HandlerList#unregisterAll(Listener)}
+     * 解除註冊，確保 listener 不殘留於 Bukkit HandlerList。</p>
+     */
+    private static final class PlayerLifecycleListener implements Listener {
+
+        private final PlayerDataService service;
+
+        PlayerLifecycleListener(PlayerDataService service) {
+            this.service = Objects.requireNonNull(service, "service");
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        void onPlayerJoin(PlayerJoinEvent event) {
+            Player player = event.getPlayer();
+            UUID uuid = player.getUniqueId();
+            String name = player.getName();
+            // 立即 snapshot UUID/name；listener 不保留 Player reference
+            service.onPlayerJoin(uuid, name);
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        void onPlayerQuit(PlayerQuitEvent event) {
+            Player player = event.getPlayer();
+            UUID uuid = player.getUniqueId();
+            // quit 觸發時 player 即將離線；此處取 UUID 即足夠，
+            // service 內部已有 name snapshot。
+            service.onPlayerQuit(uuid);
+        }
     }
 }
