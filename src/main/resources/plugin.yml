@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
 name: AceLib
 # 注意：version 與 build.gradle.kts 的 version 欄位需手動同步。
 # Phase 0 為了避免 Gradle 8+ configuration cache 與 token filter 衝突，
@@ -11,3 +12,15 @@ authors:
   - Smile
 load: POSTWORLD
 depend: []
+commands:
+  acelib:
+    description: AceLib 管理指令根節點
+    aliases:
+      - alib
+    usage: /acelib <status>
+    permission: acelib.admin
+    permission-message: 沒有權限執行此指令
+permissions:
+  acelib.admin:
+    description: 存取 AceLib 管理指令（/acelib status 等）
+    default: op

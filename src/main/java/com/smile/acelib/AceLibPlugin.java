@@ -1,5 +1,11 @@
 package com.smile.acelib;
 
+import com.smile.acelib.command.AceLibStatusHandler;
+import com.smile.acelib.command.BukkitCommandBridge;
+import com.smile.acelib.command.BukkitReplySink;
+import com.smile.acelib.command.CommandRegistryImpl;
+import com.smile.acelib.command.CommandSpec;
+import com.smile.acelib.command.SubCommandSpec;
 import com.smile.acelib.data.DataStore;
 import com.smile.acelib.data.JsonCodec;
 import com.smile.acelib.data.JsonCodecImpl;
@@ -23,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Server;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -125,6 +132,24 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile PlayerLifecycleListener playerLifecycleListener;
     private volatile boolean playerLifecycleRegistered;
+
+    /**
+     * v0.1.0 管理指令（{@code /acelib status}）使用的 {@link CommandRegistryImpl}。
+     *
+     * <p>於 onEnable 建立並註冊 {@code /acelib} 主指令（含 {@code status} 子指令）；
+     * 透過 {@link BukkitCommandBridge#attach} 把 executor / tabCompleter 綁到
+     * {@link PluginCommand}，使 Bukkit 端派送最終走到 AceLib 的
+     * {@link com.smile.acelib.command.CommandRegistry}。reload 不重建此 registry
+     * — register 只發生一次，handler 透過 {@code Supplier<DiagnosticsService>}
+     * 反映 reload 後的最新 metadata。</p>
+     */
+    private volatile CommandRegistryImpl commandRegistry;
+    /**
+     * v0.1.0：attach 到 {@link PluginCommand} 的 {@link BukkitCommandBridge}；
+     * onDisable 時把 executor / tabCompleter 設回 null，避免 Bukkit 在
+     * plugin disabled 後仍派送到 AceLib 的 dispatcher。
+     */
+    private volatile BukkitCommandBridge commandBridge;
 
     /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
@@ -268,6 +293,11 @@ public class AceLibPlugin extends JavaPlugin {
         // 建立玩家資料服務與事件 listener；註冊延後到 Bukkit 確認 plugin enabled。
         bindPlayerDataService(s);
 
+        // v0.1.0：建立管理指令系統（/acelib status 等）。在 player listener 註冊
+        // 之前先建立並 attach bridge — PluginCommand 的取得來自 plugin.yml，
+        // 與 player listener 註冊時機無依賴關係。
+        bindCommandFramework();
+
         this.ready = true;
         logInfo("AceLib {0} enabled on {1} (capability={2})",
             api.getVersion(), api.getPlatform().getDisplayName(), capability);
@@ -304,6 +334,13 @@ public class AceLibPlugin extends JavaPlugin {
             this.playerLifecycleListener = null;
         }
         this.playerLifecycleRegistered = false;
+
+        // v0.1.0：解除管理指令綁定。先把 PluginCommand 的 executor / tabCompleter
+        // 設為 null（Bukkit 端不再派送），再 disable registry 內部狀態，
+        // 確保 disable 後任何殘留的 in-flight dispatch 都會回
+        // {@code ACELIB-CMD-009 REGISTRY_DISABLED} 而非靜默執行。
+        unbindCommandFramework();
+
         if (oldPlayerService != null) {
             try {
                 oldPlayerService.shutdown();
@@ -869,6 +906,130 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private void logSevereWithCode(String code, String message) {
         safeLogger().log(Level.SEVERE, "[" + code + "] " + message);
+    }
+
+    // ---------------------------------------------------------------------
+    // v0.1.0 管理指令 lifecycle（/acelib status 等）
+    // ---------------------------------------------------------------------
+
+    /** v0.1.0 管理指令主指令名稱（必須與 plugin.yml 的 commands 區塊對應）。 */
+    private static final String ADMIN_COMMAND_NAME = "acelib";
+
+    /**
+     * 建立 {@code /acelib} 管理指令系統：registry + bridge + Bukkit PluginCommand
+     * attach。設計原則：
+     *
+     * <ul>
+     *   <li>register 只在 onEnable 呼叫一次；reload 不重建 registry — handler
+     *       透過 {@code Supplier<DiagnosticsService>} 反映 reload 後的 metadata</li>
+     *   <li>{@code plugin.yml} 缺少對應 commands 宣告時，attach 回 null；此時
+     *       bridge 不掛上 PluginCommand，指令無法被觸發 — 我們以 SEVERE log
+     *       攜帶 {@code ACELIB-CMD-012} 提示，但 plugin 其他功能不受影響</li>
+     *   <li>permission 由 CommandSpec 設定（{@code acelib.admin}）；玩家權限
+     *       缺失時由 {@link CommandRegistryImpl#dispatch} 統一回
+     *       {@code ACELIB-CMD-003} NO_PERMISSION</li>
+     *   <li>ReplySink 的 {@link com.smile.acelib.command.BukkitReplySink.SafeExecutorBackend}
+     *       在 {@code bindCommandFramework} 階段建立，{@code isReady()} 旗標此時尚未
+     *       翻轉（{@code ready = true} 在本方法之後才設）。為了避免 backend
+     *       在 {@code isReady() = false} 時被偵測為「不可用」並回拒絕例外，
+     *       此處顯式注入 eager backend（dispatch 時直接呼叫
+     *       {@code SafeExecutor.executeOnRegion}），繞過 backend 的
+     *       {@code isReady()} 預檢。registry 的 {@code disabled} 旗標仍由
+     *       {@code unbindCommandFramework} 設定，可擋下 disable 後任何
+     *       殘留 in-flight dispatch。</li>
+     * </ul>
+     *
+     * <p>此方法在 onEnable 內（建立 diagnostics / player service 之後）呼叫；
+     * 不在 onPluginReady 才呼叫 — PluginCommand 的取得依賴 plugin.yml 載入，
+     * 與 Bukkit {@code isEnabled()} 狀態無關，提早 attach 反而減少 race
+     * window。</p>
+     */
+    private void bindCommandFramework() {
+        if (this.commandRegistry != null) {
+            // 已在 onEnable 註冊過（idempotent — 防 reload 場景重複）
+            return;
+        }
+        // 顯式 eager backend：繞過 BukkitReplySink.detect 的 isReady() 預檢，
+        // 因為 bindCommandFramework 在 onEnable 的 ready=true 之前執行。
+        // 安全保證：backend 只在 command dispatch 時被呼叫，而 dispatch 只在
+        // plugin enabled（即 ready=true）時發生。disable 之後的 dispatch
+        // 會在 CommandRegistryImpl.onPluginDisable 階段被擋下。
+        com.smile.acelib.command.BukkitReplySink.SafeExecutorBackend eagerBackend =
+            (p, player, runnable) -> {
+                var api = AceLibPlugin.this.getApi();
+                com.smile.acelib.context.SafeExecutor.executeOnRegion(
+                    p, api.getPlatform(), api.getPlatformCapability(), player, runnable);
+            };
+        CommandRegistryImpl registry = new CommandRegistryImpl(
+            new BukkitReplySink(this, eagerBackend));
+
+        SubCommandSpec statusSpec = SubCommandSpec.builder("status")
+            .description("查詢 AceLib 當前狀態（版本、平台、ready、模組摘要、錯誤統計）")
+            .handler(new AceLibStatusHandler(this::getDiagnosticsService))
+            .build();
+
+        CommandSpec rootSpec = CommandSpec.builder(ADMIN_COMMAND_NAME)
+            .description("AceLib 管理指令根節點")
+            .usage("/acelib <status>")
+            .permission("acelib.admin")
+            .subCommand(statusSpec)
+            .build();
+        registry.register(rootSpec);
+
+        BukkitCommandBridge bridge = new BukkitCommandBridge(registry);
+        PluginCommand attached = bridge.attach(this, ADMIN_COMMAND_NAME);
+        if (attached == null) {
+            logSevereWithCode("ACELIB-CMD-012",
+                "bindCommandFramework: plugin.yml 缺少 '" + ADMIN_COMMAND_NAME
+                    + "' 指令宣告；/acelib status 等管理指令將無法被觸發。");
+        }
+        this.commandRegistry = registry;
+        this.commandBridge = bridge;
+    }
+
+    /**
+     * 解除 {@code /acelib} 管理指令綁定。動作：
+     *
+     * <ol>
+     *   <li>把 Bukkit {@link PluginCommand} 的 executor / tabCompleter 設為
+     *       null（避免 plugin disabled 後 Bukkit 仍派送到 AceLib dispatcher）</li>
+     *   <li>呼叫 {@link CommandRegistryImpl#onPluginDisable}（標記 disabled，
+     *       後續 dispatch 會回 {@code ACELIB-CMD-009} REGISTRY_DISABLED）</li>
+     *   <li>解除 reference，協助 GC</li>
+     * </ol>
+     *
+     * <p>此方法在 onDisable 內、player service shutdown 之前呼叫 — 確保
+     * disable 流程結束後任何殘留的 dispatch 都不會觸發 player service 或
+     * scheduler 內部 callback。</p>
+     */
+    private void unbindCommandFramework() {
+        BukkitCommandBridge bridge = this.commandBridge;
+        CommandRegistryImpl registry = this.commandRegistry;
+        // 1. Bukkit 端解除
+        if (bridge != null) {
+            try {
+                PluginCommand cmd = getCommand(ADMIN_COMMAND_NAME);
+                if (cmd != null) {
+                    cmd.setExecutor(null);
+                    cmd.setTabCompleter(null);
+                }
+            } catch (Throwable t) {
+                logFine("unbindCommandFramework: clear Bukkit executor failed (ignored): "
+                    + t.getMessage());
+            }
+        }
+        // 2. registry 內部標記 disabled（後續 dispatch 拒絕）
+        if (registry != null) {
+            try {
+                registry.onPluginDisable();
+                registry.unregister(ADMIN_COMMAND_NAME);
+            } catch (Throwable t) {
+                logFine("unbindCommandFramework: registry disable failed (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.commandRegistry = null;
+        this.commandBridge = null;
     }
 
     // ---------------------------------------------------------------------
