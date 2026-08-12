@@ -9,6 +9,13 @@ bin/
 gradle-app.setting
 !gradle/wrapper/gradle-wrapper.jar
 
+# Minecraft 伺服器本機 runtime artifacts
+# Paper / Folia 等端啟動後於 repository root 產生的 server jar、函式庫與快取；
+# 不納入版本控管，避免大型二進位檔污染 commit history
+cache/
+libraries/
+versions/
+
 # IDE
 .idea/
 *.iml
