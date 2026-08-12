@@ -14,6 +14,10 @@ import com.smile.acelib.data.SchemaVersion;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.gui.GuiErrorCode;
+import com.smile.acelib.gui.GuiService;
+import com.smile.acelib.gui.GuiServiceImpl;
+import com.smile.acelib.gui.GuiServiceUnavailableImpl;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
@@ -161,9 +165,25 @@ public class AceLibPlugin extends JavaPlugin {
      *
      * <p>於 {@link #bindWorldService(Server)} 建立並透過 {@link #unbindWorldService()}
      * shutdown。onEnable 之前若被取得，一律回 unavailable facade（{@link WorldErrorCode#NOT_READY}）。
-     * reload 期間以 commit-or-rollback 語意同步重建。
+     * reload 期間以 commit-or-rollback 語意同步重建。</p>
      */
     private volatile WorldService worldService;
+    /**
+     * Phase 11: GUI service facade。
+     *
+     * <p>於 {@link #bindGuiService(Server)} 建立並透過 {@link #unbindGuiService()}
+     * shutdown。onEnable 之前若被取得，一律回 unavailable facade
+     * （{@link GuiErrorCode#NOT_READY}）。reload 期間以 commit-or-rollback 語意
+     * 同步重建。</p>
+     */
+    private volatile GuiService guiService;
+    /**
+     * Phase 11：當前 GUI service 對應的 Bukkit listener；註冊延後到
+     * {@link #onPluginReady()}（比照 {@link PlayerLifecycleListener} 模式，
+     * 避免 Bukkit 在 plugin is enabled 之前 allow register）。reload 時同步重建。
+     */
+    private volatile org.bukkit.event.Listener guiListener;
+    private volatile boolean guiListenerRegistered;
 
     /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
@@ -220,6 +240,8 @@ public class AceLibPlugin extends JavaPlugin {
         this.diagnostics = new DiagnosticsService(Clock.system());
         // Phase 10: worldService 的 NOT_READY unavailable facade；於 onEnable 後被 bindWorldService() 替換。
         this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
+        // Phase 11: guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
+        this.guiService = new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY);
     }
 
     // ---------------------------------------------------------------------
@@ -297,26 +319,30 @@ public class AceLibPlugin extends JavaPlugin {
         this.scheduler = newScheduler;
         this.diagnostics = newDiagnostics;
 
-        // 5. 發佈 facade（5 參數版本，攜帶實際 capability）
-        this.api = AceLibApi.ready(
-            AceLibVersion.VERSION,
-            detected,
-            capability,
-            this.worldService,
-            () -> ready,
-            () -> reload()
-        );
-
         // 建立玩家資料服務與事件 listener；註冊延後到 Bukkit 確認 plugin enabled。
         bindPlayerDataService(s);
 
-        // Phase 10: 建立 world 服務（在 player 服務與管理指令之後、最後）。
+        // Phase 10: 建立 world 服務（在 player 服務與管理指令之後）。
         bindWorldService(s);
+
+        // Phase 11: 建立 GUI 服務（world 之後），並註冊 listener。
+        bindGuiService(s);
 
         // v0.1.0：建立管理指令系統（/acelib status 等）。在 player listener 註冊
         // 之前先建立並 attach bridge — PluginCommand 的取得來自 plugin.yml，
         // 與 player listener 註冊時機無依賴關係。
         bindCommandFramework();
+
+        // 5. 發佈 facade（攜帶已 bind 的 worldService + guiService；對齊 reload 路徑）
+        this.api = AceLibApi.ready(
+            AceLibVersion.VERSION,
+            detected,
+            capability,
+            this.worldService,
+            this.guiService,
+            () -> ready,
+            () -> reload()
+        );
 
         this.ready = true;
         logInfo("AceLib {0} enabled on {1} (capability={2})",
@@ -377,11 +403,14 @@ public class AceLibPlugin extends JavaPlugin {
         // 確保任何 in-flight teleport 不會被殘留 scheduler 接走。
         unbindWorldService();
 
+        // Phase 11: GUI 服務 shutdown（清除 listener + 移除所有 session）。
+        unbindGuiService();
+
         this.ready = false;
         this.server = null;
         this.platformDetector = null;
-        // 保留 SHUTDOWN worldService reference，避免 double-fork 既有 contract。
-        this.api = AceLibApi.shutDown(this.worldService);
+        // 保留 SHUTDOWN worldService 與 guiService reference，避免 double-fork 既有 contract。
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService);
 
         // 安全降級：
         // 1. scheduler 標記 disabled（解除其 recorder listener 避免 disable 後仍收到通知）
@@ -697,15 +726,24 @@ public class AceLibPlugin extends JavaPlugin {
         }
         this.playerLifecycleRegistered = false;
         bindPlayerDataService(this.server);
+        // Phase 14: 先 commit 新 scheduler 至 this.scheduler，再 bind GUI service。
+        // 順序理由：bindGuiService() 內部讀取 this.scheduler 來建立 SafeSchedulerPlayerContextExecutor，
+        // 若 scheduler 仍指向 Phase A 已 disabled 的舊 scheduler，新 GUI service 會
+        // 捕獲 disabled scheduler，導致 reload 後 openInventory 一律回
+        // ACELIB-GUI-013 SCHEDULER_REJECTED 即為此順序錯誤的具體症狀。
+        this.scheduler = newScheduler;
         // Phase 10: reload 成功後重新建立 world 服務（既有 worldService 已 shutdown）。
         bindWorldService(this.server);
+        // Phase 11: reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
+        // 必須在 this.scheduler = newScheduler 之後呼叫。
+        bindGuiService(this.server);
 
-        this.scheduler = newScheduler;
         this.api = AceLibApi.ready(
             AceLibVersion.VERSION,
             reDetected,
             reCapability,
             this.worldService,
+            this.guiService,
             () -> ready,
             () -> reload()
         );
@@ -1176,17 +1214,89 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
+     * Phase 11：建立 GUI 服務。
+     *
+     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link GuiServiceImpl}。
+     * 透過 {@link com.smile.acelib.gui.SafeSchedulerPlayerContextExecutor}
+     * 把 inventory mutation 派送到玩家 region context（Folia entity scheduler、
+     * Paper main thread）。listener 註冊延後到 {@link #onPluginReady()}
+     * （避免 Bukkit 在 plugin is enabled 之前 allow register）。</p>
+     *
+     * <p>既有 {@code this.guiService} 若仍是 NOT_READY unavailable facade，
+     * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
+     *
+     * @param server 當前 Bukkit/Paper/Folia server；不可為 null
+     * @since Phase 11 (Plan §十六 §二十一)
+     */
+    private void bindGuiService(Server server) {
+        Objects.requireNonNull(server, "server");
+        // production 必須走 SafeScheduler：Paper main thread、Folia entity scheduler。
+        // 對應 Evidence Pack「inventory mutation 透過既有 SafeExecutor/region-aware adapter」。
+        GuiServiceImpl newService = GuiServiceImpl.forProduction(this.scheduler);
+        this.guiService = newService;
+        this.guiListener = newService.getListener();
+        this.guiListenerRegistered = false;
+        logFine("Phase 11 gui service bound to server=" + server.getName());
+    }
+
+    /**
+     * Phase 11：解除並 shutdown GUI 服務。
+     *
+     * <p>解除 listener 註冊（{@link HandlerList#unregisterAll(Listener)}），
+     * 然後呼叫現有 {@code guiService.shutdown()}（idempotent），最後把
+     * {@code this.guiService} 替換為 {@code SHUTDOWN} unavailable facade。
+     * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
+     * 也保證 AceLibApi 的 guiService 永不為 null。</p>
+     *
+     * @since Phase 11 (Plan §十六 §二十一)
+     */
+    private void unbindGuiService() {
+        org.bukkit.event.Listener oldListener = this.guiListener;
+        if (oldListener != null) {
+            try {
+                HandlerList.unregisterAll(oldListener);
+            } catch (Throwable t) {
+                logFine("guiListener unregister failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.guiListener = null;
+        this.guiListenerRegistered = false;
+        GuiService old = this.guiService;
+        if (old != null) {
+            try {
+                old.shutdown();
+            } catch (Throwable t) {
+                logFine("guiService.shutdown failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.guiService = new GuiServiceUnavailableImpl(GuiErrorCode.SHUTDOWN);
+    }
+
+    /**
      * Completes listener registration after Bukkit has marked this plugin enabled.
      * Package-private so lifecycle tests can exercise the same idempotent seam
      * without invoking MockBukkit's automatic enable path.
+     *
+     * <p>同時註冊 player lifecycle listener 與 GUI listener。每一條 listener
+     * 各自維護「已註冊」旗標，避免重複呼叫 registerEvents 造成 Bukkit 重複
+     * dispatch 警告；reload 流程由 {@link #unbindGuiService()} 與既有
+     * player listener 反註冊流程處理後，新的 service 實例會在下次
+     * {@code onPluginReady} 呼叫時重新註冊。</p>
      */
     synchronized void onPluginReady() {
-        if (!isEnabled() || playerLifecycleRegistered || server == null
-                || playerLifecycleListener == null) {
+        if (!isEnabled() || server == null) {
             return;
         }
-        server.getPluginManager().registerEvents(playerLifecycleListener, this);
-        playerLifecycleRegistered = true;
+        if (!playerLifecycleRegistered && playerLifecycleListener != null) {
+            server.getPluginManager().registerEvents(playerLifecycleListener, this);
+            playerLifecycleRegistered = true;
+        }
+        if (!guiListenerRegistered && guiListener != null) {
+            server.getPluginManager().registerEvents(guiListener, this);
+            guiListenerRegistered = true;
+        }
     }
 
     /**
