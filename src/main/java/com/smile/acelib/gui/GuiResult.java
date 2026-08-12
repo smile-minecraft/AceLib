@@ -28,19 +28,25 @@ public final class GuiResult {
     private final String errorCode;
     private final String detail;
     private final GuiSession session;
+    private final GuiConfirmation confirmation;
+    private final GuiAsyncRequest asyncRequest;
 
     private GuiResult(GuiState state, String errorCode, String detail,
-                      GuiSession session) {
+                      GuiSession session, GuiConfirmation confirmation,
+                      GuiAsyncRequest asyncRequest) {
         this.state = Objects.requireNonNull(state, "state");
         this.detail = detail == null ? "" : detail;
         this.session = session;
-        if ((state == GuiState.SUCCESS || state == GuiState.ALLOWED)
-                && session == null) {
+        this.confirmation = confirmation;
+        this.asyncRequest = asyncRequest;
+        if ((state == GuiState.SUCCESS || state == GuiState.ACCEPTED
+                || state == GuiState.ALLOWED) && session == null) {
             throw new IllegalArgumentException(
                 "[" + GuiErrorCode.INVALID_INPUT + "] " + state
                     + " state 必須攜帶 session");
         }
-        if (state != GuiState.SUCCESS && state != GuiState.ALLOWED && errorCode == null) {
+        if (state != GuiState.SUCCESS && state != GuiState.ACCEPTED
+                && state != GuiState.ALLOWED && errorCode == null) {
             throw new IllegalArgumentException(
                 "[" + GuiErrorCode.INVALID_INPUT + "] " + state
                     + " state 必須攜帶 errorCode");
@@ -49,17 +55,47 @@ public final class GuiResult {
     }
 
     /**
+     * 建立「派送已接受」結果（非同步更新專用）。
+     *
+     * <p>對應 {@link GuiState#ACCEPTED}：player context executor 已接受派送
+     * （enqueue 成功），但 renderer 尚未執行；實際完成結果需待執行時的重新驗證
+     * 決定。呼叫端不得將此狀態視為 renderer 已完成。</p>
+     *
+     * @param session 派送時通過前置驗證的 session；不可為 null
+     * @param detail  人類可讀訊息；可為 null（normalize 為空字串）
+     * @return 不可為 null 的 {@link GuiResult}
+     */
+    public static GuiResult accepted(GuiSession session, String detail) {
+        return new GuiResult(GuiState.ACCEPTED, null, detail,
+            Objects.requireNonNull(session, "session"), null, null);
+    }
+
+    /**
      * 建立成功結果（攜帶 session）。
      */
     public static GuiResult success(GuiSession session) {
-        return new GuiResult(GuiState.SUCCESS, null, "", session);
+        return new GuiResult(GuiState.SUCCESS, null, "", session, null, null);
     }
 
     /**
      * 建立成功結果（攜帶 session 與詳細訊息）。
      */
     public static GuiResult success(GuiSession session, String detail) {
-        return new GuiResult(GuiState.SUCCESS, null, detail, session);
+        return new GuiResult(GuiState.SUCCESS, null, detail, session, null, null);
+    }
+
+    /**
+     * 建立成功結果（攜帶 session 與 confirmation；用於 createConfirmation）。
+     */
+    public static GuiResult success(GuiSession session, GuiConfirmation confirmation) {
+        return new GuiResult(GuiState.SUCCESS, null, "", session, confirmation, null);
+    }
+
+    /**
+     * 建立成功結果（攜帶 session 與 async request；用於 beginAsyncUpdate）。
+     */
+    public static GuiResult success(GuiSession session, GuiAsyncRequest asyncRequest) {
+        return new GuiResult(GuiState.SUCCESS, null, "", session, null, asyncRequest);
     }
 
     /**
@@ -67,7 +103,7 @@ public final class GuiResult {
      * 等「允許實際業務邏輯繼續」的情境。
      */
     public static GuiResult allowed(GuiSession session) {
-        return new GuiResult(GuiState.ALLOWED, null, "", session);
+        return new GuiResult(GuiState.ALLOWED, null, "", session, null, null);
     }
 
     /**
@@ -76,7 +112,7 @@ public final class GuiResult {
      */
     public static GuiResult rejected(String errorCode, String detail) {
         Objects.requireNonNull(errorCode, "errorCode");
-        return new GuiResult(GuiState.REJECTED, errorCode, detail, null);
+        return new GuiResult(GuiState.REJECTED, errorCode, detail, null, null, null);
     }
 
     /**
@@ -84,14 +120,14 @@ public final class GuiResult {
      */
     public static GuiResult failed(String errorCode, String detail) {
         Objects.requireNonNull(errorCode, "errorCode");
-        return new GuiResult(GuiState.FAILED, errorCode, detail, null);
+        return new GuiResult(GuiState.FAILED, errorCode, detail, null, null, null);
     }
 
     /**
      * 建立閉合結果（shutdown / reload 觸發的清理）。
      */
     public static GuiResult closed(GuiSession session) {
-        return new GuiResult(GuiState.CLOSED, null, "", session);
+        return new GuiResult(GuiState.CLOSED, null, "", session, null, null);
     }
 
     public GuiState state() {
@@ -110,8 +146,30 @@ public final class GuiResult {
         return session;
     }
 
+    /**
+     * 確認 action 合約（僅 {@code createConfirmation} 的 SUCCESS 結果有意義）。
+     */
+    public GuiConfirmation confirmation() {
+        return confirmation;
+    }
+
+    /**
+     * 非同步更新請求合約（僅 {@code beginAsyncUpdate} 的 SUCCESS 結果有意義）。
+     */
+    public GuiAsyncRequest asyncRequest() {
+        return asyncRequest;
+    }
+
     public boolean isSuccess() {
         return state == GuiState.SUCCESS;
+    }
+
+    /**
+     * 是否為「派送已接受但尚未完成」狀態（非同步更新 enqueue 成功，
+     * renderer 尚未執行）。呼叫端不得將其視為 renderer 已完成。
+     */
+    public boolean isAccepted() {
+        return state == GuiState.ACCEPTED;
     }
 
     public boolean isAllowed() {

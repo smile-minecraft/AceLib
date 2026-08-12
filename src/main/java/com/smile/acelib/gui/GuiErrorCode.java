@@ -17,8 +17,12 @@ package com.smile.acelib.gui;
  *   <li>{@link #GENERATION_MISMATCH} — 傳入的 generation 與持有 session 不符</li>
  *   <li>{@link #OPERATION_FAILED} — 通用 operation 失敗（內部執行拋例外）</li>
  *   <li>{@link #SCHEDULER_REJECTED} — player context executor 拒絕派送（SafeScheduler
- *       回傳 cancelled no-op task，例如 scheduler disabled、player offline、平台
- *       不支援；對應 Folia/Paper 安全入口語意）</li>
+ *       回傳 cancelled no-op task），例如 scheduler disabled、player offline、平台
+ *       不支援；對應 Folia/Paper 安全入口語意</li>
+ *   <li>{@link #ACTION_ALREADY_RESOLVED} — confirm/cancel 對已解決（已 confirm 或已
+ *       cancel）的 action 重複呼叫；action 一次性失效後不可再觸發</li>
+ *   <li>{@link #UNKNOWN_ACTION} — action token 不存在、已過期（session 關閉 / shutdown）
+ *       或與玩家不符；無法綁定到有效 action</li>
  * </ul>
  *
  * <p>設計原則與 {@code WorldErrorCode} 對齊：</p>
@@ -57,4 +61,16 @@ public final class GuiErrorCode {
      *  例如 scheduler disabled、player offline、平台不支援；對應 Folia/Paper
      *  安全入口語意。 */
     public static final String SCHEDULER_REJECTED = "ACELIB-GUI-013";
+    /** 014 — confirm/cancel 對已解決（已 confirm 或已 cancel）的 action 重複呼叫。 */
+    public static final String ACTION_ALREADY_RESOLVED = "ACELIB-GUI-014";
+    /** 015 — action token 不存在、已過期（session 關閉 / shutdown）或與玩家不符。 */
+    public static final String UNKNOWN_ACTION = "ACELIB-GUI-015";
+    /** 016 — 非同步更新請求已過時（被同一 session 的更新請求取代，或 request generation
+     *  不再為目前有效值）；延遲回來的舊結果不得覆寫目前 GUI。 */
+    public static final String STALE_REQUEST = "ACELIB-GUI-016";
+    /** 017 — 非同步更新結果回來時玩家已離線；不得對離線玩家執行 inventory mutation。 */
+    public static final String PLAYER_OFFLINE = "ACELIB-GUI-017";
+    /** 018 — 非同步更新結果回來時，玩家當前開啟的 inventory 已不再是本 session 綁定的
+     *  inventory（link generation 不符）；不得覆寫新的 inventory。 */
+    public static final String INVENTORY_MISMATCH = "ACELIB-GUI-018";
 }

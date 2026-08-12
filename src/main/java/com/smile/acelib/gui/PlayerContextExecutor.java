@@ -1,5 +1,7 @@
 package com.smile.acelib.gui;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -97,6 +99,26 @@ interface PlayerContextExecutor {
     }
 
     /**
+     * 建立延遲 executor（模擬 production {@link SafeSchedulerPlayerContextExecutor}
+     * 的 enqueue 語意）。
+     *
+     * <p>呼叫 {@link #runOnPlayerRegion(Player, Runnable)} 時將 runnable 加入內部
+     * 佇列並立即回傳 {@code true}（表示「派送已接受」），但<strong>不立即執行</strong>。
+     * 測試可透過 {@link DeferredPlayerContextExecutor#runPending()} 手動觸發佇列中的
+     * runnable，模擬「enqueue 後、renderer 執行前」狀態改變的 deferred race 場景。</p>
+     *
+     * <p>對應 Evidence Pack「deferred executor tests」需求：證明 {@code applyAsyncUpdate}
+     * 在 renderer 真正執行前會重新驗證 running / session / generation / request /
+     * player / link，即使 enqueue 當下所有條件都成立。這是 synchronous
+     * {@link #direct()} executor 無法覆蓋的關鍵路徑。</p>
+     *
+     * @return 不可為 null 的 {@link DeferredPlayerContextExecutor}
+     */
+    static DeferredPlayerContextExecutor deferred() {
+        return new DeferredPlayerContextExecutor();
+    }
+
+    /**
      * 建立 production executor：透過 {@code SafeScheduler.runForPlayer}
      * 派送到玩家所屬 region（Folia 用 entity scheduler、Paper 用 main thread）。
      *
@@ -110,7 +132,7 @@ interface PlayerContextExecutor {
      * @throws NullPointerException 必要參數為 null
      */
     static PlayerContextExecutor viaSafeScheduler(JavaPlugin plugin,
-                                                   com.smile.acelib.scheduler.SafeScheduler scheduler) {
+                                                    com.smile.acelib.scheduler.SafeScheduler scheduler) {
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(scheduler, "scheduler");
         return (player, runnable) -> {
@@ -119,5 +141,52 @@ interface PlayerContextExecutor {
             var task = scheduler.runForPlayer(player, runnable);
             return !task.isCancelled();
         };
+    }
+
+    /**
+     * 延遲 executor 實作：enqueue 但不立即執行，供測試模擬 deferred race。
+     *
+     * <p>本類別位於 {@code gui} 套件內（package-private），僅測試可參照其
+     * {@link #runPending()} / {@link #pendingCount()} 觀察與觸發佇列。production
+     * 路徑使用 {@link SafeSchedulerPlayerContextExecutor}，不依賴本類別。</p>
+     *
+     * @since Phase 11（Plan §十六 §二十一）
+     */
+    final class DeferredPlayerContextExecutor implements PlayerContextExecutor {
+
+        private final List<Runnable> pending = new ArrayList<>();
+
+        @Override
+        public boolean runOnPlayerRegion(Player player, Runnable runnable) {
+            Objects.requireNonNull(player, "player");
+            Objects.requireNonNull(runnable, "runnable");
+            // 僅 enqueue：不立即執行，模擬 Folia entity scheduler 已接受任務但尚未
+            // 在玩家 region 內執行的視窗。回傳 true 表示「派送已接受」。
+            pending.add(runnable);
+            return true;
+        }
+
+        /**
+         * 回傳目前佇列中尚未執行的 runnable 數量（測試觀察用）。
+         *
+         * @return 待執行 runnable 數量
+         */
+        int pendingCount() {
+            return pending.size();
+        }
+
+        /**
+         * 依序執行佇列中所有已 enqueue 的 runnable（模擬 player region 內執行）。
+         *
+         * <p>執行前先快照佇列，避免 runnable 內部再次 enqueue 造成的並發修改；
+         * 快照執行完畢後才清空佇列。</p>
+         */
+        void runPending() {
+            List<Runnable> snapshot = new ArrayList<>(pending);
+            pending.clear();
+            for (Runnable r : snapshot) {
+                r.run();
+            }
+        }
     }
 }

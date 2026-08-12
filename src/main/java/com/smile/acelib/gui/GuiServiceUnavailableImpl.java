@@ -47,6 +47,29 @@ public final class GuiServiceUnavailableImpl implements GuiService {
     }
 
     @Override
+    public GuiResult createConfirmation(UUID playerUuid, long generation,
+                                        String actionId, Runnable callback) {
+        requireNonNull(playerUuid, "playerUuid");
+        requireNonNull(actionId, "actionId");
+        requireNonNull(callback, "callback");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public GuiResult confirm(UUID playerUuid, long generation, String actionToken) {
+        requireNonNull(playerUuid, "playerUuid");
+        requireNonNull(actionToken, "actionToken");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public GuiResult cancel(UUID playerUuid, long generation, String actionToken) {
+        requireNonNull(playerUuid, "playerUuid");
+        requireNonNull(actionToken, "actionToken");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
     public GuiResult closeInventory(UUID playerUuid, long generation) {
         requireNonNull(playerUuid, "playerUuid");
         return GuiResult.rejected(code, "gui service is unavailable: " + code);
@@ -55,6 +78,22 @@ public final class GuiServiceUnavailableImpl implements GuiService {
     @Override
     public GuiResult getActiveSession(UUID playerUuid) {
         requireNonNull(playerUuid, "playerUuid");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public GuiResult beginAsyncUpdate(UUID playerUuid, long sessionGeneration,
+                                      int pageIndex) {
+        requireNonNull(playerUuid, "playerUuid");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public <T> GuiResult applyAsyncUpdate(GuiAsyncRequest request, GuiPage<T> page,
+                                          Runnable renderer) {
+        requireNonNull(request, "request");
+        requireNonNull(page, "page");
+        requireNonNull(renderer, "renderer");
         return GuiResult.rejected(code, "gui service is unavailable: " + code);
     }
 
