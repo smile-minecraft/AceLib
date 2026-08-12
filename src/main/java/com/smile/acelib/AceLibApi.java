@@ -2,6 +2,9 @@ package com.smile.acelib;
 
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
+import com.smile.acelib.world.WorldErrorCode;
+import com.smile.acelib.world.WorldService;
+import com.smile.acelib.world.WorldServiceUnavailableImpl;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -10,37 +13,43 @@ import java.util.function.BooleanSupplier;
  *
  * <p>設計原則：</p>
  * <ul>
- *   <li>不可變（immutable）：一旦建立，版本與平台欄位不可變動</li>
+ *   <li>不可變（immutable）：一旦建立，版本與平台欄位（含 worldService）皆不可變動</li>
  *   <li>{@link #isReady()} 透過 {@link BooleanSupplier} 反向查詢當前生命週期狀態</li>
  *   <li>{@link #reload()} 委派給 caller 提供的 callback，避免 facade 直接持有 plugin reference</li>
  * </ul>
  *
  * <p>對外暴露三種狀態的 instance：</p>
  * <ul>
- *   <li>未啟用（uninitialized）— 由 {@link #uninitialized()} 建立</li>
+ *   <li>未啟用（uninitialized）— 由 {@link #uninitialized()} 建立；
+ *       {@link #getWorldService()} 回傳 {@code NOT_READY} facade</li>
  *   <li>已啟用（ready）— 由
- *       {@link #ready(String, Platform, PlatformCapability, BooleanSupplier, Runnable)} 建立</li>
+ *       {@link #ready(String, Platform, PlatformCapability, WorldService, BooleanSupplier, Runnable)}
+ *       建立</li>
  * </ul>
  *
  * @see PlatformCapability
- * @since Phase 0；{@link #getPlatformCapability()} 自 Phase 1 加入（Plan §六）。
+ * @see WorldService
+ * @since Phase 0；{@link #getPlatformCapability()} 自 Phase 1 加入；{@link #getWorldService()} 自 Phase 10 加入（Plan §十五 §二十一）
  */
 public final class AceLibApi {
 
     private final String version;
     private final Platform platform;
     private final PlatformCapability capability;
+    private final WorldService worldService;
     private final BooleanSupplier readyCheck;
     private final Runnable onReload;
 
     private AceLibApi(String version,
                       Platform platform,
                       PlatformCapability capability,
+                      WorldService worldService,
                       BooleanSupplier readyCheck,
                       Runnable onReload) {
         this.version = Objects.requireNonNull(version, "version");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.capability = Objects.requireNonNull(capability, "capability");
+        this.worldService = Objects.requireNonNull(worldService, "worldService");
         this.readyCheck = Objects.requireNonNull(readyCheck, "readyCheck");
         this.onReload = Objects.requireNonNull(onReload, "onReload");
     }
@@ -52,6 +61,7 @@ public final class AceLibApi {
      *   <li>version = {@link AceLibVersion#VERSION}</li>
      *   <li>platform = {@link Platform#UNKNOWN}</li>
      *   <li>capability = {@link PlatformCapability#forPlatform(Platform) PlatformCapability.forPlatform(UNKNOWN)}</li>
+     *   <li>worldService = {@code NOT_READY} unavailable facade（永遠不為 null）</li>
      *   <li>isReady() = false</li>
      *   <li>reload() = no-op</li>
      * </ul>
@@ -61,42 +71,91 @@ public final class AceLibApi {
             AceLibVersion.VERSION,
             Platform.UNKNOWN,
             PlatformCapability.forPlatform(Platform.UNKNOWN),
+            new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             () -> false,
             () -> { /* no-op */ }
         );
     }
 
     /**
-     * 已啟用狀態的 instance（canonical 簽章，Phase 1+ 推薦使用）。
+     * 停用狀態的 facade：攜帶既有 {@code worldService} 並標記 isReady()=false。
+     *
+     * <p>典型用途：plugin 在 {@code onDisable} 內已經把 {@code worldService} 替換成
+     * {@code SHUTDOWN} unavailable facade，但不希望 facade 與既有 reference 完全不同
+     * （這會影響診斷報告的 continuity）。此工廠保留 worldService 不可變參考，
+     * 方便既有 caller 繼續觀察 shutdown 狀態。</p>
+     *
+     * @param worldService 已 shutdown 的 worldService；不可為 null
+     * @return 不可變的 {@link AceLibApi}（isReady=false、worldService=傳入值）
+     * @throws NullPointerException 當 {@code worldService} 為 null
+     * @since Phase 10 (Plan §二十一)
+     */
+    public static AceLibApi shutDown(WorldService worldService) {
+        Objects.requireNonNull(worldService, "worldService");
+        return new AceLibApi(
+            AceLibVersion.VERSION,
+            Platform.UNKNOWN,
+            PlatformCapability.forPlatform(Platform.UNKNOWN),
+            worldService,
+            () -> false,
+            () -> { /* no-op */ }
+        );
+    }
+
+    /**
+     * 已啟用狀態的 instance（canonical 6 參數簽章，Phase 10+ 推薦使用）。
      *
      * @param version     plugin 版本字串
      * @param platform    偵測到的平台
      * @param capability  對應的 capability profile（不允許 null；請用
      *                    {@link PlatformCapability#forPlatform(Platform)} 推導）
+     * @param worldService 對外 {@link WorldService} facade（不允許 null；
+     *                    plugin 端必須建立合適的 impl 並傳入）
      * @param readyCheck  當前 lifecycle 是否 ready 的 callback
      * @param onReload    reload 觸發時執行的 callback
      * @return 不可變的 {@link AceLibApi}
      * @throws NullPointerException 任何參數為 null
-     * @since Phase 1 (Plan §六)
+     * @since Phase 10 (Plan §十五 §二十一)
      */
+    public static AceLibApi ready(String version,
+                                   Platform platform,
+                                   PlatformCapability capability,
+                                   WorldService worldService,
+                                   BooleanSupplier readyCheck,
+                                   Runnable onReload) {
+        return new AceLibApi(version, platform, capability, worldService, readyCheck, onReload);
+    }
+
+    /**
+     * 已啟用狀態的 instance（5 參數舊版簽章；保留以相容既有內部呼叫 — 例如尚未擁有
+     * {@link WorldService} 的測試 seam）。
+     *
+     * <p>本方法會以 {@code NOT_READY} unavailable facade 作為 {@code worldService} —
+     * 這代表舊 caller 無法透過此 facade 取得實際 world 操作；對於完整 production，
+     * 請改用 6 參數版本。</p>
+     *
+     * @deprecated 推薦改用
+     *     {@link #ready(String, Platform, PlatformCapability, WorldService, BooleanSupplier, Runnable)}，
+     *     此方法將於 v1.0 移除。
+     * @since Phase 0
+     */
+    @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
                                    PlatformCapability capability,
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
-        return new AceLibApi(version, platform, capability, readyCheck, onReload);
+        return new AceLibApi(
+            version, platform, capability,
+            new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
+            readyCheck, onReload
+        );
     }
 
     /**
-     * 已啟用狀態的 instance（舊版 4 參數簽章；為相容既有內部呼叫而保留）。
+     * 已啟用狀態的 instance（4 參數舊版簽章；為相容既有內部呼叫而保留）。
      *
-     * <p>本方法會自動以 {@link PlatformCapability#forPlatform(Platform)} 從
-     * {@code platform} 推導 capability。若 caller 有更精確的 capability（例如依
-     * 實際 classpath 探測降級），請改用 5 參數版本。</p>
-     *
-     * @deprecated 推薦改用
-     *     {@link #ready(String, Platform, PlatformCapability, BooleanSupplier, Runnable)}，
-     *     此方法將於 v1.0 移除。
+     * @deprecated 推薦改用 6 參數版本。
      * @since Phase 0
      */
     @Deprecated
@@ -105,11 +164,10 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(
-            version,
-            platform,
+            version, platform,
             PlatformCapability.forPlatform(platform),
-            readyCheck,
-            onReload
+            new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
+            readyCheck, onReload
         );
     }
 
@@ -138,6 +196,27 @@ public final class AceLibApi {
      */
     public PlatformCapability getPlatformCapability() {
         return capability;
+    }
+
+    /**
+     * 取得對外 {@link WorldService} facade（Plan §十五 Phase 10 canonical public API）。
+     *
+     * <p>永不為 null：</p>
+     * <ul>
+     *   <li>未啟用時回傳 {@code NOT_READY} unavailable facade（每次操作回
+     *       {@code REJECTED + ACELIB-WORLD-001}）</li>
+     *   <li>已啟用且 plugin 尚未 disable 時回傳實際 {@code WorldServiceImpl}</li>
+     *   <li>已 disable 時回傳 {@code SHUTDOWN} unavailable facade（每次操作回
+     *       {@code REJECTED + ACELIB-WORLD-002}）</li>
+     * </ul>
+     *
+     * <p>後續插件可放心呼叫所有方法，無需 null 判斷。</p>
+     *
+     * @return 永不為 null 的 {@link WorldService}
+     * @since Phase 10 (Plan §十五 §二十一)
+     */
+    public WorldService getWorldService() {
+        return worldService;
     }
 
     /**

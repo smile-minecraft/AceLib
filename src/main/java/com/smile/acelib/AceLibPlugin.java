@@ -20,6 +20,12 @@ import com.smile.acelib.platform.PlatformDetector;
 import com.smile.acelib.player.PlayerDataService;
 import com.smile.acelib.player.PlayerStateException;
 import com.smile.acelib.scheduler.SafeSchedulerImpl;
+import com.smile.acelib.world.BukkitWorldBackend;
+import com.smile.acelib.world.WorldBackend;
+import com.smile.acelib.world.WorldService;
+import com.smile.acelib.world.WorldServiceImpl;
+import com.smile.acelib.world.WorldServiceUnavailableImpl;
+import com.smile.acelib.world.WorldErrorCode;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.UUID;
@@ -150,6 +156,14 @@ public class AceLibPlugin extends JavaPlugin {
      * plugin disabled 後仍派送到 AceLib 的 dispatcher。
      */
     private volatile BukkitCommandBridge commandBridge;
+    /**
+     * Phase 10: world/block/entity/teleport 安全 facade。
+     *
+     * <p>於 {@link #bindWorldService(Server)} 建立並透過 {@link #unbindWorldService()}
+     * shutdown。onEnable 之前若被取得，一律回 unavailable facade（{@link WorldErrorCode#NOT_READY}）。
+     * reload 期間以 commit-or-rollback 語意同步重建。
+     */
+    private volatile WorldService worldService;
 
     /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
@@ -199,11 +213,13 @@ public class AceLibPlugin extends JavaPlugin {
     volatile Runnable reloadPlayerShutdownFailureHook = null;
 
     public AceLibPlugin() {
-        // 預先放一個 uninitialized facade，避免 getApi() 在 onEnable 前�例外
+        // 預先放一個 uninitialized facade，避免 getApi() 在 onEnable 前丟例外
         this.api = AceLibApi.uninitialized();
         // DiagnosticsService 預設 instance：尚未 bind plugin，但允許 buildSnapshot()
         // 查詢（會以 AceLibVersion.VERSION / Platform.UNKNOWN / not ready 呈現）
         this.diagnostics = new DiagnosticsService(Clock.system());
+        // Phase 10: worldService 的 NOT_READY unavailable facade；於 onEnable 後被 bindWorldService() 替換。
+        this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
     }
 
     // ---------------------------------------------------------------------
@@ -286,12 +302,16 @@ public class AceLibPlugin extends JavaPlugin {
             AceLibVersion.VERSION,
             detected,
             capability,
+            this.worldService,
             () -> ready,
             () -> reload()
         );
 
         // 建立玩家資料服務與事件 listener；註冊延後到 Bukkit 確認 plugin enabled。
         bindPlayerDataService(s);
+
+        // Phase 10: 建立 world 服務（在 player 服務與管理指令之後、最後）。
+        bindWorldService(s);
 
         // v0.1.0：建立管理指令系統（/acelib status 等）。在 player listener 註冊
         // 之前先建立並 attach bridge — PluginCommand 的取得來自 plugin.yml，
@@ -352,16 +372,32 @@ public class AceLibPlugin extends JavaPlugin {
             }
         }
 
+        // Phase 10: world 服務 shutdown（標記 stopped、取消 in-flight handle、
+        // 註冊 FAILED module state）。順序置於 player 與 scheduler 卸載之後，
+        // 確保任何 in-flight teleport 不會被殘留 scheduler 接走。
+        unbindWorldService();
+
         this.ready = false;
         this.server = null;
         this.platformDetector = null;
-        this.api = AceLibApi.uninitialized();
+        // 保留 SHUTDOWN worldService reference，避免 double-fork 既有 contract。
+        this.api = AceLibApi.shutDown(this.worldService);
 
         // 安全降級：
         // 1. scheduler 標記 disabled（解除其 recorder listener 避免 disable 後仍收到通知）
         // 2. diagnostics 保留同一 reference；scheduler 模組降級為 FAILED + ACELIB-SCHED-006，
         //    ready 設為 false，throttler 重置。供既有 reference（管理員命令、測試 seam）
         //    仍可查詢「曾 bind 但現已 disable」的狀態。
+        // Phase 10: 先 shutdown 既有的 worldService（標記 stopped），
+        // 確保 reload 期間 in-flight handle 不會被舊 backend 殘留繼續執行。
+        if (worldService != null) {
+            try {
+                worldService.shutdown();
+            } catch (Throwable t) {
+                logFine("reload: old worldService shutdown failed (ignored): " + t.getMessage());
+            }
+        }
+
         if (oldScheduler != null) {
             try {
                 oldScheduler.getRecorder().clearRecordSink();
@@ -661,12 +697,15 @@ public class AceLibPlugin extends JavaPlugin {
         }
         this.playerLifecycleRegistered = false;
         bindPlayerDataService(this.server);
+        // Phase 10: reload 成功後重新建立 world 服務（既有 worldService 已 shutdown）。
+        bindWorldService(this.server);
 
         this.scheduler = newScheduler;
         this.api = AceLibApi.ready(
             AceLibVersion.VERSION,
             reDetected,
             reCapability,
+            this.worldService,
             () -> ready,
             () -> reload()
         );
@@ -1090,6 +1129,50 @@ public class AceLibPlugin extends JavaPlugin {
         PlayerLifecycleListener listener = new PlayerLifecycleListener(service);
         this.playerDataService = service;
         this.playerLifecycleListener = listener;
+    }
+
+    /**
+     * Phase 10：建立 world 服務與其 diagnostics 綁定。
+     *
+     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link BukkitWorldBackend} +
+     * {@link WorldServiceImpl} 並委派 {@code WorldServiceImpl} 於
+     * {@link DiagnosticsService} 註冊 {@code READY} 模組狀態。</p>
+     *
+     * <p>既有 {@code this.worldService} 若仍是 NOT_READY unavailable facade，
+     * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
+     *
+     * @param server 當前 Bukkit/Paper/Folia server；不可為 null
+     * @since Phase 10 (Plan §十九 §二十一)
+     */
+    private void bindWorldService(Server server) {
+        Objects.requireNonNull(server, "server");
+        WorldBackend backend = new BukkitWorldBackend(server);
+        WorldService newService = new WorldServiceImpl(backend, diagnostics);
+        this.worldService = newService;
+        logFine("Phase 10 world service bound to server=" + server.getName());
+    }
+
+    /**
+     * Phase 10：解除並 shutdown world 服務。
+     *
+     * <p>呼叫現有 {@code worldService.shutdown()}（idempotent），然後把
+     * {@code this.worldService} 替換為 {@code SHUTDOWN} unavailable facade。
+     * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
+     * 也保證 AceLibApi 的 worldService 永不為 null。</p>
+     *
+     * @since Phase 10 (Plan §十九 §二十一)
+     */
+    private void unbindWorldService() {
+        WorldService old = this.worldService;
+        if (old != null) {
+            try {
+                old.shutdown();
+            } catch (Throwable t) {
+                logFine("worldService.shutdown failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.SHUTDOWN);
     }
 
     /**
