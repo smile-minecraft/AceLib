@@ -14,6 +14,12 @@ import com.smile.acelib.data.SchemaVersion;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.external.ExternalIntegrationService;
+import com.smile.acelib.external.ExternalIntegrationServiceImpl;
+import com.smile.acelib.external.IntegrationRegistry;
+import com.smile.acelib.external.LuckPermsIntegrationAdapter;
+import com.smile.acelib.external.PlaceholderApiIntegrationAdapter;
+import com.smile.acelib.external.VaultIntegrationAdapter;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
 import com.smile.acelib.platform.Platform;
@@ -45,6 +51,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -99,6 +106,9 @@ public class AceLibPlugin extends JavaPlugin {
      * 「診斷模組自身錯誤」）。
      */
     private static final String RELOAD_DIAGNOSTICS_FAILURE_CODE = "ACELIB-DBG-001";
+
+    /** 診斷模組名稱（對應 DiagnosticsService 內部 MODULE_INTEGRATION 常數）。 */
+    private static final String MODULE_INTEGRATION = "integration";
 
     private volatile boolean ready = false;
     private volatile Server server;
@@ -184,6 +194,16 @@ public class AceLibPlugin extends JavaPlugin {
     private volatile boolean guiListenerRegistered;
 
     /**
+     * 外部插件整合服務 facade。
+     *
+     * <p>於 {@link #bindExternalService(Server)} 建立並透過 {@link #unbindExternalService()}
+     * shutdown。onEnable 之前若被取得，回傳 null（safe-default，與
+     * {@link #getPlayerDataService()} 一致）。reload 期間先 shutdown 舊服務再建立新服務，
+     * 失敗不新舊混用。</p>
+     */
+    private volatile ExternalIntegrationService externalService;
+
+    /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
      * 注入受控失敗，模擬 {@code SafeSchedulerImpl.onPluginDisable()} 拋錯的罕見
      * 路徑。Production 預設為 null；正常 reload 不會觸發。
@@ -229,6 +249,9 @@ public class AceLibPlugin extends JavaPlugin {
 
     /** Package-private test seam for a controlled player-service shutdown failure. */
     volatile Runnable reloadPlayerShutdownFailureHook = null;
+
+    /** Package-private test seam for a controlled external-service bind failure during reload. */
+    volatile Runnable reloadExternalBindFailureHook = null;
 
     public AceLibPlugin() {
         // 預先放一個 uninitialized facade，避免 getApi() 在 onEnable 前丟例外
@@ -326,18 +349,22 @@ public class AceLibPlugin extends JavaPlugin {
         // Phase 11: 建立 GUI 服務（world 之後），並註冊 listener。
         bindGuiService(s);
 
+        // 建立外部整合服務（world/gui 之後），並向 diagnostics 註冊 integration 模組狀態。
+        bindExternalService(s);
+
         // v0.1.0：建立管理指令系統（/acelib status 等）。在 player listener 註冊
-        // 之前先建立並 attach bridge — PluginCommand 的取得來自 plugin.yml，
+        // 之前先建立並 attach bridge；PluginCommand 的取得來自 plugin.yml，
         // 與 player listener 註冊時機無依賴關係。
         bindCommandFramework();
 
-        // 5. 發佈 facade（攜帶已 bind 的 worldService + guiService；對齊 reload 路徑）
+        // 5. 發佈 facade（攜帶已 bind 的 worldService + guiService + externalService；對齊 reload 路徑）
         this.api = AceLibApi.ready(
             AceLibVersion.VERSION,
             detected,
             capability,
             this.worldService,
             this.guiService,
+            this.externalService,
             () -> ready,
             () -> reload()
         );
@@ -403,6 +430,9 @@ public class AceLibPlugin extends JavaPlugin {
 
         // Phase 11: GUI 服務 shutdown（清除 listener + 移除所有 session）。
         unbindGuiService();
+
+        // 外部整合服務 shutdown（釋放 registry 資源）並解除 integration 模組狀態註冊。
+        unbindExternalService();
 
         this.ready = false;
         this.server = null;
@@ -543,6 +573,18 @@ public class AceLibPlugin extends JavaPlugin {
      */
     PlayerDataService getPlayerDataService() {
         return playerDataService;
+    }
+
+    /**
+     * 取得當前綁定的 {@link ExternalIntegrationService}（外部插件整合服務）。
+     *
+     * <p>於 onEnable 建立；reload 時 shutdown 舊 service + 建立新 service；onDisable 時
+     * shutdown 並替換為 SHUTDOWN unavailable facade。onEnable 之前回傳 null。</p>
+     *
+     * @return 當前 external service；可能為 null（plugin 未啟用）
+     */
+    ExternalIntegrationService getExternalIntegrationService() {
+        return externalService;
     }
 
     /**
@@ -690,6 +732,53 @@ public class AceLibPlugin extends JavaPlugin {
         // -----------------------------------------------------------------
         // Phase D：commit（全部階段成功才執行）
         // -----------------------------------------------------------------
+        // 外部整合服務：先 shutdown 舊服務，再建立新服務（commit 階段）。
+        // 失敗（reloadExternalBindFailureHook）時不建立新服務、保留舊服務已 shutdown 狀態，
+        // 不會出現新舊同時 active 的混合狀態；此處位於 player/world/gui commit 之前，
+        // 失敗時進入完整 rollbackReload 路徑（釋放 newScheduler、還原 ds metadata/ready、
+        // 重新綁回已 disabled 舊 scheduler），避免 diagnostics rebind 階段已將 ds 綁定
+        // newScheduler 卻未同步 this.scheduler 的不一致，再乾淨回傳 false。
+        ExternalIntegrationService oldExternal = this.externalService;
+        if (oldExternal != null) {
+            try {
+                oldExternal.shutdown();
+            } catch (Throwable t) {
+                logFine("reload: old external service shutdown failed (ignored): "
+                    + t.getMessage());
+            }
+        }
+        if (reloadExternalBindFailureHook != null) {
+            try {
+                reloadExternalBindFailureHook.run();
+            } catch (Throwable t) {
+                // 與 diagnostics rebind 失敗一致：進入完整 rollback 路徑，釋放 newScheduler、
+                // 還原 ds metadata/ready 並重新綁回已 disabled 舊 scheduler（模組標記
+                // FAILED + ACELIB-SCHED-006），確保 diagnostics 綁定的 scheduler 與
+                // this.scheduler（仍指向舊 disabled scheduler）一致。external service 仍為
+                // 舊 reference（已 shutdown），不新舊混用。
+                //
+                // 舊 external service 已在上方 shutdown，但 bindExternalService 註冊的
+                // MODULE_INTEGRATION 模組狀態仍殘留（指向已失效的舊 impl）。rollback 前
+                // 先解除該模組註冊，使 diagnostics 與 SHUTDOWN facade 的 external service
+                // 語意一致（integration 模組回到 NOT_INITIALIZED），避免「diagnostics 顯示
+                // FAILED 但實際 external service 已 SHUTDOWN」的假象。
+                if (this.diagnostics != null) {
+                    try {
+                        this.diagnostics.unregisterModuleState(MODULE_INTEGRATION);
+                    } catch (Throwable ignore) {
+                        logFine("reload external bind failure: integration module unregister "
+                            + "failed (ignored): " + ignore.getMessage());
+                    }
+                }
+                rollbackReload(newScheduler, ds, oldMeta, oldScheduler);
+                logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
+                    "reload: external service bind failed; rolled back to previous binding "
+                        + "(scheduler/diagnostics restored). Cause: " + t);
+                return false;
+            }
+        }
+        bindExternalService(this.server);
+
         if (oldPlayerService != null) {
             try {
                 if (reloadPlayerShutdownFailureHook != null) {
@@ -742,6 +831,7 @@ public class AceLibPlugin extends JavaPlugin {
             reCapability,
             this.worldService,
             this.guiService,
+            this.externalService,
             () -> ready,
             () -> reload()
         );
@@ -1271,6 +1361,61 @@ public class AceLibPlugin extends JavaPlugin {
             }
         }
         this.guiService = GuiService.forUnavailable(GuiErrorCode.SHUTDOWN);
+    }
+
+    /**
+     * 建立並綁定外部整合服務，並向 diagnostics 註冊 integration 模組狀態。
+     *
+     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link IntegrationRegistry} 並註冊三個
+     * reflection-only adapter（Vault / LuckPerms / PlaceholderAPI），再以
+     * {@link IntegrationRegistry#initializeAll()} 啟用，最後包裝為
+     * {@link ExternalIntegrationServiceImpl} 並將其 {@code toModuleState()} 註冊到
+     * {@link DiagnosticsService} 的 integration 模組。</p>
+     *
+     * @param server 當前 Bukkit/Paper/Folia server；不可為 null
+     */
+    private void bindExternalService(Server server) {
+        Objects.requireNonNull(server, "server");
+        ClassLoader classLoader = server.getClass().getClassLoader();
+        PluginManager pluginManager = server.getPluginManager();
+        IntegrationRegistry registry = new IntegrationRegistry();
+        registry.register(new VaultIntegrationAdapter(classLoader, pluginManager));
+        registry.register(new LuckPermsIntegrationAdapter(classLoader, pluginManager));
+        registry.register(new PlaceholderApiIntegrationAdapter(classLoader, pluginManager));
+        registry.initializeAll();
+        ExternalIntegrationServiceImpl impl = new ExternalIntegrationServiceImpl(registry);
+        this.diagnostics.registerModuleState(MODULE_INTEGRATION, impl.toModuleState());
+        this.externalService = impl;
+    }
+
+    /**
+     * 解除並 shutdown 外部整合服務，並自 diagnostics 取消 integration 模組狀態註冊。
+     *
+     * <p>呼叫現有 {@code externalService.shutdown()}（idempotent），然後把
+     * {@code this.externalService} 替換為 {@code SHUTDOWN} unavailable facade。
+     * 這個替換保證既有 caller 在 disable 後繼續讀到「服務已停用」的訊號，
+     * 也保證 AceLibApi 的 externalService 永不為 null。</p>
+     */
+    private void unbindExternalService() {
+        ExternalIntegrationService old = this.externalService;
+        if (old != null) {
+            try {
+                old.shutdown();
+            } catch (Throwable t) {
+                logFine("externalService.shutdown failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        if (this.diagnostics != null) {
+            try {
+                this.diagnostics.unregisterModuleState(MODULE_INTEGRATION);
+            } catch (Throwable t) {
+                logFine("externalService module state unregister failed (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.externalService = ExternalIntegrationService.forUnavailable(
+            ExternalIntegrationService.SHUTDOWN);
     }
 
     /**

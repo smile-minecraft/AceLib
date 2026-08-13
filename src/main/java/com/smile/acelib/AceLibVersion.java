@@ -13,7 +13,7 @@ public final class AceLibVersion {
      * 對外版本字串。Phase 0 對應 0.1.0-SNAPSHOT；後續 phase 升級時同步更新
      * {@code build.gradle.kts} 的 {@code version} 即可。
      */
-    public static final String VERSION = "0.1.0-SNAPSHOT";
+    public static final String VERSION = "0.5.0-SNAPSHOT";
 
     private AceLibVersion() {
         // utility class

@@ -38,7 +38,7 @@ AceLib 是 Smile 系列 Minecraft 插件的共用基礎函式庫（隸屬於 git
 ## Build 指令
 
 ```bash
-# 編譯 + 打包 jar（產出 build/libs/AceLib-0.1.0-SNAPSHOT.jar）
+# 編譯 + 打包 jar（產出 build/libs/AceLib-0.5.0-SNAPSHOT.jar）
 ./gradlew build
 
 # 跑 unit verification 後檢視 `build/reports/` 內附 HTML report

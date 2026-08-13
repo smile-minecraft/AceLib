@@ -1,5 +1,6 @@
 package com.smile.acelib;
 
+import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
 import com.smile.acelib.platform.Platform;
@@ -22,16 +23,15 @@ import java.util.function.BooleanSupplier;
  *
  * <p>對外暴露三種狀態的 instance：</p>
  * <ul>
- *   <li>未啟用（uninitialized）— 由 {@link #uninitialized()} 建立；
+*   <li>未啟用（uninitialized）— 由 {@link #uninitialized()} 建立；
  *       {@link #getWorldService()} 回傳 {@code NOT_READY} facade</li>
  *   <li>已啟用（ready）— 由
- *       {@link #ready(String, Platform, PlatformCapability, WorldService, BooleanSupplier, Runnable)}
+ *       {@link #ready(String, Platform, PlatformCapability, WorldService, GuiService, BooleanSupplier, Runnable)}
  *       建立</li>
  * </ul>
  *
  * @see PlatformCapability
  * @see WorldService
- * @since Phase 0；{@link #getPlatformCapability()} 自 Phase 1 加入；{@link #getWorldService()} 自 Phase 10 加入（Plan §十五 §二十一）；{@link #getGuiService()} 自 Phase 11 加入（Plan §十六 §二十一）
  */
 public final class AceLibApi {
 
@@ -40,6 +40,7 @@ public final class AceLibApi {
     private final PlatformCapability capability;
     private final WorldService worldService;
     private final GuiService guiService;
+    private final ExternalIntegrationService externalService;
     private final BooleanSupplier readyCheck;
     private final Runnable onReload;
 
@@ -48,6 +49,7 @@ public final class AceLibApi {
                       PlatformCapability capability,
                       WorldService worldService,
                       GuiService guiService,
+                      ExternalIntegrationService externalService,
                       BooleanSupplier readyCheck,
                       Runnable onReload) {
         this.version = Objects.requireNonNull(version, "version");
@@ -55,6 +57,7 @@ public final class AceLibApi {
         this.capability = Objects.requireNonNull(capability, "capability");
         this.worldService = Objects.requireNonNull(worldService, "worldService");
         this.guiService = Objects.requireNonNull(guiService, "guiService");
+        this.externalService = Objects.requireNonNull(externalService, "externalService");
         this.readyCheck = Objects.requireNonNull(readyCheck, "readyCheck");
         this.onReload = Objects.requireNonNull(onReload, "onReload");
     }
@@ -68,6 +71,7 @@ public final class AceLibApi {
      *   <li>capability = {@link PlatformCapability#forPlatform(Platform) PlatformCapability.forPlatform(UNKNOWN)}</li>
      *   <li>worldService = {@code NOT_READY} unavailable facade（永遠不為 null）</li>
      *   <li>guiService = {@code NOT_READY} unavailable facade（永遠不為 null）</li>
+     *   <li>externalService = {@code NOT_READY} unavailable facade（永遠不為 null）</li>
      *   <li>isReady() = false</li>
      *   <li>reload() = no-op</li>
      * </ul>
@@ -79,6 +83,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -100,8 +105,7 @@ public final class AceLibApi {
      * @param worldService 已 shutdown 的 worldService；不可為 null
      * @return 不可變的 {@link AceLibApi}（isReady=false、worldService=傳入值）
      * @throws NullPointerException 當 {@code worldService} 為 null
-     * @since Phase 10 (Plan §二十一)
-     */
+ */
     public static AceLibApi shutDown(WorldService worldService) {
         Objects.requireNonNull(worldService, "worldService");
         return new AceLibApi(
@@ -110,6 +114,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
             GuiService.forUnavailable(GuiErrorCode.SHUTDOWN),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -118,15 +123,14 @@ public final class AceLibApi {
     /**
      * 停用狀態的 facade（攜帶既有 worldService + guiService）。
      *
-     * <p>Phase 11 起的 canonical 重載：保留兩個 service 的不可變 reference，
+     * <p>canonical 重載：保留兩個 service 的不可變 reference，
      * 確保既有的診斷報告查詢可在 plugin disable 後仍能看到一致的 service 物件。</p>
      *
      * @param worldService 已 shutdown 的 worldService；不可為 null
      * @param guiService   已 shutdown 的 guiService；不可為 null
      * @return 不可變的 {@link AceLibApi}
      * @throws NullPointerException 任何參數為 null
-     * @since Phase 11 (Plan §十六 §二十一)
-     */
+ */
     public static AceLibApi shutDown(WorldService worldService, GuiService guiService) {
         Objects.requireNonNull(worldService, "worldService");
         Objects.requireNonNull(guiService, "guiService");
@@ -136,13 +140,14 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
             guiService,
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
             () -> false,
             () -> { /* no-op */ }
         );
     }
 
     /**
-     * 已啟用狀態的 instance（canonical 7 參數簽章，Phase 11+ 推薦使用）。
+     * 已啟用狀態的 instance（canonical 7 參數簽章，推薦使用）。
      *
      * @param version     plugin 版本字串
      * @param platform    偵測到的平台
@@ -156,8 +161,7 @@ public final class AceLibApi {
      * @param onReload    reload 觸發時執行的 callback
      * @return 不可變的 {@link AceLibApi}
      * @throws NullPointerException 任何參數為 null
-     * @since Phase 11 (Plan §十六 §二十一)
-     */
+ */
     public static AceLibApi ready(String version,
                                    Platform platform,
                                    PlatformCapability capability,
@@ -166,7 +170,40 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             readyCheck, onReload);
+    }
+
+    /**
+     * 已啟用狀態的 instance（8 參數簽章，推薦使用）。
+     *
+     * <p>與 7 參數版本的差異：額外接受對外 {@link ExternalIntegrationService}
+     * facade，讓外部整合查詢可透過 canonical lookup
+     * 取得；既有 7 參數版本以 {@code NOT_READY} unavailable facade 填補。</p>
+     *
+     * @param version          plugin 版本字串
+     * @param platform         偵測到的平台
+     * @param capability       對應的 capability profile（不允許 null；請用
+     *                         {@link PlatformCapability#forPlatform(Platform)} 推導）
+     * @param worldService     對外 {@link WorldService} facade（不允許 null）
+     * @param guiService       對外 {@link GuiService} facade（不允許 null）
+     * @param externalService  對外 {@link ExternalIntegrationService} facade
+     *                         （不允許 null；plugin 端必須建立合適的 impl 並傳入）
+     * @param readyCheck       當前 lifecycle 是否 ready 的 callback
+     * @param onReload         reload 觸發時執行的 callback
+     * @return 不可變的 {@link AceLibApi}
+     * @throws NullPointerException 任何參數為 null
+ */
+    public static AceLibApi ready(String version,
+                                   Platform platform,
+                                   PlatformCapability capability,
+                                   WorldService worldService,
+                                   GuiService guiService,
+                                   ExternalIntegrationService externalService,
+                                   BooleanSupplier readyCheck,
+                                   Runnable onReload) {
+        return new AceLibApi(version, platform, capability, worldService, guiService,
+            externalService, readyCheck, onReload);
     }
 
     /**
@@ -180,8 +217,7 @@ public final class AceLibApi {
      * @deprecated 推薦改用
      *     {@link #ready(String, Platform, PlatformCapability, WorldService, GuiService, BooleanSupplier, Runnable)}，
      *     此方法將於 v1.0 移除。
-     * @since Phase 10
-     */
+ */
     @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
@@ -192,6 +228,7 @@ public final class AceLibApi {
         return new AceLibApi(
             version, platform, capability, worldService,
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             readyCheck, onReload
         );
     }
@@ -205,8 +242,7 @@ public final class AceLibApi {
      * 請改用 7 參數版本。</p>
      *
      * @deprecated 推薦改用 7 參數版本。
-     * @since Phase 0
-     */
+ */
     @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
@@ -217,6 +253,7 @@ public final class AceLibApi {
             version, platform, capability,
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             readyCheck, onReload
         );
     }
@@ -225,8 +262,7 @@ public final class AceLibApi {
      * 已啟用狀態的 instance（4 參數舊版簽章；為相容既有內部呼叫而保留）。
      *
      * @deprecated 推薦改用 7 參數版本。
-     * @since Phase 0
-     */
+ */
     @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
@@ -237,6 +273,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(platform),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             readyCheck, onReload
         );
     }
@@ -262,14 +299,13 @@ public final class AceLibApi {
      * 若 facade 為未啟用狀態，回傳的是 {@link Platform#UNKNOWN} 對應的全 false capability。</p>
      *
      * @return 永遠不為 null 的 {@link PlatformCapability}
-     * @since Phase 1 (Plan §六)
-     */
+ */
     public PlatformCapability getPlatformCapability() {
         return capability;
     }
 
     /**
-     * 取得對外 {@link WorldService} facade（Plan §十五 Phase 10 canonical public API）。
+     * 取得對外 {@link WorldService} facade（canonical public API）。
      *
      * <p>永不為 null：</p>
      * <ul>
@@ -283,14 +319,13 @@ public final class AceLibApi {
      * <p>後續插件可放心呼叫所有方法，無需 null 判斷。</p>
      *
      * @return 永不為 null 的 {@link WorldService}
-     * @since Phase 10 (Plan §十五 §二十一)
-     */
+ */
     public WorldService getWorldService() {
         return worldService;
     }
 
     /**
-     * 取得對外 {@link GuiService} facade（Plan §十六 Phase 11 canonical public API）。
+     * 取得對外 {@link GuiService} facade（canonical public API）。
      *
      * <p>永不為 null：</p>
      * <ul>
@@ -304,10 +339,30 @@ public final class AceLibApi {
      * <p>後續插件可放心呼叫所有方法，無需 null 判斷。</p>
      *
      * @return 永不為 null 的 {@link GuiService}
-     * @since Phase 11 (Plan §十六 §二十一)
-     */
+ */
     public GuiService getGuiService() {
         return guiService;
+    }
+
+    /**
+ * 取得對外 {@link ExternalIntegrationService} facade（canonical public API）。
+     *
+     * <p>永不為 null：</p>
+     * <ul>
+     *   <li>未啟用時回傳 {@code NOT_READY} unavailable facade（查詢一律回
+     *       {@code INIT_FAILED} 結果，模組狀態 {@code NOT_INITIALIZED}）</li>
+     *   <li>已啟用且 plugin 尚未 disable 時回傳實際
+     *       {@code ExternalIntegrationService} 實作</li>
+     *   <li>已 disable 時回傳 {@code SHUTDOWN} unavailable facade（模組狀態
+     *       {@code FAILED}）</li>
+     * </ul>
+     *
+     * <p>後續插件可放心呼叫所有查詢方法，無需 null 判斷。</p>
+     *
+     * @return 永不為 null 的 {@link ExternalIntegrationService}
+ */
+    public ExternalIntegrationService getExternalIntegrationService() {
+        return externalService;
     }
 
     /**
