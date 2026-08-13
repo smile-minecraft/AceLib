@@ -10,6 +10,7 @@ import com.smile.acelib.player.PlayerDataService;
 import com.smile.acelib.player.PlayerSession;
 import com.smile.acelib.player.PlayerSessionState;
 import java.util.UUID;
+import net.kyori.adventure.text.Component;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -102,13 +103,14 @@ class AceLibPluginPlayerLifecycleTest {
         assertSame(PlayerSessionState.READY, session.getState(),
             "join 後 async load 必須在合理時間內完成為 READY");
 
-        server.getPluginManager().callEvent(new PlayerQuitEvent(player, (String) null));
+        server.getPluginManager().callEvent(
+            new PlayerQuitEvent(player, Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
         long quitDeadline = System.currentTimeMillis() + 5000L;
         while (svc.getSession(uuid).isPresent() && System.currentTimeMillis() < quitDeadline) {
             try { Thread.sleep(10L); }
             catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
         }
-        server.getPluginManager().callEvent(new PlayerJoinEvent(player, (String) null));
+        server.getPluginManager().callEvent(new PlayerJoinEvent(player, Component.empty()));
         long rejoinDeadline = System.currentTimeMillis() + 5000L;
         while ((svc.getSession(uuid).isEmpty() || !svc.getSession(uuid).get().isReady())
             && System.currentTimeMillis() < rejoinDeadline) {
@@ -136,7 +138,8 @@ class AceLibPluginPlayerLifecycleTest {
         assertTrue(svc.getSession(uuid).isPresent(),
             "前置：join 必須建立 session");
 
-        server.getPluginManager().callEvent(new PlayerQuitEvent(player, (String) null));
+        server.getPluginManager().callEvent(
+            new PlayerQuitEvent(player, Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
 
         // 等 quit 處理完 — session 應被移除
         deadline = System.currentTimeMillis() + 5000L;
