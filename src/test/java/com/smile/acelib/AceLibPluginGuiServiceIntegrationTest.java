@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
-import com.smile.acelib.gui.GuiServiceImpl;
 import com.smile.acelib.gui.GuiState;
 import com.smile.acelib.platform.PlatformDetector;
 import java.util.List;
@@ -65,7 +64,7 @@ class AceLibPluginGuiServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("onEnable 後 getApi().getGuiService() 永遠不為 null，且為 GuiServiceImpl 實例")
+    @DisplayName("onEnable 後 getApi().getGuiService() 永遠不為 null，且為 GuiService 實例（內部實作類別已隱藏）")
     void enabledPlugin_getGuiService_neverNull() {
         assertNotNull(plugin.getApi().getGuiService(),
             "onEnable 後 getGuiService 必須永遠不為 null");

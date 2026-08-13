@@ -2,7 +2,6 @@ package com.smile.acelib;
 
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
-import com.smile.acelib.gui.GuiServiceUnavailableImpl;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.world.WorldErrorCode;
@@ -79,7 +78,7 @@ public final class AceLibApi {
             Platform.UNKNOWN,
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
-            new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY),
+            GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -110,7 +109,7 @@ public final class AceLibApi {
             Platform.UNKNOWN,
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
-            new GuiServiceUnavailableImpl(GuiErrorCode.SHUTDOWN),
+            GuiService.forUnavailable(GuiErrorCode.SHUTDOWN),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -192,7 +191,7 @@ public final class AceLibApi {
                                    Runnable onReload) {
         return new AceLibApi(
             version, platform, capability, worldService,
-            new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY),
+            GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             readyCheck, onReload
         );
     }
@@ -217,7 +216,7 @@ public final class AceLibApi {
         return new AceLibApi(
             version, platform, capability,
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
-            new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY),
+            GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             readyCheck, onReload
         );
     }
@@ -237,7 +236,7 @@ public final class AceLibApi {
             version, platform,
             PlatformCapability.forPlatform(platform),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
-            new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY),
+            GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             readyCheck, onReload
         );
     }

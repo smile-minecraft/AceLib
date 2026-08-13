@@ -1,6 +1,8 @@
 package com.smile.acelib.gui;
 
+import com.smile.acelib.scheduler.SafeScheduler;
 import java.util.UUID;
+import org.bukkit.event.Listener;
 
 /**
  * GUI 服務對外 facade（Plan §十六 Phase 11 canonical public API）。
@@ -28,6 +30,56 @@ import java.util.UUID;
  * @since Phase 11 (Plan §十六 §二十一)
  */
 public interface GuiService {
+
+    /**
+     * Production factory：透過 {@link SafeScheduler} 把 inventory mutation 派送到
+     * 玩家 region context（Folia entity scheduler、Paper main thread），建立並回傳
+     * 對外 {@link GuiService} facade。
+     *
+     * <p>實作類別 {@code GuiServiceImpl} 為 package-private（不暴露為 public API）；
+     * 本方法為下游插件與內部 wiring 取得實作實例的唯一 public 入口，回傳型別為
+     * 介面本身，隱藏內部實作。</p>
+     *
+     * @param scheduler 對應平台 SafeScheduler；不可為 null
+     * @return 新的 {@link GuiService} 實作實例；never null
+     * @throws NullPointerException 當 {@code scheduler} 為 null
+     * @since Phase 11 (Plan §十六 §二十一)
+     */
+    static GuiService forProduction(SafeScheduler scheduler) {
+        return GuiServiceImpl.forProduction(scheduler);
+    }
+
+    /**
+     * Unavailable factory：建立未啟用 / 已停用狀態下的可診斷 facade。
+     *
+     * <p>實作類別 {@code GuiServiceUnavailableImpl} 為 package-private（不暴露為 public API）；
+     * 本方法為內部 wiring 與下游插件取得 unavailable 實例的唯一 public 入口，回傳型別為
+     * 介面本身，隱藏內部實作。{@code code} 必須為 {@link GuiErrorCode#NOT_READY} 或
+     * {@link GuiErrorCode#SHUTDOWN}，否則丟 {@link IllegalArgumentException}（不吞錯）。</p>
+     *
+     * @param code 狀態碼；不可為 null，且必須為 NOT_READY 或 SHUTDOWN
+     * @return 新的 {@link GuiService} unavailable 實作實例；never null
+     * @throws IllegalArgumentException 當 {@code code} 為 null 或不是 NOT_READY / SHUTDOWN
+     * @since Phase 11 (Plan §十六 §二十一)
+     */
+    static GuiService forUnavailable(String code) {
+        return new GuiServiceUnavailableImpl(code);
+    }
+
+    /**
+     * 取得內部 Bukkit listener reference（plugin lifecycle seam）。
+     *
+     * <p>由 {@code AceLibPlugin} 持有，以便在 onDisable / reload 時透過
+     * {@link org.bukkit.event.HandlerList#unregisterAll(Listener)} 解除註冊；
+     * 回傳型別為 Bukkit {@link Listener} 介面，不暴露內部 listener 實作類別。
+     * 未啟用 / 已停用的 facade 回傳 {@code null}（無 listener 可註冊）。</p>
+     *
+     * @return listener reference；unavailable facade 回傳 null
+     */
+    default Listener getListener() {
+        return null;
+    }
+
 
     /**
      * null-input 預檢（default method 共用）：null 必須丟 {@link IllegalArgumentException}

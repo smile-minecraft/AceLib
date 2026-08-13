@@ -44,7 +44,7 @@ import org.bukkit.inventory.Inventory;
  * @see GuiService
  * @since Phase 11 (Plan §十六 §二十一)
  */
-public final class GuiServiceImpl implements GuiService {
+final class GuiServiceImpl implements GuiService {
 
     private static final Logger LOGGER = Logger.getLogger("AceLib");
 
@@ -87,7 +87,7 @@ public final class GuiServiceImpl implements GuiService {
      * {@link #GuiServiceImpl(PlayerContextExecutor)} 或
      * {@link #forProduction(com.smile.acelib.scheduler.SafeScheduler)} 注入 executor。</p>
      */
-    public GuiServiceImpl() {
+    GuiServiceImpl() {
         this(PlayerContextExecutor.noop());
     }
 
@@ -97,7 +97,7 @@ public final class GuiServiceImpl implements GuiService {
      *
      * @param executor 派送 adapter；不可為 null
      */
-    public GuiServiceImpl(PlayerContextExecutor executor) {
+    GuiServiceImpl(PlayerContextExecutor executor) {
         this.playerContextExecutor = Objects.requireNonNull(executor, "executor");
     }
 
@@ -115,7 +115,7 @@ public final class GuiServiceImpl implements GuiService {
      * @throws NullPointerException 當 {@code scheduler} 為 null
      * @since Phase 11（Plan §十六 §二十一）
      */
-    public static GuiServiceImpl forProduction(
+    static GuiServiceImpl forProduction(
             com.smile.acelib.scheduler.SafeScheduler scheduler) {
         Objects.requireNonNull(scheduler, "scheduler");
         return new GuiServiceImpl(new SafeSchedulerPlayerContextExecutor(scheduler));

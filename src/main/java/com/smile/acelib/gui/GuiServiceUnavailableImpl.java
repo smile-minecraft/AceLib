@@ -16,12 +16,12 @@ import java.util.UUID;
  * @see GuiService
  * @since Phase 11 (Plan §十六 §二十一)
  */
-public final class GuiServiceUnavailableImpl implements GuiService {
+final class GuiServiceUnavailableImpl implements GuiService {
 
     /** 標記本 facade 為「未啟用」或「已停用」。 */
     private final String code;
 
-    public GuiServiceUnavailableImpl(String code) {
+    GuiServiceUnavailableImpl(String code) {
         if (!GuiErrorCode.NOT_READY.equals(code)
                 && !GuiErrorCode.SHUTDOWN.equals(code)) {
             throw new IllegalArgumentException(

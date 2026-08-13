@@ -16,8 +16,6 @@ import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
-import com.smile.acelib.gui.GuiServiceImpl;
-import com.smile.acelib.gui.GuiServiceUnavailableImpl;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
@@ -241,7 +239,7 @@ public class AceLibPlugin extends JavaPlugin {
         // Phase 10: worldService 的 NOT_READY unavailable facade；於 onEnable 後被 bindWorldService() 替換。
         this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
         // Phase 11: guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
-        this.guiService = new GuiServiceUnavailableImpl(GuiErrorCode.NOT_READY);
+        this.guiService = GuiService.forUnavailable(GuiErrorCode.NOT_READY);
     }
 
     // ---------------------------------------------------------------------
@@ -1216,8 +1214,9 @@ public class AceLibPlugin extends JavaPlugin {
     /**
      * Phase 11：建立 GUI 服務。
      *
-     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link GuiServiceImpl}。
-     * 透過 {@link com.smile.acelib.gui.SafeSchedulerPlayerContextExecutor}
+     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link GuiService} 實作
+     * （透過 {@code GuiService.forProduction} 隱藏內部實作類別）。
+     * 內部透過 SafeSchedulerPlayerContextExecutor
      * 把 inventory mutation 派送到玩家 region context（Folia entity scheduler、
      * Paper main thread）。listener 註冊延後到 {@link #onPluginReady()}
      * （避免 Bukkit 在 plugin is enabled 之前 allow register）。</p>
@@ -1232,7 +1231,7 @@ public class AceLibPlugin extends JavaPlugin {
         Objects.requireNonNull(server, "server");
         // production 必須走 SafeScheduler：Paper main thread、Folia entity scheduler。
         // 對應 Evidence Pack「inventory mutation 透過既有 SafeExecutor/region-aware adapter」。
-        GuiServiceImpl newService = GuiServiceImpl.forProduction(this.scheduler);
+        GuiService newService = GuiService.forProduction(this.scheduler);
         this.guiService = newService;
         this.guiListener = newService.getListener();
         this.guiListenerRegistered = false;
@@ -1271,7 +1270,7 @@ public class AceLibPlugin extends JavaPlugin {
                     + t.getMessage());
             }
         }
-        this.guiService = new GuiServiceUnavailableImpl(GuiErrorCode.SHUTDOWN);
+        this.guiService = GuiService.forUnavailable(GuiErrorCode.SHUTDOWN);
     }
 
     /**

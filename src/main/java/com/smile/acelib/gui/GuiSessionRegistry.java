@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @see GuiSession
  * @since Phase 11 (Plan §十六)
  */
-public final class GuiSessionRegistry {
+final class GuiSessionRegistry {
 
     private final ConcurrentMap<UUID, GuiSession> sessions = new ConcurrentHashMap<>();
     private final AtomicLong generationCounter = new AtomicLong(0L);
