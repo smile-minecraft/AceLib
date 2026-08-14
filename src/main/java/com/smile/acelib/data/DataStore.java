@@ -6,16 +6,15 @@ import java.util.concurrent.Executor;
 /**
  * 資料儲存抽象（public API 主介面）。
  *
- * <p>對應 Plan §十三 Phase 8「資料儲存」需求，提供後續插件統一的儲存入口。
- * 內部實作不可暴露 JDBC / NIO / Map 細節；對外只暴露 {@link Record} /
- * {@link SchemaVersion} / 同步 + 非同步讀寫介面。</p>
+ * <p>提供後續插件統一的儲存入口。內部實作不可暴露 JDBC / NIO / Map 細節；
+ * 對外只暴露 {@link Record} / {@link SchemaVersion} / 同步 + 非同步讀寫介面。</p>
  *
  * <h2>生命週期</h2>
  * <ol>
  *   <li>{@link #init()} — 開啟／建立底層儲存、執行 schema 遷移；
  *       {@link #isInitialized()} 之後才回傳 true</li>
  *   <li>同步操作：{@link #root()}/{@link #save()}/{@link #flush()}；
- *       非同步操作：{@link #submit(Executor)} 等</li>
+ *       非同步操作：{@link #submit} 等</li>
  *   <li>{@link #close()} — flush + 釋放資源；冪等，重複呼叫不丟例外</li>
  * </ol>
  *
@@ -35,7 +34,7 @@ import java.util.concurrent.Executor;
  * @see Record
  * @see SchemaVersion
  * @see DataStoreException
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public interface DataStore extends AutoCloseable {
 
@@ -108,7 +107,7 @@ public interface DataStore extends AutoCloseable {
     void save();
 
     /**
-     * 同步等待所有非同步任務完成（{@link #submit(Executor)} 派送後尚未完成的），
+     * 同步等待所有非同步任務完成（{@link #submit} 派送後尚未完成的），
      * 並將資料寫回底層。
      *
      * <p>與 {@link #save()} 的差別在於：{@code save()} 僅 flush 同步視圖的差異，

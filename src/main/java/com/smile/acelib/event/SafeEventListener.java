@@ -6,9 +6,8 @@ import org.bukkit.event.Event;
 /**
  * 後續插件的事件處理器介面。
  *
- * <p>對應 Plan §十二 Phase 7「事件註冊／解除」的需求；{@link SafeEventRegistry}
- * 透過泛型 {@code E} 綁定事件型別，避免後續插件在 listener 內部自行
- * {@code instanceof} 判斷造成的 boilerplate。</p>
+ * <p>{@link SafeEventRegistry} 透過泛型 {@code E} 綁定事件型別，避免後續
+ * 插件在 listener 內部自行 {@code instanceof} 判斷造成的 boilerplate。</p>
  *
  * <h2>設計約束</h2>
  * <ul>
@@ -30,7 +29,7 @@ import org.bukkit.event.Event;
  * @param <E> 對應的 Bukkit Event 子型別
  * @see SafeEventRegistry
  * @see ListenerPolicy
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface SafeEventListener<E extends Event> {

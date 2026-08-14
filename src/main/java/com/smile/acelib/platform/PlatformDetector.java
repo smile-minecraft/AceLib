@@ -6,7 +6,7 @@ import java.util.logging.Logger;
 import org.bukkit.Server;
 
 /**
- * 透過 classpath reflection 判定執行平台（Folia / Paper / Unknown）。
+ * 透過 classpath reflection 判定執行平台（Supported）。
  *
  * <p>判定順序：</p>
  * <ol>
@@ -21,11 +21,7 @@ import org.bukkit.Server;
  *
  * @see Platform
  * @see PlatformCapability
- * @since Phase 0；{@link #isFoliaClasspathAvailable()}、
- *      {@link #isPaperClasspathAvailable()}、
- *      {@link #detectMinecraftVersion(Server)}、
- *      {@link #detectJavaVersion()}、
- *      {@link #detectCapability(Platform)} 自 Phase 1 加入（Plan §六）。
+ * @since 1.0.0
  */
 public final class PlatformDetector {
 
@@ -76,7 +72,7 @@ public final class PlatformDetector {
     }
 
     // ---------------------------------------------------------------------
-    // Phase 1 新增方法（Plan §六）
+    // 能力與版本偵測方法
     // ---------------------------------------------------------------------
 
     /**
@@ -86,7 +82,7 @@ public final class PlatformDetector {
      * 流程的情況下單獨查詢 Folia 可用性；{@link #detect()} 隱含 PAPER fallback。</p>
      *
      * @return 若能找到 {@code io.papermc.paper.threadedregions.RegionizedServer} 則 {@code true}
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public boolean isFoliaClasspathAvailable() {
         return isPresent(FOLIA_MARKER);
@@ -98,7 +94,7 @@ public final class PlatformDetector {
      * <p>對 Folia 環境同樣會回傳 {@code true}（Folia 內含 Bukkit API）。</p>
      *
      * @return 若能找到 {@code org.bukkit.Bukkit} 則 {@code true}
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public boolean isPaperClasspathAvailable() {
         return isPresent(PAPER_MARKER);
@@ -118,7 +114,7 @@ public final class PlatformDetector {
      *
      * @param server 當前 server，可為 null；傳入 null 時直接回傳 {@code "unknown"}
      * @return 找到的 Minecraft 版本字串；失敗時回傳 {@code "unknown"}（永遠不為 null）
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public String detectMinecraftVersion(Server server) {
         if (server == null) {
@@ -161,7 +157,7 @@ public final class PlatformDetector {
      * <p>失敗時回傳 {@code "unknown"} 並輸出一行 fine log，不丟例外。</p>
      *
      * @return 找到的 Java 版本字串；失敗時回傳 {@code "unknown"}（永遠不為 null）
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public String detectJavaVersion() {
         try {
@@ -187,7 +183,7 @@ public final class PlatformDetector {
      * @param platform 偵測結果；不可為 null
      * @return 對應的 {@link PlatformCapability}
      * @throws NullPointerException 當 {@code platform} 為 null
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public PlatformCapability detectCapability(Platform platform) {
         Objects.requireNonNull(platform, "platform");

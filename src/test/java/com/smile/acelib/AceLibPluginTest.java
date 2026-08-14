@@ -97,9 +97,9 @@ class AceLibPluginTest {
     }
 
     @Test
-    @DisplayName("AceLibVersion.VERSION 應為 0.5.0-SNAPSHOT")
+    @DisplayName("AceLibVersion.VERSION 應為 1.0.0")
     void versionConstant_isCorrect() {
-        assertEquals("0.5.0-SNAPSHOT", AceLibVersion.VERSION);
+        assertEquals("1.0.0", AceLibVersion.VERSION);
     }
 
     @Test

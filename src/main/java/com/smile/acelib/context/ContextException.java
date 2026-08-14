@@ -3,9 +3,9 @@ package com.smile.acelib.context;
 import java.util.Objects;
 
 /**
- * 上下文安全例外（extends {@link RuntimeException}）。
+ * 上下文安全例外（Supported，extends {@link RuntimeException}）。
  *
- * <p>對應 Plan §八 Phase 3：當 {@link SafeExecutor} 偵測到操作將在錯誤上下文中執行時，
+ * <p>當 {@link SafeExecutor} 偵測到操作將在錯誤上下文中執行時，
  * 拋出此例外。例外攜帶的欄位：</p>
  * <ul>
  *   <li>{@link #getCode()} — 錯誤分類代碼（{@code ACELIB-CTX-001} ~ {@code 004}）</li>
@@ -25,7 +25,7 @@ import java.util.Objects;
  *
  * @see SafeExecutor
  * @see ContextInspector
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public class ContextException extends RuntimeException {
 

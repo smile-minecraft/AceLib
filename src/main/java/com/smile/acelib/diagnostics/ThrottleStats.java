@@ -5,21 +5,20 @@ import java.util.Objects;
 /**
  * 節流統計資訊（immutable record）。
  *
- * <p>對應 Plan §十九 Phase 14「同類錯誤大量發生時不無限制洗版」需求，
- * 在 report debug 區塊中用以呈現每個代碼的視窗內計數。</p>
+ * <p>在 report debug 區塊中用以呈現每個代碼的視窗內計數。</p>
  *
  * @param allowed    視窗內被允許的次數（>= 0）
  * @param suppressed 視窗內被抑制的次數（>= 0）
  * @param windowMs   視窗長度（毫秒，> 0）
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public record ThrottleStats(int allowed, int suppressed, long windowMs) {
 
     /**
      * Compact constructor：欄位範圍檢查。
      *
-     * @throws IllegalArgumentException 當 {@code allowed} / {@code suppressed} < 0 或
-     *                                  {@code windowMs} <= 0
+     * @throws IllegalArgumentException 當 {@code allowed} / {@code suppressed} &lt; 0 或
+     *                                  {@code windowMs} &lt;= 0
      */
     public ThrottleStats {
         if (allowed < 0) {

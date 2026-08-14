@@ -1,7 +1,7 @@
 package com.smile.acelib.world;
 
 /**
- * 世界操作結果狀態（Plan §十九 Phase 10 共同契約）。
+ * 世界操作結果狀態。
  *
  * <p>所有 {@link WorldResult} 子類型（{@link BlockResult} / {@link EntityResult} /
  * {@link TeleportResult} / {@link NearbyQueryResult}）皆攜帶下列狀態之一：</p>
@@ -19,7 +19,7 @@ package com.smile.acelib.world;
  * 狀態順序凍結，不得更動。
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public enum WorldState {
 

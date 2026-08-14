@@ -3,7 +3,7 @@ package com.smile.acelib.diagnostics;
 /**
  * 可注入的時鐘抽象。
  *
- * <p>對應 Plan §十九 Phase 14「同類錯誤短時間大量發生的節流」需求；
+ * <p>供同類錯誤節流等需要時間判斷的元件注入時間來源；
  * 測試全程使用 {@link java.util.concurrent.atomic.AtomicLong} 實作
  * 來推進時間，<strong>禁止 sleep</strong>。</p>
  *
@@ -16,7 +16,7 @@ package com.smile.acelib.diagnostics;
  * </ul>
  *
  * @see ErrorThrottler
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface Clock {

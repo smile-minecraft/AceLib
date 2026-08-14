@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * 指令註冊中心介面（Plan §十一 Phase 6）。
+ * 指令註冊中心介面。
  *
  * <p>後續插件透過本介面註冊主指令 + 子指令、查詢既有指令、執行 dispatch
  * 與 tab complete。實作為 {@link CommandRegistryImpl}。</p>
@@ -25,7 +25,7 @@ import java.util.List;
  *
  * @see CommandSpec
  * @see SubCommandSpec
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public interface CommandRegistry {
 
@@ -98,7 +98,7 @@ public interface CommandRegistry {
      *   <li>args[0] 為已知主指令（繼續）或未知字串（不再繼續）→ 列出 sender 可見的子指令</li>
      *   <li>args[0] 為主指令 + 已知子指令 + args[1+] → 委派給該子指令的
      *       {@link SubCommandCompleter}</li>
-     *   <li>無論如何，<strong>不暴露無權限子指令</strong>（Plan §十一驗收標準）</li>
+     *   <li>無論如何，<strong>不暴露無權限子指令</strong>（tab completion 的權限收斂契約）</li>
      * </ul>
      *
      * @param sender       指令 sender；不可為 null
@@ -133,7 +133,7 @@ public interface CommandRegistry {
      *   <li>後續 {@link #register} 拋 {@link CommandErrorKind#REGISTRY_DISABLED}</li>
      *   <li>後續 {@link #dispatch} 對已註冊指令拋 {@code ACELIB-CMD-009}</li>
      *   <li>既有指令 map 與冷卻狀態保留，供 reload 後重新註冊使用
-     *       （reload 不破壞 Plan §十一驗收標準）</li>
+     *       （reload 不破壞冷卻 / 防重複觸發狀態）</li>
      *   <li>重複呼叫不丟例外（idempotent）</li>
      * </ul>
      */

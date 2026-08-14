@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Item 相關錯誤代碼常數。
  *
- * <p>對應 Plan Phase 12：所有對外拋出或記錄的 item 錯誤都必須攜帶
+ * <p>所有對外拋出或記錄的 item 錯誤都必須攜帶
  * {@code ACELIB-ITEM-*} 分類代碼，方便
  * {@link com.smile.acelib.diagnostics.ErrorCodeRegistry} 正確歸類。</p>
  *

@@ -1,0 +1,1218 @@
+{
+  "schemaVersion": 1,
+  "description": "AceLib v1 public API surface contract: Supported / SPI / Internal classification.",
+  "policy": {
+    "Supported": "v1.0 起承諾 source/binary compatibility。",
+    "SPI": "供 adapter / backend / extension 實作者使用；寫明實作者責任與相容性承諾。",
+    "Internal": "不允許下游直接依賴；v1.0 前應收斂為 package-private 或移入 internal package。"
+  },
+  "types": [
+    {
+      "fqcn": "com.smile.acelib.AceLibApi",
+      "package": "com.smile.acelib",
+      "simpleName": "AceLibApi",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "對外 API facade；v1 承諾 source/binary 相容，是下游取得各 service 的入口。",
+      "mainCallers": "AceLibPlugin 建構；消費者經 v1 的 AceLibProvider 取得。"
+    },
+    {
+      "fqcn": "com.smile.acelib.AceLibPlugin",
+      "package": "com.smile.acelib",
+      "simpleName": "AceLibPlugin",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Bukkit plugin main class，因 plugin.yml 要求必須 public；非穩定消費者契約，穩定入口由 v1 的 AceLibProvider 提供。",
+      "mainCallers": "Bukkit server；AceLibApi 接收其 lifecycle callback。",
+      "retention": "plugin.yml main class 必須 public（Bukkit framework 反射要求）；v1 穩定入口由 AceLibProvider 提供，本類不屬消費者契約。"
+    },
+    {
+      "fqcn": "com.smile.acelib.AceLibVersion",
+      "package": "com.smile.acelib",
+      "simpleName": "AceLibVersion",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "對外版本常數 VERSION，與 plugin.yml / build 一致；v1 契約一部分。",
+      "mainCallers": "AceLibApi.uninitialized；DiagnosticsService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.AceLibStatusHandler",
+      "package": "com.smile.acelib.command",
+      "simpleName": "AceLibStatusHandler",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "內部 /acelib status 指令處理器，封裝 console/玩家分流與 region-safe 派送；非消費者 API。",
+      "mainCallers": "BukkitCommandBridge。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構註冊 /acelib status；v1 前保留 public 供既有組裝鏈使用。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.BukkitCommandBridge",
+      "package": "com.smile.acelib.command",
+      "simpleName": "BukkitCommandBridge",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Bukkit CommandExecutor 橋接內部實作；非穩定契約。",
+      "mainCallers": "AceLibPlugin 註冊指令。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構並 attach 到 Bukkit CommandExecutor；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.BukkitReplySink",
+      "package": "com.smile.acelib.command",
+      "simpleName": "BukkitReplySink",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "ReplySink 的 Bukkit 內部實作；消費者應使用 ReplySink 抽象而非此類。",
+      "mainCallers": "AceLibStatusHandler；指令 dispatch。",
+      "retention": "AceLibPlugin 跨 package 建構 ReplySink（含 nested SafeExecutorBackend）；v1 前保留 public 供既有組裝鏈使用。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.BukkitSender",
+      "package": "com.smile.acelib.command",
+      "simpleName": "BukkitSender",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Sender 的 Bukkit 內部實作；消費者應使用 Sender 抽象。",
+      "retention": "v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。",
+      "mainCallers": "指令 dispatch。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandContext",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandContext",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "傳遞給 SubCommand 的執行上下文（指令、參數、sender）；指令擴充契約的一部分，v1 穩定。",
+      "mainCallers": "SubCommand.execute。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandErrorKind",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandErrorKind",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "指令錯誤分類列舉，出現在 CommandException 與回覆語意中；v1 凍結常數順序。",
+      "mainCallers": "CommandException；BukkitReplySink。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandException",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "指令層級例外，消費者在 SubCommand 中可拋出；v1 契約。",
+      "mainCallers": "SubCommand；CommandRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandRegistry",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandRegistry",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "指令註冊服務介面，消費者用來註冊 SubCommand；v1 承諾相容。",
+      "mainCallers": "AceLibPlugin；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandRegistryImpl",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandRegistryImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "CommandRegistry 的內部實作；非消費者 API。",
+      "mainCallers": "AceLibPlugin。",
+      "retention": "AceLibPlugin 跨 package 建構並於 onDisable 呼叫 onPluginDisable；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandSpec",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandSpec",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "指令規格值型別（名稱、權限、描述）；註冊時使用；v1 穩定。",
+      "mainCallers": "CommandRegistry.register。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CooldownTracker",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CooldownTracker",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "指令冷卻追蹤工具類，供 SubCommandSpec 使用；public 穩定工具。",
+      "mainCallers": "SubCommandSpec；CommandRegistryImpl。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.PlayerHandle",
+      "package": "com.smile.acelib.command",
+      "simpleName": "PlayerHandle",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "指令中代表玩家/來源的抽象；SubCommand 接收；v1 穩定。",
+      "mainCallers": "SubCommand；Sender。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.ReplySink",
+      "package": "com.smile.acelib.command",
+      "simpleName": "ReplySink",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "指令回覆抽象（region-safe 派送）；SubCommand 接收；v1 穩定。",
+      "mainCallers": "SubCommand；BukkitReplySink 實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.Sender",
+      "package": "com.smile.acelib.command",
+      "simpleName": "Sender",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "指令來源抽象（console/玩家）；SubCommand 接收；v1 穩定。",
+      "mainCallers": "SubCommand；BukkitSender 實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.SubCommand",
+      "package": "com.smile.acelib.command",
+      "simpleName": "SubCommand",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的指令邏輯介面（extension point）；文件須寫明實作者責任與相容性。",
+      "mainCallers": "CommandRegistry 呼叫；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.SubCommandCompleter",
+      "package": "com.smile.acelib.command",
+      "simpleName": "SubCommandCompleter",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的 tab 補全介面；extension point。",
+      "mainCallers": "CommandRegistry 呼叫補全。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.SubCommandSpec",
+      "package": "com.smile.acelib.command",
+      "simpleName": "SubCommandSpec",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "子指令規格值型別（名稱、權限、冷卻）；註冊時使用；v1 穩定。",
+      "mainCallers": "CommandRegistry.register。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.AceLibConfig",
+      "package": "com.smile.acelib.config",
+      "simpleName": "AceLibConfig",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "配置綁定工廠（bind/get/unbind）與 ConfigManager/LangManager 存取；v1 穩定入口。",
+      "mainCallers": "AceLibPlugin；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigException",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "配置載入/遷移例外；v1 契約。",
+      "mainCallers": "ConfigManager；ConfigMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigManager",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigManager",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "配置管理服務（載入/遷移/儲存）；v1 穩定。",
+      "mainCallers": "AceLibConfig；AceLibPlugin。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigMigration",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigMigration",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的配置遷移介面（extension point）；寫明冪等與相容性責任。",
+      "mainCallers": "ConfigManager.registerMigration；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigSchema",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigSchema",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "配置結構描述值型別；v1 穩定。",
+      "mainCallers": "AceLibConfig.withConfigSchema；ConfigManager。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigVersion",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigVersion",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "配置版本值型別（major.minor），可比較；v1 凍結結構。",
+      "mainCallers": "ConfigSchema；ConfigManager；ConfigMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.FieldSpec",
+      "package": "com.smile.acelib.config",
+      "simpleName": "FieldSpec",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "配置欄位規格值型別；v1 穩定。",
+      "mainCallers": "ConfigSchema。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.LangManager",
+      "package": "com.smile.acelib.config",
+      "simpleName": "LangManager",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "多語系訊息管理服務；v1 穩定。",
+      "mainCallers": "AceLibConfig；MessageService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.MigrationChain",
+      "package": "com.smile.acelib.config",
+      "simpleName": "MigrationChain",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "配置遷移鏈值型別，串接 ConfigMigration；v1 穩定。",
+      "mainCallers": "ConfigManager；ConfigMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.MigrationResult",
+      "package": "com.smile.acelib.config",
+      "simpleName": "MigrationResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "配置遷移結果值型別；v1 穩定。",
+      "mainCallers": "ConfigMigration；MigrationChain。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.ContextCheckResult",
+      "package": "com.smile.acelib.context",
+      "simpleName": "ContextCheckResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "執行緒/操作上下文檢查結果值型別；v1 穩定。",
+      "mainCallers": "ContextInspector；SafeExecutor。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.ContextException",
+      "package": "com.smile.acelib.context",
+      "simpleName": "ContextException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "上下文違規例外；v1 契約。",
+      "mainCallers": "SafeExecutor；ContextInspector。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.ContextInspector",
+      "package": "com.smile.acelib.context",
+      "simpleName": "ContextInspector",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "執行緒上下文檢查工具（currentContext/check）；Folia-safe 基礎原語；v1 穩定。",
+      "mainCallers": "SafeExecutor；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.DebugMode",
+      "package": "com.smile.acelib.context",
+      "simpleName": "DebugMode",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "除錯模式開關工具；v1 穩定。",
+      "mainCallers": "DiagnosticsService；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.OperationType",
+      "package": "com.smile.acelib.context",
+      "simpleName": "OperationType",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "操作型別列舉（READ_ONLY 等）；v1 凍結常數順序。",
+      "mainCallers": "ContextInspector；ThreadContext。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.SafeExecutor",
+      "package": "com.smile.acelib.context",
+      "simpleName": "SafeExecutor",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "Folia-safe 執行原語（executeAsync/executeOnRegion）；v1 穩定核心 API。",
+      "mainCallers": "消費者；ReplySink 實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.context.ThreadContext",
+      "package": "com.smile.acelib.context",
+      "simpleName": "ThreadContext",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "執行緒上下文列舉（UNKNOWN 等）；v1 凍結常數順序。",
+      "mainCallers": "ContextInspector；OperationType。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.DataMigration",
+      "package": "com.smile.acelib.data",
+      "simpleName": "DataMigration",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的資料遷移介面（extension point）；寫明冪等與 rollback 責任。",
+      "mainCallers": "DataStore 遷移執行器；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.DataMigrationContext",
+      "package": "com.smile.acelib.data",
+      "simpleName": "DataMigrationContext",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "資料遷移上下文（read/write view）；遷移過程使用；v1 穩定。",
+      "mainCallers": "DataMigration.migrate。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.DataStore",
+      "package": "com.smile.acelib.data",
+      "simpleName": "DataStore",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "資料儲存服務介面；v1 承諾相容。",
+      "mainCallers": "PlayerDataService；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.DataStoreException",
+      "package": "com.smile.acelib.data",
+      "simpleName": "DataStoreException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "資料儲存例外；v1 契約。",
+      "mainCallers": "DataStore 實作；PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.JdbcDataStore",
+      "package": "com.smile.acelib.data",
+      "simpleName": "JdbcDataStore",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "DataStore 的 JDBC 內部實作；非消費者 API。",
+      "mainCallers": "AceLibPlugin 組裝。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 組裝 DataStore；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.JsonCodec",
+      "package": "com.smile.acelib.data",
+      "simpleName": "JsonCodec",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的 JSON 編解碼介面（extension point）；寫明 round-trip 白名單責任。",
+      "mainCallers": "JsonFileDataStore；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.JsonCodecImpl",
+      "package": "com.smile.acelib.data",
+      "simpleName": "JsonCodecImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "JsonCodec 的內部預設實作；非消費者 API。",
+      "mainCallers": "JsonFileDataStore。",
+      "retention": "AceLibPlugin 與多個 data/player 測試跨 package 建構預設 codec；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.JsonFileDataStore",
+      "package": "com.smile.acelib.data",
+      "simpleName": "JsonFileDataStore",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "DataStore 的 JSON 檔案內部實作；非消費者 API。",
+      "mainCallers": "AceLibPlugin。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 組裝 DataStore；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.MemoryRecord",
+      "package": "com.smile.acelib.data",
+      "simpleName": "MemoryRecord",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Record 的記憶體內部實作；非消費者 API。",
+      "mainCallers": "內部 / 測試。",
+      "retention": "player 模組（LockedPlayerRecord/PlayerDataService）跨 package 使用作為 Record 實作；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.MigrationChain",
+      "package": "com.smile.acelib.data",
+      "simpleName": "MigrationChain",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "資料遷移鏈值型別，串接 DataMigration；v1 穩定。",
+      "mainCallers": "DataStore 遷移；DataMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.MigrationResult",
+      "package": "com.smile.acelib.data",
+      "simpleName": "MigrationResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "資料遷移結果值型別；v1 穩定。",
+      "mainCallers": "DataMigration；MigrationChain。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.Record",
+      "package": "com.smile.acelib.data",
+      "simpleName": "Record",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的資料記錄介面（extension point）；定義 path/getter 契約。",
+      "mainCallers": "DataStore；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.SchemaVersion",
+      "package": "com.smile.acelib.data",
+      "simpleName": "SchemaVersion",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "資料 schema 版本值型別（major.minor）；v1 凍結結構。",
+      "mainCallers": "DataStore；MigrationResult；Record。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.Clock",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "Clock",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "可注入的時鐘介面（extension point）；測試/進階用途提供自訂時間來源。",
+      "mainCallers": "ErrorThrottler；DiagnosticsService 測試。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.DiagnosticReport",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "DiagnosticReport",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "診斷報告建構/格式化工具；v1 穩定。",
+      "mainCallers": "消費者；DiagnosticsService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.DiagnosticSnapshot",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "DiagnosticSnapshot",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "診斷快照值型別；v1 穩定。",
+      "mainCallers": "DiagnosticReport；DiagnosticsService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.DiagnosticsService",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "DiagnosticsService",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "診斷服務（模組狀態、錯誤碼註冊、debug）；v1 穩定。",
+      "mainCallers": "AceLibPlugin；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ErrorCategory",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ErrorCategory",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "錯誤分類列舉；v1 凍結常數順序。",
+      "mainCallers": "ErrorCodeRegistry；ErrorCodeInfo。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ErrorCodeInfo",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ErrorCodeInfo",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "錯誤碼資訊值型別；v1 穩定。",
+      "mainCallers": "ErrorCodeRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ErrorCodeRegistry",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ErrorCodeRegistry",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "錯誤碼註冊表（唯一錯誤碼總表來源）；v1 穩定。",
+      "mainCallers": "DiagnosticsService；各模組。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ErrorSummaryLine",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ErrorSummaryLine",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "錯誤摘要行值型別；v1 穩定。",
+      "mainCallers": "DiagnosticReport。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ErrorThrottler",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ErrorThrottler",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "錯誤節流工具（tryRecord/getStats）；v1 穩定。",
+      "mainCallers": "DiagnosticsService；各模組。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ModuleState",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ModuleState",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "模組狀態值型別；v1 穩定。",
+      "mainCallers": "DiagnosticsService.registerModuleState。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ModuleStatus",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ModuleStatus",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "模組狀態列舉；v1 凍結常數順序。",
+      "mainCallers": "ModuleState；DiagnosticsService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ThrottleDecision",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ThrottleDecision",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "節流決策值型別；v1 穩定。",
+      "mainCallers": "ErrorThrottler。"
+    },
+    {
+      "fqcn": "com.smile.acelib.diagnostics.ThrottleStats",
+      "package": "com.smile.acelib.diagnostics",
+      "simpleName": "ThrottleStats",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "節流統計值型別；v1 穩定。",
+      "mainCallers": "ErrorThrottler。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.AceLibEvents",
+      "package": "com.smile.acelib.event",
+      "simpleName": "AceLibEvents",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "事件註冊工廠（create/bind/boundTo）；v1 穩定入口。",
+      "mainCallers": "AceLibPlugin；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.EventErrorRecord",
+      "package": "com.smile.acelib.event",
+      "simpleName": "EventErrorRecord",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "事件錯誤記錄值型別；v1 穩定。",
+      "mainCallers": "EventErrorRecorder；SafeEventRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.EventErrorRecorder",
+      "package": "com.smile.acelib.event",
+      "simpleName": "EventErrorRecorder",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "事件錯誤記錄器（ring buffer）；v1 穩定工具。",
+      "mainCallers": "SafeEventRegistryImpl；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.EventRegistration",
+      "package": "com.smile.acelib.event",
+      "simpleName": "EventRegistration",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "事件註冊結果值型別；v1 穩定。",
+      "mainCallers": "SafeEventRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.ListenerPolicy",
+      "package": "com.smile.acelib.event",
+      "simpleName": "ListenerPolicy",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "事件監聽策略列舉（Folia 約束）；v1 凍結常數順序。",
+      "mainCallers": "SafeEventListener；SafeEventRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.SafeEventListener",
+      "package": "com.smile.acelib.event",
+      "simpleName": "SafeEventListener",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的 Folia-safe 事件監聽介面（extension point）；寫明 identity/thread 責任。",
+      "mainCallers": "SafeEventRegistry.register；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.SafeEventRegistry",
+      "package": "com.smile.acelib.event",
+      "simpleName": "SafeEventRegistry",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "事件註冊服務介面；v1 承諾相容。",
+      "mainCallers": "AceLibEvents；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.event.SafeEventRegistryImpl",
+      "package": "com.smile.acelib.event",
+      "simpleName": "SafeEventRegistryImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "SafeEventRegistry 的內部實作；非消費者 API。",
+      "retention": "v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。",
+      "mainCallers": "AceLibEvents。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.ExternalIntegrationErrorCodes",
+      "package": "com.smile.acelib.external",
+      "simpleName": "ExternalIntegrationErrorCodes",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "外部整合錯誤碼常數表；v1 穩定。",
+      "mainCallers": "ExternalIntegrationService；IntegrationRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.ExternalIntegrationService",
+      "package": "com.smile.acelib.external",
+      "simpleName": "ExternalIntegrationService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "外部整合查詢服務介面；v1 承諾相容。",
+      "mainCallers": "AceLibApi；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.ExternalIntegrationServiceImpl",
+      "package": "com.smile.acelib.external",
+      "simpleName": "ExternalIntegrationServiceImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "ExternalIntegrationService 的內部實作；非消費者 API。",
+      "mainCallers": "AceLibPlugin。",
+      "retention": "AceLibPlugin 跨 package 建構並取 toModuleState() 註冊 diagnostics；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.ExternalPluginProbe",
+      "package": "com.smile.acelib.external",
+      "simpleName": "ExternalPluginProbe",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "外部插件探測工具（classpath/版本）；v1 穩定。",
+      "mainCallers": "IntegrationRegistry；IntegrationAdapter。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.IntegrationAdapter",
+      "package": "com.smile.acelib.external",
+      "simpleName": "IntegrationAdapter",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的外部整合介面（extension point）；寫明冪等生命週期與相容性責任。",
+      "mainCallers": "IntegrationRegistry.register；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.IntegrationProbeResult",
+      "package": "com.smile.acelib.external",
+      "simpleName": "IntegrationProbeResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "整合探測結果值型別；v1 穩定。",
+      "mainCallers": "ExternalPluginProbe；IntegrationAdapter；ExternalIntegrationService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.IntegrationRegistry",
+      "package": "com.smile.acelib.external",
+      "simpleName": "IntegrationRegistry",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "整合介面卡註冊/查詢服務；v1 穩定。",
+      "mainCallers": "AceLibPlugin；消費者註冊 adapter。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.IntegrationStatus",
+      "package": "com.smile.acelib.external",
+      "simpleName": "IntegrationStatus",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "整合狀態列舉；v1 凍結常數順序。",
+      "mainCallers": "IntegrationProbeResult；ExternalIntegrationService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.LuckPermsIntegrationAdapter",
+      "package": "com.smile.acelib.external",
+      "simpleName": "LuckPermsIntegrationAdapter",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "LuckPerms 內建介面卡實作；消費者不應繼承，請實作 IntegrationAdapter。",
+      "mainCallers": "AceLibPlugin 註冊內建。",
+      "retention": "AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.PlaceholderApiIntegrationAdapter",
+      "package": "com.smile.acelib.external",
+      "simpleName": "PlaceholderApiIntegrationAdapter",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "PlaceholderAPI 內建介面卡實作；消費者不應繼承。",
+      "mainCallers": "AceLibPlugin 註冊內建。",
+      "retention": "AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.external.VaultIntegrationAdapter",
+      "package": "com.smile.acelib.external",
+      "simpleName": "VaultIntegrationAdapter",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Vault 內建介面卡實作；消費者不應繼承。",
+      "mainCallers": "AceLibPlugin 註冊內建。",
+      "retention": "AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiArgument",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiArgument",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 開啟參數值型別（玩家/標題/保護格）；v1 穩定。",
+      "mainCallers": "GuiService.open；GuiSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiAsyncRequest",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiAsyncRequest",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 非同步請求值型別；v1 穩定。",
+      "mainCallers": "GuiService；GuiSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiConfirmation",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiConfirmation",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 確認流程值型別；v1 穩定。",
+      "mainCallers": "GuiService；GuiResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiErrorCode",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiErrorCode",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 錯誤碼常數表；v1 穩定。",
+      "mainCallers": "GuiService；GuiResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiPage",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiPage",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 分頁結果值型別；v1 穩定。",
+      "mainCallers": "GuiService；GuiResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiResult",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 操作結果值型別（accepted/success/rejected/failed）；v1 穩定。",
+      "mainCallers": "GuiService；GuiSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiService",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "GUI 服務介面；v1 承諾相容。",
+      "mainCallers": "AceLibApi；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiSession",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiSession",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 會話值型別；v1 穩定。",
+      "mainCallers": "GuiService；GuiResult；GuiArgument。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiState",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiState",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "GUI 狀態列舉；v1 凍結常數順序（只能追加）。",
+      "mainCallers": "GuiResult；GuiSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.AceItemFactory",
+      "package": "com.smile.acelib.item",
+      "simpleName": "AceItemFactory",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "物品工廠（create/identify/metadata）；v1 穩定。",
+      "mainCallers": "消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemErrorCode",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemErrorCode",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "物品錯誤碼常數表；v1 穩定。",
+      "mainCallers": "AceItemFactory；ItemMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemException",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "物品操作例外；v1 契約。",
+      "mainCallers": "AceItemFactory；ItemMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemIdentity",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemIdentity",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "物品識別值型別（namespace:key@major.minor）；v1 穩定。",
+      "mainCallers": "AceItemFactory；ItemMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemMigration",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemMigration",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的物品遷移介面（extension point）；寫明冪等與 rollback 責任。",
+      "mainCallers": "ItemMigrationChain；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemMigrationChain",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemMigrationChain",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "物品遷移鏈值型別，串接 ItemMigration；v1 穩定。",
+      "mainCallers": "AceItemFactory；ItemMigration。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemMigrationContext",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemMigrationContext",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "物品遷移上下文介面（extension point）；傳遞給 ItemMigration。",
+      "mainCallers": "ItemMigration.migrate；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemMigrationResult",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemMigrationResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "物品遷移結果值型別；v1 穩定。",
+      "mainCallers": "ItemMigration；ItemMigrationChain。"
+    },
+    {
+      "fqcn": "com.smile.acelib.item.ItemSchemaVersion",
+      "package": "com.smile.acelib.item",
+      "simpleName": "ItemSchemaVersion",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "物品 schema 版本值型別（major.minor）；v1 凍結結構。",
+      "mainCallers": "ItemMigration；ItemMigrationResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.MessageService",
+      "package": "com.smile.acelib.message",
+      "simpleName": "MessageService",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "訊息格式化/發送服務；v1 穩定。",
+      "mainCallers": "消費者；LangManager。"
+    },
+    {
+      "fqcn": "com.smile.acelib.platform.Platform",
+      "package": "com.smile.acelib.platform",
+      "simpleName": "Platform",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "平台列舉（FOLIA/PAPER/UNKNOWN）；v1 凍結常數順序。",
+      "mainCallers": "PlatformDetector；PlatformCapability；AceLibApi。"
+    },
+    {
+      "fqcn": "com.smile.acelib.platform.PlatformCapability",
+      "package": "com.smile.acelib.platform",
+      "simpleName": "PlatformCapability",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "平台能力 profile 值型別；v1 穩定。",
+      "mainCallers": "PlatformDetector；AceLibApi；SafeExecutor。"
+    },
+    {
+      "fqcn": "com.smile.acelib.platform.PlatformDetector",
+      "package": "com.smile.acelib.platform",
+      "simpleName": "PlatformDetector",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "平台偵測工具（detect/detectCapability）；v1 穩定。",
+      "mainCallers": "AceLibPlugin；AceLibApi。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerCooldownService",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerCooldownService",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "玩家冷卻服務；v1 穩定。",
+      "mainCallers": "消費者；PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerDataService",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerDataService",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "玩家資料/會話服務；v1 穩定。",
+      "mainCallers": "消費者；AceLibPlugin。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerSession",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerSession",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "玩家會話值型別；v1 穩定。",
+      "mainCallers": "PlayerDataService；PlayerSessionRegistry。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerSessionRegistry",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerSessionRegistry",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "玩家會話註冊/追蹤服務；v1 穩定。",
+      "mainCallers": "PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerSessionState",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerSessionState",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "玩家會話狀態列舉；v1 凍結常數順序。",
+      "mainCallers": "PlayerSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerStateException",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerStateException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "玩家會話狀態例外；v1 契約。",
+      "mainCallers": "PlayerSession；PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.AceLibScheduler",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "AceLibScheduler",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "排程器工廠（create/bind/boundTo）；v1 穩定入口。",
+      "mainCallers": "AceLibPlugin；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.SafeScheduler",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "SafeScheduler",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "Folia-safe 排程服務介面；v1 承諾相容。",
+      "mainCallers": "AceLibScheduler；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.SafeSchedulerImpl",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "SafeSchedulerImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "SafeScheduler 的內部實作；非消費者 API。",
+      "mainCallers": "AceLibScheduler。",
+      "retention": "SafeExecutor（context）、DiagnosticsService（diagnostics）與 AceLibPlugin 跨 package 依賴型別與 getRecorder/bindScheduler；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.ScheduledTask",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "ScheduledTask",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "排程任務控制介面（cancel/isCancelled）；v1 穩定。",
+      "mainCallers": "SafeScheduler；SafeExecutor。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskErrorRecord",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskErrorRecord",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "排程錯誤記錄值型別；v1 穩定。",
+      "mainCallers": "TaskErrorRecorder；SafeScheduler。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskErrorRecorder",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskErrorRecorder",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "排程錯誤記錄器；v1 穩定工具。",
+      "mainCallers": "SafeSchedulerImpl；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskType",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskType",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "排程任務型別列舉；v1 凍結常數順序。",
+      "mainCallers": "SafeScheduler；ScheduledTask。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.BlockResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "BlockResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "區塊操作結果值型別；v1 穩定。",
+      "mainCallers": "WorldService；WorldBackendResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.BukkitWorldBackend",
+      "package": "com.smile.acelib.world",
+      "simpleName": "BukkitWorldBackend",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "WorldBackend 的 Bukkit/Folia 內部實作；非消費者 API。",
+      "mainCallers": "WorldServiceImpl。",
+      "retention": "AceLibPlugin 跨 package 建構 WorldBackend 注入 WorldServiceImpl；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.EntityReference",
+      "package": "com.smile.acelib.world",
+      "simpleName": "EntityReference",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "實體參考值型別；v1 穩定。",
+      "mainCallers": "WorldService；EntityResult；NearbyQueryResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.EntityResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "EntityResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "實體操作結果值型別；v1 穩定。",
+      "mainCallers": "WorldService；WorldBackendResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.LocationSnapshot",
+      "package": "com.smile.acelib.world",
+      "simpleName": "LocationSnapshot",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "位置快照值型別（不可變）；v1 穩定。",
+      "mainCallers": "WorldService；BlockResult；EntityResult 等。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.NearbyQueryResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "NearbyQueryResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "附近查詢結果值型別；v1 穩定。",
+      "mainCallers": "WorldService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.TeleportResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "TeleportResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "傳送結果值型別；v1 穩定。",
+      "mainCallers": "WorldService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldBackend",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldBackend",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "消費者實作的 world 後端介面（extension point）；寫明 region/thread 與失敗語意責任。",
+      "mainCallers": "WorldServiceImpl；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldBackendResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldBackendResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "world 後端結果值型別（WorldBackend 回傳）；v1 穩定。",
+      "mainCallers": "WorldBackend；WorldServiceImpl。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldErrorCode",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldErrorCode",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "world 錯誤碼常數表；v1 穩定。",
+      "mainCallers": "WorldService；WorldResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldResult",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "world 操作結果基類值型別；v1 穩定。",
+      "mainCallers": "WorldService；WorldBackendResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldService",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "world 操作服務介面；v1 承諾相容。",
+      "mainCallers": "AceLibApi；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldServiceImpl",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldServiceImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "WorldService 的內部實作；非消費者 API。",
+      "mainCallers": "AceLibPlugin。",
+      "retention": "AceLibPlugin 與 AceLibApi 跨 package 建構/型別依賴；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldServiceUnavailableImpl",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldServiceUnavailableImpl",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "WorldService 的不可用 facade 內部實作（NOT_READY/SHUTDOWN）；非消費者 API。",
+      "mainCallers": "AceLibApi（uninitialized/shutDown）。",
+      "retention": "AceLibApi（com.smile.acelib）跨 package 建構 NOT_READY/SHUTDOWN facade；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.world.WorldState",
+      "package": "com.smile.acelib.world",
+      "simpleName": "WorldState",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "world 操作狀態列舉；v1 凍結常數順序。",
+      "mainCallers": "WorldResult；BlockResult 等。"
+    }
+  ]
+}

@@ -6,8 +6,7 @@ import org.bukkit.event.Event;
 /**
  * 事件註冊 handle（immutable record）。
  *
- * <p>對應 Plan §十二 Phase 7「事件註冊 / 解除」：呼叫
- * {@link SafeEventRegistry#register} / {@link SafeEventRegistry#registerOneShot}
+ * <p>呼叫 {@link SafeEventRegistry#register} / {@link SafeEventRegistry#registerOneShot}
  * 後會回傳一個 {@code EventRegistration} handle，後續插件可持有此 handle
  * 呼叫 {@link SafeEventRegistry#unregister(EventRegistration)} 解除註冊。</p>
  *
@@ -24,10 +23,15 @@ import org.bukkit.event.Event;
  * {@link SafeEventListener#identity()} override 自定義 key，可能出現
  * equals 的情況（這通常表示「同樣的 listener 重複註冊」）。</p>
  *
- * @param <E> 對應的 Bukkit Event 子型別
+ * @param <E>       對應的 Bukkit Event 子型別
+ * @param registryId registry 內部的唯一識別
+ * @param eventType  對應的 Bukkit Event 型別；不可為 null
+ * @param listener   對應的 listener；不可為 null
+ * @param identity   listener 的識別鍵；不可為 null
+ * @param oneShot    是否為一次性 listener
  * @see SafeEventRegistry
  * @see SafeEventListener
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public record EventRegistration<E extends Event>(
     long registryId,

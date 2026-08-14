@@ -11,8 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 確定性、可注入時鐘的同類錯誤節流器。
  *
- * <p>對應 Plan §十九 Phase 14「同類錯誤大量發生時不無限制洗版」需求。
- * 內部為每個 error code 維護獨立視窗：</p>
+ * <p>內部為每個 error code 維護獨立視窗：</p>
  * <ul>
  *   <li>視窗內前 {@code maxPerWindow} 次 → {@link ThrottleDecision.Kind#ALLOWED}</li>
  *   <li>視窗內第 {@code maxPerWindow + 1} 次（含）以後 → {@link ThrottleDecision.Kind#SUPPRESSED}</li>
@@ -47,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <strong>禁止 sleep</strong>。
  *
  * @see ThrottleDecision
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public final class ErrorThrottler {
 
@@ -243,7 +242,7 @@ public final class ErrorThrottler {
      * @return 不可變的 {@code code -> ThrottleStats} 映射；當前無 tracked 代碼時回傳空 map
      * @see #trackedKeys()
      * @see #getStats(String)
-     * @since Phase 14 (Plan §十九) — 為 {@code DiagnosticsService.buildSnapshot}
+     * @since 1.0.0 — 為 {@code DiagnosticsService.buildSnapshot}
      *      提供併發安全的 throttle 快照
      */
     public Map<String, ThrottleStats> snapshotStats() {

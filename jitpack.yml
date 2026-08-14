@@ -1,0 +1,9 @@
+# JitPack 建置設定：使用 Java 25 工具鏈。
+# 注意：本檔僅聲明建置環境，不含任何 credential / secret。
+# JitPack 預設執行 `./gradlew install`（對應 maven-publish 的 publishToMavenLocal），
+# 產出 binary / POM / sources / javadoc artifact。
+jdk:
+  - openjdk25
+
+install:
+  - ./gradlew publishToMavenLocal -x test

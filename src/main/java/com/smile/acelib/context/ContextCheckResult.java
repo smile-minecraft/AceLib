@@ -3,9 +3,9 @@ package com.smile.acelib.context;
 import java.util.Objects;
 
 /**
- * 上下文檢查結果（immutable record）。
+ * 上下文檢查結果（Supported，immutable record）。
  *
- * <p>對應 Plan §八 Phase 3：{@link ContextInspector#check(ThreadContext, OperationType, Platform)}
+ * <p>{@link ContextInspector#check(ThreadContext, OperationType, Platform)}
  * 回傳的結果封裝。三個欄位：</p>
  * <ul>
  *   <li>{@link #safe} — 是否允許執行該操作</li>
@@ -19,7 +19,10 @@ import java.util.Objects;
  *   <li>{@link #denied(String, String)} — 拒絕時指定錯誤代碼與原因</li>
  * </ul>
  *
- * @since Phase 3 (Plan §八)
+ * @param safe   是否允許執行該操作
+ * @param code   拒絕時的錯誤代碼；允許時為 null
+ * @param reason 拒絕時的人類可讀原因；允許時為 null
+ * @since 1.0.0
  */
 public record ContextCheckResult(
     boolean safe,

@@ -5,8 +5,7 @@ import java.util.Set;
 /**
  * 資料儲存的「記錄」抽象：階層式鍵值視圖。
  *
- * <p>對應 Plan §十三 Phase 8「資料表 / 資料格式初始化」需求。
- * {@link DataStore} 提供單一根 {@link DataStore#root() root} 視圖，所有資料以
+ * <p>{@link DataStore} 提供單一根 {@link DataStore#root() root} 視圖，所有資料以
  * 「點分隔 path」存取（例如 {@code "user.balance"}、{@code "players.uuid-1234.lastLogin"}）。</p>
  *
  * <h2>型別支援</h2>
@@ -17,7 +16,7 @@ import java.util.Set;
  * </ul>
  *
  * <h2>Round-trip 設計</h2>
- * <p>{@link #setObject(String, Object)} + {@link #getObject(String, Class, Object)}
+ * <p>{@link #set(String, Object)} + {@link #getObject(String, Class, Object)}
  * 對基本型別、{@link Record} 子節點、{@code Map}/{@code List} 結構皆提供可逆序列化，
  * 不丟失結構性資料。複雜型別（非上述白名單）會在 {@code setObject} 拋
  * {@link DataStoreException}（{@code ACELIB-DATA-006}）。</p>
@@ -31,7 +30,7 @@ import java.util.Set;
  *
  * @see DataStore
  * @see DataStoreException
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public interface Record {
 

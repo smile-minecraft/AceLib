@@ -5,8 +5,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 /**
  * 設定遷移介面。
  *
- * <p>對應 Plan §九 Phase 4「設定遷移」需求。
- * 每個 {@link ConfigMigration} 負責把設定檔從 {@link #fromVersion()}
+ * <p>每個 {@link ConfigMigration} 負責把設定檔從 {@link #fromVersion()}
  * 升級到 {@link #toVersion()}；多個 migration 透過 {@link MigrationChain}
  * 串接成鏈。</p>
  *
@@ -33,7 +32,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
  *
  * @see MigrationChain
  * @see MigrationResult
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public interface ConfigMigration {
 

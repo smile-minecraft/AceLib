@@ -15,8 +15,7 @@ import java.util.concurrent.Executor;
 /**
  * 本地檔案型 {@link DataStore}（JSON 原子寫入）。
  *
- * <p>對應 Plan §十三 Phase 8「本地輕量資料儲存」需求。
- * 內部以 {@link JsonCodec} 序列化整棵 record tree 為 JSON；
+ * <p>內部以 {@link JsonCodec} 序列化整棵 record tree 為 JSON；
  * 寫入採用 Java NIO 原子 temp+move 流程，避免半寫入損壞既有資料。</p>
  *
  * <h2>檔案格式</h2>
@@ -54,7 +53,7 @@ import java.util.concurrent.Executor;
  *   <li>{@code ACELIB-DATA-010}：on-disk schema 版本比 current 新（拒絕降版覆寫）</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class JsonFileDataStore implements DataStore {
 

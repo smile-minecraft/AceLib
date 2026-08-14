@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 節流決策結果（immutable record）。
  *
- * <p>對應 Plan §十九 Phase 14「同類錯誤大量發生時不無限制洗版」需求。
- * 由 {@link ErrorThrottler#tryRecord(String, String)} 回傳，告知 caller
+ * <p>由 {@link ErrorThrottler#tryRecord(String, String)} 回傳，告知 caller
  * 「是否被允許 / 抑制 / 在視窗外允許」以及對應的 code / detail。</p>
  *
  * <h2>欄位語意</h2>
@@ -18,8 +17,11 @@ import java.util.Objects;
  *       <em>最近一次 ALLOWED 事件的 detail</em>，避免上層丟失訊息）</li>
  * </ul>
  *
+ * @param kind   節流決策分類；不可為 null
+ * @param code   對應的錯誤代碼；不可為 null
+ * @param detail 此事件的詳細訊息；可為 null（accessor 會做 null-safe）
  * @see ErrorThrottler
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public record ThrottleDecision(Kind kind, String code, String detail) {
 

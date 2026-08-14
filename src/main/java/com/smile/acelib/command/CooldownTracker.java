@@ -7,7 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 指令冷卻追蹤器（Plan §十一 Phase 6）。
+ * 指令冷卻追蹤器。
  *
  * <p>防止「短時間重複觸發」：對於 {@link SubCommandSpec#cooldownMillis()} 大於 0
  * 的子指令，dispatcher 在每次進入時透過 {@link #tryAcquire} 嘗試取得鎖。</p>
@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <h2>Reload 行為</h2>
  * <p>冷卻狀態<strong>不</strong>在 {@link #clearAll()} 以外的流程清除 —
- * Plan §十一驗收標準「reload 過程中也不會破壞狀態」。Plugin disable 時
+ * 冷卻 / 防重複觸發在 reload 過程中也不破壞狀態。Plugin disable 時
  * registry 整個釋放，冷卻 tracker 仍可保留狀態直到 GC。</p>
  *
  * <h2>執行緒安全</h2>
@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 寫入也只有「更新過期時間為更晚值」，不會讓 acquire 通過多於一次）。</p>
  *
  * @see SubCommandSpec#cooldownMillis()
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class CooldownTracker {
 
@@ -134,8 +134,8 @@ public final class CooldownTracker {
     /**
      * 清除所有冷卻記錄。
      *
-     * <p>給 plugin disable / reload 流程使用 — 但依 Plan §十一驗收標準，
-     * disable 時<strong>不</strong>清除（保留 reload 連續性）。</p>
+     * <p>給 plugin disable / reload 流程使用 — 但 disable 時<strong>不</strong>
+     * 清除（保留 reload 連續性）。</p>
      */
     public void clearAll() {
         expiresAt.clear();

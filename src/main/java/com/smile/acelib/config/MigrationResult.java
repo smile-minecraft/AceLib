@@ -6,8 +6,7 @@ import java.util.Objects;
 /**
  * 設定遷移結果（immutable record）。
  *
- * <p>對應 Plan §九 Phase 4「設定遷移」需求。
- * 當 {@link MigrationChain#migrateAll} 執行多個 {@link ConfigMigration}
+ * <p>當 {@link MigrationChain#migrateAll} 執行多個 {@link ConfigMigration}
  * 後回傳此結果，記錄：</p>
  * <ul>
  *   <li>{@link #from()} — 起始版本</li>
@@ -23,7 +22,11 @@ import java.util.Objects;
  *   <li>{@code warnings} 不可為 null（空清單亦可）</li>
  * </ul>
  *
- * @since Phase 4 (Plan §九)
+ * @param from     起始版本；不可為 null
+ * @param to       目標版本；不可為 null
+ * @param success  是否全部 migration 成功
+ * @param warnings 警告訊息清單；不可為 null（可能為空）
+ * @since 1.0.0
  */
 public record MigrationResult(
     ConfigVersion from,

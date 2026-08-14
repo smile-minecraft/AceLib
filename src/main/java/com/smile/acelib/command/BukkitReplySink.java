@@ -7,7 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * 預設 Bukkit {@link ReplySink} 實作 — Phase 6 指令系統的玩家回覆出口。
+ * 預設 Bukkit {@link ReplySink} 實作 — 指令系統的玩家回覆出口。
  *
  * <p>使用 plugin logger（玩家導向輸出到 {@code Player.sendMessage}，console
  * 與其他 sender 輸出到 plugin logger）。i18n 由 caller 在 handler 內透過
@@ -17,7 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <h2>玩家回覆一律走 backend（Folia region 安全）</h2>
  * <p>不論 {@code ctx.reply()} 同步或 {@code ctx.replyPlayerAsync()} 跨執行緒，
  * 對玩家 sender 的回覆都必須透過 {@link SafeExecutorBackend} 派送，由
- * {@link SafeExecutor#executeOnRegion} 確保 mutate 發生在玩家 region thread
+ * {@link com.smile.acelib.context.SafeExecutor#executeOnRegion} 確保 mutate 發生在玩家 region thread
  * （Folia 安全）。本 sink 內部 <strong>禁止</strong>直接呼叫
  * {@code Player.sendMessage} 來繞過 region-bound 派送。</p>
  *
@@ -40,7 +40,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * </ul>
  *
  * @see BukkitCommandBridge
- * @since Phase 6 — 指令系統封裝
+ * @since 1.0.0
  */
 public final class BukkitReplySink implements ReplySink {
 
@@ -181,7 +181,7 @@ public final class BukkitReplySink implements ReplySink {
     }
 
     /**
-     * 透過 {@link SafeExecutor#executeOnRegion} 把 runnable 派送到玩家 region 的 backend 介面。
+     * 透過 {@link com.smile.acelib.context.SafeExecutor#executeOnRegion} 把 runnable 派送到玩家 region 的 backend 介面。
      *
      * <p>為避免對外暴露 {@code SafeExecutor} 的 platform / capability 參數（這些
      * 由 AceLibPlugin 統一管理），透過此介面包裝，caller 只需提供 player + runnable。</p>
@@ -193,7 +193,7 @@ public final class BukkitReplySink implements ReplySink {
          * 把 runnable 派送到玩家的 region thread（Folia 安全）。
          *
          * <p>當 owner 為 {@link com.smile.acelib.AceLibPlugin} 時，內部委派給
-         * {@link SafeExecutor#executeOnRegion}；當 owner 非 {@code AceLibPlugin}
+         * {@link com.smile.acelib.context.SafeExecutor#executeOnRegion}；當 owner 非 {@code AceLibPlugin}
          * 或尚未 ready 時，必須 <strong>拋 {@link IllegalStateException}</strong>
          * 帶 {@code ACELIB-CMD-011} 錯誤代碼，禁止 inline 執行 runnable
          * （否則會繞過 region-bound 派送、Folia 環境下違規）。</p>
@@ -210,7 +210,7 @@ public final class BukkitReplySink implements ReplySink {
          * <ul>
          *   <li>{@link com.smile.acelib.AceLibPlugin} 且 {@code isReady()} 為
          *       true → 透過 {@code getApi()} 取得 platform / capability，呼叫
-         *       {@link SafeExecutor#executeOnRegion}</li>
+         *       {@link com.smile.acelib.context.SafeExecutor#executeOnRegion}</li>
          *   <li>其他 plugin → 明確拒絕：回傳 backend 實作，重新呼叫
          *       {@link #runOnPlayerRegion} 時拋 {@link IllegalStateException}
          *       帶 {@code ACELIB-CMD-011} code。</li>

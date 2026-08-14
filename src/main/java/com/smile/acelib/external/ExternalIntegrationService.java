@@ -1,7 +1,7 @@
 package com.smile.acelib.external;
 
 /**
- * 外部插件整合服務對外 facade（canonical public API）。
+ * 外部插件整合服務對外 facade（Supported API）。
  *
  * <p>提供外部插件整合狀態的查詢入口，後續插件不需要直接接觸
  * {@link ExternalPluginProbe} / registry / adapter 生命週期，改透過本介面
@@ -28,6 +28,7 @@ package com.smile.acelib.external;
  * @see IntegrationStatus
  * @see IntegrationProbeResult
  * @see ExternalIntegrationErrorCodes
+ * @since 1.0.0
  */
 public interface ExternalIntegrationService {
 

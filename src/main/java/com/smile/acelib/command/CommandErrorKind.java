@@ -1,7 +1,7 @@
 package com.smile.acelib.command;
 
 /**
- * 指令錯誤分類列舉 — Phase 6 指令系統封裝。
+ * 指令錯誤分類列舉。
  *
  * <p>每一種 kind 對應一個固定的 {@code ACELIB-CMD-NNN} 錯誤代碼，
  * 方便 dispatcher 在內部標準化處理、測試與日誌紀錄。</p>
@@ -24,7 +24,7 @@ package com.smile.acelib.command;
  * </table>
  *
  * @see CommandException
- * @since Phase 6 — 指令系統封裝
+ * @since 1.0.0
  */
 public enum CommandErrorKind {
 
@@ -68,7 +68,7 @@ public enum CommandErrorKind {
      *
      * <p>對應行為：{@link BukkitReplySink.SafeExecutorBackend} 必須
      * <strong>拋例外</strong>而非 inline 派送；sink 必須 catch 例外、輸出
-     * warning 攜帶此 code，並保證不直接呼叫 {@code Player#sendMessage}。</p>
+     * 警示日誌攜帶此 code，並保證不直接呼叫 {@code Player#sendMessage}。</p>
      */
     REPLY_BACKEND_UNAVAILABLE;
 

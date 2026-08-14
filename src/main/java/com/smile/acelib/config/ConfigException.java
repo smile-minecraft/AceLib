@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * 設定檔／語言檔例外（extends {@link RuntimeException}）。
  *
- * <p>對應 Plan §九 Phase 4 錯誤代碼：
+ * <p>錯誤代碼：
  * <ul>
  *   <li>{@code ACELIB-CFG-001}：設定檔不存在且無法生成</li>
  *   <li>{@code ACELIB-CFG-002}：設定檔格式錯誤（YAML 解析失敗）</li>
@@ -22,7 +22,7 @@ import java.util.Objects;
  *   <li>{@code ACELIB-LANG-001} 不應作為 throw，而是用於 log warning</li>
  * </ul>
  *
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public class ConfigException extends RuntimeException {
 

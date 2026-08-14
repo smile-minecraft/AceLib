@@ -3,7 +3,7 @@ package com.smile.acelib.external;
 import org.bukkit.plugin.PluginManager;
 
 /**
- * Vault 外部整合 adapter（reflection-only）。
+ * Vault 外部整合 adapter（reflection-only，Internal）。
  *
  * <p>以 {@link ExternalPluginProbe} 探測 Vault 的 marker API class、plugin 安裝 / 啟用
  * 狀態與版本；只有探測結果為 {@link IntegrationStatus#AVAILABLE} 時 {@code initialize()}
@@ -13,6 +13,10 @@ import org.bukkit.plugin.PluginManager;
  * <p>本 adapter 不 import 任何 Vault API 類別；Vault marker / plugin 名稱 / 最低版本皆以
  * 字串常數表示，完全透過 classpath 反射與 Bukkit {@link PluginManager} 探測，因此外部
  * Vault 類別不在 classpath 時仍可安全啟動。</p>
+ *
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴。</p>
+ *
+ * @since 1.0.0
  */
 public final class VaultIntegrationAdapter extends AbstractIntegrationAdapter {
 

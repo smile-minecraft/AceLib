@@ -8,23 +8,25 @@ import java.util.Objects;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * {@link SafeScheduler} 的對外 facade + factory。
+ * {@link SafeScheduler} 的對外 facade + factory（Supported）。
  *
- * <p>對應 Plan §七 Phase 2「後續插件不直接呼叫原生 scheduler 也能完成排程」
- * 與 §二十六第一優先級（Folia-safe 底座）。本類別提供：</p>
+ * <p>本類別提供：</p>
  * <ul>
  *   <li>{@link #create(JavaPlugin, Platform, PlatformCapability)} — 從 plugin +
- *       platform + capability 建立 {@link SafeScheduler}</li>
- *   <li>{@link #create(AceLibPlugin)} — 從 {@link AceLibPlugin} 直接建立（推薦）</li>
+ *       platform + capability 建立 {@link SafeScheduler}（consumer 使用方式）</li>
+ *   <li>{@link #create(AceLibPlugin)} — 從 {@link AceLibPlugin} 建立的 AceLib
+ *       內部便利方法（Internal；下游 consumer 不應依賴 {@link AceLibPlugin}）</li>
  *   <li>{@link #bind(AceLibPlugin, SafeScheduler)} / {@link #unbind(AceLibPlugin)} —
  *       將 scheduler 掛載到 plugin 的 onDisable 生命週期</li>
  *   <li>{@link #getRecorderErrors(SafeScheduler, int)} — 統一查詢錯誤紀錄</li>
  * </ul>
  *
  * <h2>bind 機制</h2>
- * <p>呼叫 {@link #bind} 後，AceLib 會在 {@link AceLibPlugin#onDisable()} 時自動呼叫
- * scheduler 的 {@link SafeSchedulerImpl#onPluginDisable()}，確保所有任務被取消、
- * 後續任務不再被派送。</p>
+ * <p>呼叫 {@link #bind} 後，plugin → scheduler 對應會記入 process-local 綁定表；
+ * 於 {@link #unbind(AceLibPlugin)} 時主動呼叫
+ * {@link SafeSchedulerImpl#onPluginDisable()}，確保所有任務被取消、
+ * 後續任務不再被派送。若需要掛載到 {@link AceLibPlugin#onDisable()} 自動觸發，
+ * 請由 caller 在 disable 流程中呼叫 {@link #unbind(AceLibPlugin)}。</p>
  *
  * <h2>unbind 機制</h2>
  * <p>{@link #unbind} 會主動呼叫 {@link SafeSchedulerImpl#onPluginDisable()} 並解除綁定，
@@ -32,7 +34,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * @see SafeScheduler
  * @see SafeSchedulerImpl
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public final class AceLibScheduler {
 
@@ -47,7 +49,10 @@ public final class AceLibScheduler {
     /**
      * 從 plugin + platform + capability 建立 {@link SafeSchedulerImpl}。
      *
-     * <p>推薦使用 {@link #create(AceLibPlugin)} 以避免手動組合三個參數。</p>
+     * <p>這是 consumer 使用的標準 factory：`plugin` 為下游自身的
+     * {@link JavaPlugin}，`platform` / `capability` 建議從
+     * {@code AceLibApi#getPlatform()} / {@code AceLibApi#getPlatformCapability()}
+     * 取得，確保與 AceLib 偵測結果一致。</p>
      *
      * @param plugin     派送任務的 plugin owner；不可為 null
      * @param platform   偵測到的平台；不可為 null
@@ -62,10 +67,13 @@ public final class AceLibScheduler {
     }
 
     /**
-     * 從 {@link AceLibPlugin} 建立 scheduler（推薦用法）。
+     * 從 {@link AceLibPlugin} 建立 scheduler（AceLib 內部便利方法）。
      *
      * <p>內部以 {@code plugin.getPlatformCapability()} 推導對應的 capability，
-     * 確保傳入的 capability 與 {@code plugin.getApi().getPlatform()} 一致。</p>
+     * 確保傳入的 capability 與 {@code plugin.getApi().getPlatform()} 一致。
+     * 此 overload 依賴 {@link AceLibPlugin}（Internal），供 AceLib 內部整合或
+     * 測試使用；下游 consumer 應改用
+     * {@link #create(JavaPlugin, Platform, PlatformCapability)}。</p>
      *
      * @param plugin AceLib 主類別實例；不可為 null（必須已通過 {@code onEnable}）
      * @return 新的 {@link SafeSchedulerImpl} 實例（永遠不為 null）
@@ -83,16 +91,13 @@ public final class AceLibScheduler {
     // -----------------------------------------------------------------
 
     /**
-     * 將 scheduler 綁定到 {@link AceLibPlugin} 的 onDisable 生命週期。
+     * 將 scheduler 綁定到指定 {@link AceLibPlugin}（process-local 綁定表）。
      *
-     * <p>綁定後，AceLib 內部會在 plugin disable 時自動呼叫 scheduler 的
-     * {@link SafeSchedulerImpl#onPluginDisable()}。重複綁定同一個 plugin 不會
-     * 留下殘留（後者覆蓋前者）。</p>
-     *
-     * <p>注意：本方法並未直接修改 {@link AceLibPlugin} 內部狀態，而是透過
-     * 內部的 {@link java.util.IdentityHashMap} 維護 plugin → scheduler 對應；
-     * 真正的 onDisable 整合需配合 {@link AceLibPlugin} 未來版本或由 caller
-     * 手動呼叫 {@link #unbind(AceLibPlugin)}。</p>
+     * <p>重複綁定同一個 plugin 不會留下殘留（後者覆蓋前者）。
+     * 此方法不直接修改 {@link AceLibPlugin} 內部狀態；disable 時需由 caller
+     * 呼叫 {@link #unbind(AceLibPlugin)} 完成 {@link SafeSchedulerImpl#onPluginDisable()}。
+     * 對直接以 {@link AceLibPlugin} 內部 scheduler 運作的整合方式，plugin 自身
+     * 的 onDisable 已處理 teardown，不需額外呼叫本方法。</p>
      *
      * @param plugin    AceLib 主類別實例；不可為 null
      * @param scheduler 要綁定的 scheduler；不可為 null

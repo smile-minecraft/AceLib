@@ -5,7 +5,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 實際 {@link ExternalIntegrationService} 實作：包裝 {@link IntegrationRegistry}，
+ * 實際 {@link ExternalIntegrationService} 實作（Internal）：包裝 {@link IntegrationRegistry}，
  * 提供整合狀態查詢、模組狀態聚合與資源釋放。
  *
  * <p>所有查詢方法永不回 null；未知 integration id 回傳 {@link IntegrationStatus#INIT_FAILED}
@@ -26,6 +26,7 @@ import java.util.Set;
  *
  * @see IntegrationRegistry
  * @see ExternalIntegrationErrorCodes
+ * @since 1.0.0
  */
 public final class ExternalIntegrationServiceImpl implements ExternalIntegrationService {
 

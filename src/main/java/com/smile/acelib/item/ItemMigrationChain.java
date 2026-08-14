@@ -9,8 +9,7 @@ import java.util.function.Consumer;
 /**
  * 物品 migration 鏈（多個 {@link ItemMigration} 依序執行）。
  *
- * <p>對應 Plan Phase 12「舊版資料升級」需求。
- * 從「目前版本」依序套用 migration 到「目標版本」；任一失敗觸發 rollback，
+ * <p>從「目前版本」依序套用 migration 到「目標版本」；任一失敗觸發 rollback，
  * <strong>輸入 ItemStack 不被破壞</strong>。</p>
  *
  * <h2>失敗 rollback 語意</h2>

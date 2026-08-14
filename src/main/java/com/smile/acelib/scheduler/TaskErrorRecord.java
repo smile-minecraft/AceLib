@@ -3,18 +3,16 @@ package com.smile.acelib.scheduler;
 import java.util.Objects;
 
 /**
- * 排程錯誤紀錄（immutable record）。
+ * 排程錯誤紀錄（Supported，immutable record）。
  *
- * <p>對應 Plan §七 Phase 2「任務錯誤留下可追蹤紀錄」的需求。
- * 任何 {@link SafeScheduler} 派送的任務若發生錯誤、玩家離線、實體失效、
+ * <p>任何 {@link SafeScheduler} 派送的任務若發生錯誤、玩家離線、實體失效、
  * chunk 不可用、平台不支援或插件已停用，皆會被包裝為 {@code TaskErrorRecord}
  * 並送入 {@link TaskErrorRecorder}。</p>
  *
  * <h2>欄位語意</h2>
  * <ul>
  *   <li>{@link #type} — 觸發此錯誤的任務類型</li>
- *   <li>{@link #code} — 錯誤分類代碼，遵循 {@code ACELIB-SCHED-xxx} 格式
- *       （參見 CONTRIBUTING.md §6 與 §二十三 DoD）</li>
+ *   <li>{@link #code} — 錯誤分類代碼，遵循 {@code ACELIB-SCHED-xxx} 格式</li>
  *   <li>{@link #detail} — 人類可讀的詳細訊息（含目標、原因）</li>
  *   <li>{@link #cause} — 觸發此錯誤的例外（可為 null，例如「取消」情境）；由
  *       {@link #threw(TaskType, String, String, Throwable)} 工廠方法建立的紀錄
@@ -30,9 +28,14 @@ import java.util.Objects;
  *   <li>{@code tick} 可為 0（測試環境），不視為錯誤</li>
  * </ul>
  *
+ * @param type   觸發此錯誤的任務類型；不可為 null
+ * @param code   錯誤分類代碼（{@code ACELIB-SCHED-*}）；不可為 null
+ * @param detail 人類可讀的詳細訊息；不可為 null
+ * @param cause  觸發此錯誤的例外；取消類錯誤可為 null
+ * @param tick   紀錄產生時的伺服器 tick（測試環境可為 0）
  * @see TaskErrorRecorder
  * @see SafeScheduler
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public record TaskErrorRecord(
     TaskType type,

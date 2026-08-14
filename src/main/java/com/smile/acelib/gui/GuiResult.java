@@ -3,7 +3,7 @@ package com.smile.acelib.gui;
 import java.util.Objects;
 
 /**
- * GUI 操作結果的對外型別（Plan §十六 Phase 11 共同契約）。
+ * GUI 操作結果的對外型別（Supported API）。
  *
  * <p>所有對外 {@link GuiService} 操作皆回傳 {@link GuiResult}。
  * 結果內含狀態（{@link GuiState}）、錯誤代碼（{@link GuiErrorCode} *）、
@@ -20,7 +20,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see GuiService
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 public final class GuiResult {
 

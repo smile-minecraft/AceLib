@@ -9,7 +9,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 /**
- * GUI 服務的 Bukkit listener（Plan §十六 Phase 11 內部使用）。
+ * GUI 服務的 Bukkit listener（Internal）。
  *
  * <p>三個事件：</p>
  * <ul>

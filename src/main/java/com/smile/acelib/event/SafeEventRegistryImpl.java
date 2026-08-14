@@ -22,7 +22,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * {@link SafeEventRegistry} 的標準實作。
  *
- * <p>對應 Plan §十二 Phase 7 規格，內含：</p>
+ * <p>內含：</p>
  *
  * <ul>
  *   <li>註冊 / 解除 listener，綁定到 Bukkit {@link PluginManager}</li>
@@ -71,7 +71,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * byEventType map 採 {@link ConcurrentHashMap}。</p>
  *
  * @see SafeEventRegistry
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public final class SafeEventRegistryImpl implements SafeEventRegistry {
 

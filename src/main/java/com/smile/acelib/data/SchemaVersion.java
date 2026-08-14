@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 資料儲存 schema 版本（immutable record）。
  *
- * <p>對應 Plan §十三 Phase 8「資料版本遷移」需求。
- * {@link DataStore} 內部以 {@code major.minor} 形式記錄「當前 schema 版本」；
+ * <p>{@link DataStore} 內部以 {@code major.minor} 形式記錄「當前 schema 版本」；
  * 載入既有資料時若版本較舊，自動觸發 {@link DataMigration} 升級。</p>
  *
  * <h2>排序規則</h2>
@@ -25,11 +24,13 @@ import java.util.Objects;
  *   <li>兩者皆有 {@code major.minor} 結構，但刻意分開避免資料與設定耦合</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @param major 主版本號（先比較）
+ * @param minor 次版本號（major 相同時比較）
+ * @since 1.0.0
  */
 public record SchemaVersion(int major, int minor) implements Comparable<SchemaVersion> {
 
-    /** Phase 8 起始版本 {@code 1.0}。 */
+    /** 初始版本 {@code 1.0}。 */
     public static final SchemaVersion V1_0 = new SchemaVersion(1, 0);
 
     /** Compact constructor：保留 record 自動產生的 accessor 與等價性。 */

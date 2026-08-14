@@ -8,8 +8,7 @@ import java.util.Set;
 /**
  * {@link Record} 的標準 in-memory 實作。
  *
- * <p>對應 Plan §十三 Phase 8「資料表 / 資料格式初始化」需求。
- * 以 {@link LinkedHashMap} 表達階層式鍵值結構，支援基本型別 + 巢狀
+ * <p>以 {@link LinkedHashMap} 表達階層式鍵值結構，支援基本型別 + 巢狀
  * {@code Map} + {@code List}。</p>
  *
  * <h2>設計約定</h2>
@@ -19,7 +18,7 @@ import java.util.Set;
  *   <li>型別不符時回傳 default，不丟例外（避免 migration 期間因單一欄位崩潰）</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class MemoryRecord implements Record {
 

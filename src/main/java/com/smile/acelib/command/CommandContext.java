@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 指令執行 context（Plan §十一 Phase 6）。
+ * 指令執行 context。
  *
  * <p>由 {@link CommandRegistry} 在 dispatch 時建立，傳遞給對應的
  * {@link SubCommand#execute}。handler 透過本 context 取得 sender、玩家、參數、
@@ -21,7 +21,7 @@ import java.util.Objects;
  *   <li>{@link #reply(String)} — 同步回覆訊息</li>
  *   <li>{@link #replyError(Throwable)} — 回覆錯誤（dispatcher 標準化）</li>
  *   <li>{@link #replyPlayerAsync(String)} — 跨執行緒回覆（Folia 安全，
- *       內部透過 {@link SafeExecutor#executeOnRegion} 派送）</li>
+ *       內部透過 {@link com.smile.acelib.context.SafeExecutor#executeOnRegion} 派送）</li>
  *   <li>{@link #args()} — 完整 args（含子指令名），不可變</li>
  *   <li>{@link #commandArgs()} — 子指令之後的 args（不含子指令名），不可變</li>
  * </ul>
@@ -32,7 +32,7 @@ import java.util.Objects;
  *
  * @see CommandRegistry
  * @see SubCommand
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class CommandContext {
 
@@ -116,7 +116,7 @@ public final class CommandContext {
     /**
      * 取得<strong>在線</strong>玩家 handle；若離線拋 {@link CommandException}。
      *
-     * <p>語意對應 Plan §十一 邊界條件「玩家執行後立刻離線」：handler 在取得
+     * <p>語意對應「玩家執行後立刻離線」邊界條件：handler 在取得
      * 玩家後若需要立即 mutate，應呼叫本方法以確保玩家仍在線上。</p>
      *
      * @return 永不為 null 且 {@link PlayerHandle#isOnline()} 為 true 的玩家

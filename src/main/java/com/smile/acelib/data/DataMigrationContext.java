@@ -29,7 +29,7 @@ import java.util.Objects;
  *   <li>{@code migrate} 拋例外 → {@code writeView} 整批丟棄，舊資料保留</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class DataMigrationContext {
 

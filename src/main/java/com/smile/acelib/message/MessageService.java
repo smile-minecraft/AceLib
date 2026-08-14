@@ -17,7 +17,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * 統一訊息服務（Plan §十 Phase 5）。
+ * 統一訊息服務。
  *
  * <p>封裝「讀 LangManager 模板 → 套用 prefix / 變數替換 → 送到目標媒介
  * （chat / action bar / title-subtitle / 廣播 / console）」的完整流程，
@@ -25,7 +25,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * <h2>對外方法</h2>
  * <ul>
- *   <li>{@link #MessageService(JavaPlugin, LangManager)} — 主要建構子（Plan §十 對外契約）：
+ *   <li>{@link #MessageService(JavaPlugin, LangManager)} — 主要建構子（對外契約）：
  *       優先重用 AceLib canonical platform cache，一般 plugin 才透過
  *       {@link PlatformDetector} 偵測；呼叫端不需自行注入 {@link Platform}
  *       與 {@link PlatformCapability}</li>
@@ -70,14 +70,14 @@ import org.bukkit.plugin.java.JavaPlugin;
  * @see LangManager
  * @see Platform
  * @see PlatformCapability
- * @since Phase 5 (Plan §十)
+ * @since 1.0.0
  */
 public final class MessageService {
 
     /** 玩家導向訊息通用的 prefix key（在 {@code <locale>.yml} 內）。 */
     public static final String PREFIX_KEY = "message.prefix";
 
-    /** 訊息 key 缺失的錯誤代碼（Plan §十 + §二十三 DoD）。 */
+    /** 訊息 key 缺失的錯誤代碼。 */
     static final String ERR_KEY_MISSING = "ACELIB-MSG-001";
 
     /** Folia 不安全上下文操作玩家訊息的錯誤代碼。 */
@@ -106,9 +106,9 @@ public final class MessageService {
     private final PlatformCapability capability;
 
     /**
-     * 主要建構子（Plan §十 Phase 5 對外契約）。
+     * 主要建構子（對外契約）。
      *
-     * <p>已就緒的 {@link AceLibPlugin} 直接重用 Phase 1 發佈的 canonical platform cache；
+     * <p>已就緒的 {@link AceLibPlugin} 直接重用 canonical platform cache；
      * 其他 {@link JavaPlugin} 才透過 {@link PlatformDetector} 偵測目前執行平台，
      * 並由同一次偵測結果推導 {@link PlatformCapability}。</p>
      *
@@ -130,7 +130,7 @@ public final class MessageService {
      * 內部 / 測試注入用建構子：顯式提供 {@link Platform} 與 {@link PlatformCapability}。
      *
      * <p>保留此建構子僅供 <strong>同 package 測試</strong>（例如
-     * {@code MessageServiceFoliaTest}）用於注入 FOLIA 環境；對外契約（Plan §十）
+     * {@code MessageServiceFoliaTest}）用於注入 FOLIA 環境；對外契約
      * 為 2 參數 {@link #MessageService(JavaPlugin, LangManager)}，自動解析平台。</p>
      *
      * @param plugin     對外 owner plugin；不可為 null

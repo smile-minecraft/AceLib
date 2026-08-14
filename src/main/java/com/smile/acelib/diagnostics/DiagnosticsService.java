@@ -16,12 +16,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * 統一診斷服務（Phase 14 入口）。
+ * 統一診斷服務。
  *
- * <p>對應 Plan §十九 Phase 14 全部驗收條件：</p>
+ * <p>提供：</p>
  * <ul>
  *   <li>查詢目前狀態：version / platform / capability / ready / debug</li>
- *   <li>缺失模組安全降級（Phase 8/13 未實作模組標記 NOT_INITIALIZED）</li>
+ *   <li>缺失模組安全降級（未實作模組標記 NOT_INITIALIZED）</li>
  *   <li>排程錯誤摘要（依 code 合併計數）</li>
  *   <li>debug 模式開關委派給 {@link DebugMode}</li>
  *   <li>同類錯誤節流（{@link ErrorThrottler}）</li>
@@ -40,18 +40,18 @@ import java.util.function.Consumer;
  * @see DiagnosticSnapshot
  * @see DiagnosticReport
  * @see ErrorThrottler
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public final class DiagnosticsService {
 
-    /** 預設模組識別（依 Plan §七 Phase 14 對應的核心模組）。 */
+    /** 預設模組識別。 */
     static final String MODULE_SCHEDULER = "scheduler";
     static final String MODULE_CONFIG = "config";
     static final String MODULE_LANG = "lang";
     static final String MODULE_INTEGRATION = "integration";
     static final String MODULE_DATA = "data";
 
-    /** 預設模組缺席時的 detail（依 Plan §七）。 */
+    /** 預設模組缺席時的 detail。 */
     private static final Map<String, String> DEFAULT_DETAILS;
 
     static {
@@ -84,7 +84,7 @@ public final class DiagnosticsService {
      * 視窗內同 code 第二次起 SUPPRESSED（{@code maxPerWindow = 1}）。
      * 此策略獨立於 {@link ErrorThrottler#DEFAULT_MAX_PER_WINDOW} 的通用節流語意
      * （預設 = 5，視窗內前 5 次都放行），是 DiagnosticsService 對應
-     * Plan §十九 Phase 14「同類錯誤不無限制洗版」之 service-level 行為；
+     * 「同類錯誤不無限制洗版」之 service-level 行為；
      * 若外部 caller 想要通用 N 次節流，請直接使用 {@link ErrorThrottler}。</p>
      *
      * @param clock 時鐘來源；不可為 null
@@ -128,7 +128,7 @@ public final class DiagnosticsService {
     /**
      * 取得當前對外版本字串。
      *
-     * <p>未 bind 時回傳 {@link AceLibVersion#VERSION}（向後相容於 Phase 0~13 既有呼叫）。</p>
+     * <p>未 bind 時回傳 {@link AceLibVersion#VERSION}（向後相容既有呼叫）。</p>
      *
      * @return 對外版本字串；永遠不為 null
      */
@@ -223,7 +223,7 @@ public final class DiagnosticsService {
     /**
      * 綁定排程器；同時將 scheduler 模組標記為 READY / FAILED / NOT_INITIALIZED。
      *
-     * <p>Phase 14 wiring：當傳入非 null 的 {@link SafeSchedulerImpl} 時，
+     * <p>當傳入非 null 的 {@link SafeSchedulerImpl} 時，
      * 此方法會自動呼叫
      * {@code scheduler.getRecorder().setRecordSink(this::onRecorderSink)}
      * 注入一個 <strong>recorder-level</strong> listener；無論錯誤來自
@@ -300,7 +300,7 @@ public final class DiagnosticsService {
     /**
      * 在不替換 {@link DiagnosticsService} instance 的前提下更新版本/平台/capability。
      *
-     * <p>對應 Phase 14 reload 流程：reload 不會建立新的 service，而是
+     * <p>對應 reload 流程：reload 不會建立新的 service，而是
      * 對既有 service 重新寫入 plugin 版本/平台/capability 欄位。
      * 後續 {@link #buildSnapshot()} 立即反映新值，確保
      * 「既有 reference 仍可觀測到 reload 後狀態」的契約。</p>
@@ -320,7 +320,7 @@ public final class DiagnosticsService {
      * @param platform   偵測平台；不可為 null
      * @param capability 對應 capability；不可為 null
      * @throws NullPointerException 當任一參數為 null
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void rebindPlugin(String version, Platform platform, PlatformCapability capability) {
         Objects.requireNonNull(version, "version");
@@ -334,10 +334,10 @@ public final class DiagnosticsService {
     }
 
     /**
-     * 還原版本/平台/capability metadata 至先前 snapshot（Phase 14 reload rollback）。
+     * 還原版本/平台/capability metadata 至先前 snapshot（reload rollback）。
      *
-     * <p>公開 API（since Phase 14 M-14-04 補強），用於 {@code AceLibPlugin.reload()}
-     * 的 rollback 流程：當 Phase C 在 {@link #rebindPlugin} 寫入新 metadata
+     * <p>公開 API（since 1.0.0），用於 {@code AceLibPlugin.reload()}
+     * 的 rollback 流程：當 reload 在 {@link #rebindPlugin} 寫入新 metadata
      * 之後、commit 前失敗時，呼叫端必須能將 metadata 還原為 reload 前值，
      * 避免留下「scheduler reference 雖未 commit、但 diagnostics 內容已是新平台」
      * 的 partial commit 狀態。</p>
@@ -345,7 +345,7 @@ public final class DiagnosticsService {
      * <p><strong>僅供 reload rollback 使用</strong>：一般 plugin lifecycle 應走
      * {@link #bindPlugin(String, Platform, PlatformCapability)}（首次 bind）或
      * {@link #rebindPlugin(String, Platform, PlatformCapability)}（reload commit）；
-     * 直接呼叫 {@code restoreMetadata} 僅在「Phase C rebind 已成功寫入新 metadata、
+     * 直接呼叫 {@code restoreMetadata} 僅在「reload commit 已成功寫入新 metadata、
      * 但後續 bindScheduler/hook 失敗需要還原」的特殊情境下使用。誤用此方法
      * 可能導致 diagnostics 與實際 platform 不一致的隱性 bug。</p>
      *
@@ -356,7 +356,7 @@ public final class DiagnosticsService {
      *   <li>{@code restoreMetadata} 是 rollback 路徑（還原先前 snapshot），
      *       <strong>不</strong>改動 {@link #bound}、{@link #ready} 或 scheduler 綁定</li>
      * </ul>
-     * 兩者使用相同 {@code volatile} 寫入路徑，故執行緒安全。</p>
+     * 兩者使用相同 {@code volatile} 寫入路徑，故執行緒安全。
      *
      * <p>呼叫端責任：restore 完 metadata 後仍須透過既有 API 處理
      * {@link #setReady(boolean)} 與 {@link #bindScheduler(SafeSchedulerImpl)} —
@@ -366,7 +366,7 @@ public final class DiagnosticsService {
      * @param platform   先前 snapshot 的 platform；不可為 null
      * @param capability 先前 snapshot 的 capability；不可為 null
      * @throws NullPointerException 當任一參數為 null
-     * @since Phase 14 (Plan §十九, M-14-04 rollback metadata 補強)
+     * @since 1.0.0
      */
     public void restoreMetadata(String version, Platform platform, PlatformCapability capability) {
         Objects.requireNonNull(version, "version");
@@ -396,7 +396,7 @@ public final class DiagnosticsService {
      *
      * <p>冪等：重複呼叫不丟例外，模組狀態保持 FAILED + SCHED-006。</p>
      *
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void markSchedulerDisabled() {
         // safe-default 場景：boundScheduler == null 表示從未綁定過 scheduler，
@@ -417,7 +417,7 @@ public final class DiagnosticsService {
      * 注入 sink 的 caller（例如只想測試 sink 路�）。一般 plugin lifecycle 走
      * {@link #bindScheduler(SafeSchedulerImpl)} 即可。</p>
      *
-     * <p>Phase 14 wiring 變更：sink 注入改走
+     * <p>sink 注入改走
      * {@link com.smile.acelib.scheduler.TaskErrorRecorder#setRecordSink(Consumer)}
      * （recorder-level），確保外部直接呼叫 {@code scheduler.getRecorder().record(...)}
      * 也會被觀察到。</p>
@@ -432,7 +432,7 @@ public final class DiagnosticsService {
     }
 
     /**
-     * 對外公開的「scheduler 錯誤回報」API（Phase 14 wiring 入口）。
+     * 對外公開的「scheduler 錯誤回報」API（wiring 入口）。
      *
      * <p>將一筆排程錯誤事件送入 diagnostics 節流路徑：
      * <ul>

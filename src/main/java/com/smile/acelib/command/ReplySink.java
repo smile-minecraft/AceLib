@@ -3,7 +3,7 @@ package com.smile.acelib.command;
 import java.util.UUID;
 
 /**
- * 指令回覆出口（Plan §十一 Phase 6）。
+ * 指令回覆出口。
  *
  * <p>core dispatcher 不直接接觸 Bukkit {@code CommandSender}；所有訊息輸出、
  * 玩家查詢、跨執行緒派送都透過本介面委派，caller 在初始化 registry 時注入實作
@@ -22,7 +22,7 @@ import java.util.UUID;
  * <p>實作須為 thread-safe；dispatcher 在 main thread / region thread / async thread
  * 都可能呼叫。</p>
  *
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public interface ReplySink {
 

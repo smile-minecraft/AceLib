@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 不可變位置快照（Plan §十九 Phase 10 共同契約）。
+ * 不可變位置快照。
  *
  * <p>本 record 為 {@link WorldService} 對外公開的位置表達方式，
  * <strong>不可</strong>將 {@link org.bukkit.Location} 或 {@link org.bukkit.World}
@@ -21,8 +21,14 @@ import java.util.UUID;
  * <h2>執行緒安全</h2>
  * 不可變 record；所有欄位為 {@code final}，執行緒安全。
  *
+ * @param worldId    目標世界 UUID；不可為 null
+ * @param blockX     方塊 X 座標（整數）
+ * @param blockY     方塊 Y 座標（整數）
+ * @param blockZ     方塊 Z 座標（整數）
+ * @param yaw        yaw 旋轉（degree；NaN 表示未指定）
+ * @param pitch      pitch 旋轉（degree；NaN 表示未指定）
  * @see EntityReference
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public record LocationSnapshot(
     UUID worldId,

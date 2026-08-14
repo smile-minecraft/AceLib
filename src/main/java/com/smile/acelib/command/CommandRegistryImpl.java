@@ -13,7 +13,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * 指令註冊中心實作（Plan §十一 Phase 6）。
+ * 指令註冊中心實作。
  *
  * <h2>dispatch 流程</h2>
  * <ol>
@@ -48,7 +48,7 @@ import java.util.logging.Logger;
  * {@link CooldownTracker#clearAll()}。</p>
  *
  * @see CommandRegistry
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class CommandRegistryImpl implements CommandRegistry {
 
@@ -160,7 +160,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
         disabled = true;
         // 不清除 byName / byPrimary / cooldowns —
         // reload 流程通常 register 一次後可能想重用既有 CooldownTracker 狀態
-        // （Plan §十一驗收標準「冷卻 / 防重複觸發在 reload 過程中也不會破壞狀態」）。
+        // （冷卻 / 防重複觸發在 reload 過程中也不破壞狀態）。
     }
 
     // ---------------------------------------------------------------------

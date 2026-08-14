@@ -3,7 +3,7 @@ package com.smile.acelib.world;
 import java.util.Objects;
 
 /**
- * 世界操作結果的共同基底（Plan §十九 Phase 10 共同契約）。
+ * 世界操作結果的共同基底。
  *
  * <p>所有對外 {@link WorldService} 操作皆回傳 {@link WorldResult} 子類型。
  * 結果內含狀態（{@link WorldState}）、錯誤代碼（{@link WorldErrorCode} *）、
@@ -23,7 +23,7 @@ import java.util.Objects;
  * @see EntityResult
  * @see TeleportResult
  * @see NearbyQueryResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public abstract sealed class WorldResult
     permits BlockResult, EntityResult, TeleportResult, NearbyQueryResult {
@@ -79,6 +79,8 @@ public abstract sealed class WorldResult
 
     /**
      * 便利方法：是否成功。
+     *
+     * @return {@code true} 表示 {@link WorldState#SUCCESS}
      */
     public boolean isSuccess() {
         return state == WorldState.SUCCESS;
@@ -86,6 +88,8 @@ public abstract sealed class WorldResult
 
     /**
      * 便利方法：是否被拒絕（{@link WorldState#REJECTED} / {@link WorldState#CANCELLED}）。
+     *
+     * @return {@code true} 表示 REJECTED 或 CANCELLED
      */
     public boolean isRejected() {
         return state == WorldState.REJECTED || state == WorldState.CANCELLED;

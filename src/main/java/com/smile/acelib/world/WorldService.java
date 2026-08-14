@@ -4,27 +4,34 @@ import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 
 /**
- * WorldService 安全 facade（Plan §十五 §十九 Phase 10 對外 canonical API）。
+ * 世界操作安全 facade（Supported API）。
  *
  * <p>提供一組 Folia-safe 的世界操作入口，後續插件不需要直接接觸
  * {@code Bukkit.getWorld(uid)} / {@code World#getBlockAt(loc)} /
  * {@code Entity#teleportAsync(loc)} 等會破壞 Folia 執行緒假設的 API，
  * 改透過本介面取得 region-aware 操作結果。</p>
  *
- * <h2>設計原則（Plan §二十一未完成階段共同交付契約）</h2>
+ * <h2>設計原則</h2>
  * <ul>
  *   <li>對外輸入僅接受 {@link LocationSnapshot} / {@link EntityReference} —
  *       不可傳入 {@code World} / {@code Location} / {@code Entity} / {@code Player}。</li>
  *   <li>每次呼叫於執行前重新驗證目標；失敗回對應 {@code ACELIB-WORLD-*} 結果，
- *       不丟例外給 caller。</li>
+ *       不丟例外給 caller（null 輸入除外，丟 {@link IllegalArgumentException}）。</li>
  *   <li>Teleport 為非同步：回 {@link CompletionStage} 等待實際 future 完成
  *       （success / false / exception / cancelled / partial）。</li>
- *   <li>模組於未啟用（{@link AceLibApi#uninitialized()}）或停用後呼叫一律回
+ *   <li>模組於未啟用（{@link com.smile.acelib.AceLibApi#uninitialized()}）或停用後呼叫一律回
  *       {@code REJECTED + ACELIB-WORLD-001 / 002}；實作內部持有 in-flight
  *       handle 清單，shutdown 時拒絕新請求並取消既有。</li>
  * </ul>
  *
- * @since Phase 10 (Plan §十五 §十九 §二十一)
+ * <h2>執行緒 / Folia 契約</h2>
+ * <p>方塊與實體 mutate 操作必須在目標所屬 region context（Folia）或主執行緒
+ * （Paper）內執行；本介面不承諾任意執行緒呼叫皆安全。實作層透過既有
+ * 安全排程 API 安排 region 派送。</p>
+ *
+ * @see WorldErrorCode
+ * @see WorldResult
+ * @since 1.0.0
  */
 public interface WorldService {
 
@@ -143,7 +150,7 @@ public interface WorldService {
      *
      * @return 永遠不為 null 的診斷快照（以 {@code String} 形式供測試使用，
      *         <strong>不屬於穩定 public API</strong>；後續插件用於診斷查詢）
-     * @since Phase 10 (Plan §二十一未完成階段共同交付契約)
+     * @since 1.0.0
      */
     String getModuleStatus();
 
@@ -151,7 +158,7 @@ public interface WorldService {
      * 取消所有 in-flight handle 並標記 stopped。測試 seam；正常 reload/disable
      * 不應直接呼叫。
      *
-     * @since Phase 10 (Plan §二十一未完成階段共同交付契約)
+     * @since 1.0.0
      */
     void shutdown();
 }

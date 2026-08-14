@@ -8,30 +8,29 @@ import java.util.function.Supplier;
 import org.bukkit.plugin.Plugin;
 
 /**
- * 除錯模式開關。
+ * 除錯模式開關（Supported）。
  *
- * <p>對應 Plan §八 Phase 3 驗收標準 #5「除錯模式可輸出額外診斷資訊」與
- * Plan §十九 Phase 14 除錯模式規範。設計：</p>
+ * <p>設計：</p>
  *
  * <ul>
  *   <li>支援 system property {@code acelib.debug}（最高優先）</li>
- *   <li>支援 plugin config {@code debug.enabled}（後續 Phase 4 提供 config 系統時接入）</li>
+ *   <li>支援 plugin config {@code debug.enabled}（config 系統接入後生效）</li>
  *   <li>支援 {@link #setEnabled(boolean)} 動態切換</li>
  *   <li>支援 {@link #getOrCompute(Plugin, Supplier)} 快取計算結果</li>
  * </ul>
  *
  * <h2>優先順序（高 → 低）</h2>
  * <ol>
+ *   <li>system property {@code acelib.debug}（存在時以它為準，覆寫其他來源）</li>
  *   <li>{@link #setEnabled(boolean)} 已顯式設定過（{@link #isExplicitlySet()} 為 true）</li>
- *   <li>system property {@code acelib.debug}</li>
- *   <li>plugin config {@code debug.enabled}（Phase 3 尚未提供 config API，目前一律 false）</li>
+ *   <li>plugin config {@code debug.enabled}（config 系統尚未接入，目前一律 false）</li>
  *   <li>預設 {@code false}</li>
  * </ol>
  *
  * <h2>執行緒安全</h2>
  * 使用 {@link AtomicReference} 儲存顯式設定值；{@link #isEnabled()} 為 lock-free。
  *
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public final class DebugMode {
 
@@ -64,7 +63,7 @@ public final class DebugMode {
      *   <li>否則回傳 {@code false}</li>
      * </ol>
      *
-     * @param plugin plugin owner（保留給 Phase 4 config 接入；目前忽略）；可為 null
+     * @param plugin plugin owner（保留給 config 系統接入；目前忽略）；可為 null
      * @return 是否啟用除錯模式
      */
     public static boolean isEnabled(Plugin plugin) {
@@ -92,8 +91,9 @@ public final class DebugMode {
     /**
      * 顯式設定除錯模式狀態。
      *
-     * <p>設定後 {@link #isEnabled()} 將忽略 system property，直到下次呼叫
-     * {@link #clearExplicit()} 才會重新讀取。</p>
+     * <p>設定後 {@link #isEnabled()} 以該值為準，但 system property
+     * {@code acelib.debug} 存在時仍優先於此值（見 {@link #isEnabled(Plugin)}）；
+     * 呼叫 {@link #clearExplicit()} 可清除此設定。</p>
      *
      * @param enabled true = 啟用、false = 關閉
      */

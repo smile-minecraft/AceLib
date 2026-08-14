@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
- * 玩家資料服務（Plan §十四 Phase 9）。
+ * 玩家資料服務。
  *
  * <p>協調玩家 join / quit lifecycle、非同步載入 / 保存、session 與資料的
  * 對應，以及快速登入登出、名稱變更、reload / disable 的資源管理。</p>
@@ -60,7 +60,7 @@ import java.util.function.Function;
  * <p>同一 UUID 不同名稱重新登入：舊 session 必須先 end；新 session 透過
  * {@link #onPlayerJoin(UUID, String)} 建立並以新 name 取代。</p>
  *
- * <h2>關閉語意（M-9-04 收斂）</h2>
+ * <h2>關閉語意</h2>
  * <ul>
  *   <li>設定 atomic shutdown flag；新 join/quit 立刻以 PLAYER-007 拒絕</li>
  *   <li>等待 in-flight tasks 完成（{@link #awaitInFlight(long, TimeUnit)}）；
@@ -83,7 +83,7 @@ import java.util.function.Function;
  * </ul>
  *
  * @see PlayerSessionRegistry
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public final class PlayerDataService {
 
@@ -112,7 +112,7 @@ public final class PlayerDataService {
      * 是為了在 caller 透過 {@link #getData(UUID)} 取得 Record 並 mutate 時，
      * 與 service 在 {@link #serialStoreExecutor} 上執行的 snapshot 序列化
      * （共用同一把 lock），避免非 thread-safe 的內部 {@code LinkedHashMap}
-     * 產生 {@link java.util.ConcurrentModificationException}（M-9-04 收斂）。</p>
+     * 產生 {@link java.util.ConcurrentModificationException}。</p>
      */
     private final ConcurrentMap<UUID, PlayerRecordView> records = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -475,7 +475,7 @@ public final class PlayerDataService {
     /**
      * 關閉服務：封閉新工作、等待 in-flight 完成、flush dirty I/O、清除 state。
      *
-     * <h2>語意（M-9-04 收斂）</h2>
+     * <h4>語意</h4>
      * <ol>
      *   <li>設定 atomic shutdown flag；後續 {@link #onPlayerJoin} /
      *       {@link #onPlayerQuit} 立刻以 PLAYER-007 拒絕</li>

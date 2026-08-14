@@ -4,10 +4,9 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * 玩家 session 生命週期狀態（Plan §十四 Phase 9）。
+ * 玩家 session 生命週期狀態。
  *
- * <p>對應需求「資料未載入完成時相關操作等待 / 拒絕 / 回覆合理提示」；
- * session 必須有明確可觀察的狀態，使外部 caller 能區分
+ * <p>session 必須有明確可觀察的狀態，使外部 caller 能區分
  * 「資料未就緒」與「資料已就緒」並選擇對應的處理策略
  * （等待、拒絕、降級訊息）。</p>
  *
@@ -35,7 +34,7 @@ import java.util.Set;
  * </ul>
  *
  * @see PlayerSession
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public enum PlayerSessionState {
 

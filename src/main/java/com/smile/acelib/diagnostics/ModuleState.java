@@ -6,8 +6,7 @@ import java.util.Optional;
 /**
  * 模組狀態（immutable record）。
  *
- * <p>對應 Plan §十九 Phase 14「狀態查詢」需求；
- * 透過 {@link DiagnosticsService} 註冊後彙整到 {@link DiagnosticSnapshot}。</p>
+ * <p>透過 {@link DiagnosticsService} 註冊後彙整到 {@link DiagnosticSnapshot}。</p>
  *
  * <h2>欄位語意</h2>
  * <ul>
@@ -19,9 +18,13 @@ import java.util.Optional;
  *       對外請透過 {@link #errorCode()} 取得 {@link Optional} 視圖</li>
  * </ul>
  *
+ * @param name            模組識別名；不可為 null
+ * @param status          對應的 {@link ModuleStatus}；不可為 null
+ * @param detail          人類可讀的詳細訊息；不可為 null
+ * @param errorCodeValue  FAILED 時攜帶的 {@code ACELIB-<AREA>-<CODE>}；其他情況為 null
  * @see ModuleStatus
  * @see DiagnosticsService
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public record ModuleState(
     String name,

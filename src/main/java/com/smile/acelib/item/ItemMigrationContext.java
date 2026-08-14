@@ -12,8 +12,7 @@ import org.bukkit.persistence.PersistentDataType;
 /**
  * Item migration 上下文 — 提供「讀取舊版資料」與「寫入新版資料」的 in-memory 視圖。
  *
- * <p>對應 Plan Phase 12「舊版資料升級」需求。
- * 該介面刻意保持 <strong>不可變讀寫視圖</strong>：
+ * <p>該介面刻意保持 <strong>不可變讀寫視圖</strong>：
  * 任何透過 {@link #writeVersion(ItemSchemaVersion)}、{@link #writeIdentity(ItemIdentity)}
  * 、{@link #writeDisplayName(Component)}、{@link #writeLore(List)}、
  * {@link #writeGameplayInt(String, int)}、{@link #writeGameplayString(String, String)}、

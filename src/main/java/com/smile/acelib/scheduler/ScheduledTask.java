@@ -3,7 +3,7 @@ package com.smile.acelib.scheduler;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * 已派送任務的抽象控制介面。
+ * 已派送任務的抽象控制介面（Supported）。
  *
  * <p>由 {@link SafeScheduler} 各方法回傳；持有者可用 {@link #cancel()} 取消任務、
  * 用 {@link #isCancelled()} 查詢當前狀態，或在診斷時取得任務的 plugin owner、
@@ -18,7 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * @see SafeScheduler
  * @see TaskType
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public interface ScheduledTask {
 

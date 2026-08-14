@@ -11,7 +11,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * 設定檔管理器（單一檔案）。
  *
- * <p>對應 Plan §九 Phase 4「設定檔與語言檔管理」所有驗收標準：</p>
+ * <p>負責設定檔的載入、遷移、儲存與驗證，對外承諾：</p>
  * <ul>
  *   <li>預設設定檔生成（首次啟動無檔案時自動建立）</li>
  *   <li>設定檔版本欄位存在；版本過舊自動觸發遷移</li>
@@ -33,7 +33,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * 但 {@link YamlConfiguration} 內部並非執行緒安全，並發呼叫 {@link #set} 應由
  * caller 負責同步（典型情境：只在主執行緒 reload）。</p>
  *
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public final class ConfigManager {
 

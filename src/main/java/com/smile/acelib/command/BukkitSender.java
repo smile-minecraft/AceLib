@@ -7,7 +7,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 /**
- * Bukkit {@link CommandSender} 的 {@link Sender} 適配（Plan §十一 Phase 6）。
+ * Bukkit {@link CommandSender} 的 {@link Sender} 適配。
  *
  * <p>將 Bukkit sender 包裝為 core dispatcher 看得懂的 {@link Sender} 抽象；
  * 玩家 sender 額外包成 {@link BukkitPlayerHandle} 提供 UUID / locale / online
@@ -20,7 +20,7 @@ import org.bukkit.entity.Player;
  *   <li>非玩家 sender（console / RCON / 自動化）：固定 {@link Locale#ROOT}</li>
  * </ul>
  *
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class BukkitSender implements Sender {
 

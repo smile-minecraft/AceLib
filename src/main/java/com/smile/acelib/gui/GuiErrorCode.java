@@ -1,7 +1,7 @@
 package com.smile.acelib.gui;
 
 /**
- * 集中錯誤代碼常數（Plan §十六 Phase 11 共同契約）。
+ * 集中錯誤代碼常數。
  *
  * <p>對應 {@code ACELIB-GUI-<CODE>} 格式分類代碼。
  * 所有對外拒絕或失敗的 operation result 必須攜帶其中之一。</p>
@@ -33,7 +33,7 @@ package com.smile.acelib.gui;
  * </ul>
  *
  * @see GuiResult
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 public final class GuiErrorCode {
 

@@ -11,11 +11,11 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Phase 9：對 {@link MemoryRecord} 的執行緒安全包裝。
+ * 對 {@link MemoryRecord} 的執行緒安全包裝。
  *
- * <p>對應 Momus G4 blocking finding：「caller 直接 mutation + service 並發 snapshot
- * 對非 thread-safe {@link MemoryRecord} 內部 {@code LinkedHashMap} 造成
- * {@link java.util.ConcurrentModificationException}」。</p>
+ * <p>解決「caller 直接 mutation + service 並發 snapshot 對非 thread-safe
+ * {@link MemoryRecord} 內部 {@code LinkedHashMap} 造成
+ * {@link java.util.ConcurrentModificationException}」的競態問題。</p>
  *
  * <h2>設計</h2>
  * <ul>
@@ -37,7 +37,7 @@ import java.util.Set;
  *       使用而無需擔心後續 mutation</li>
  * </ul>
  *
- * @since Phase 9 (Plan §十四) — Momus G4 blocking 收斂
+ * @since 1.0.0
  */
 final class LockedPlayerRecord implements Record {
 

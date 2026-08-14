@@ -7,7 +7,8 @@ import java.util.Objects;
  *
  * <p>設計輕量；facade 層會把此結果轉成 {@link WorldResult} 對外型別。</p>
  *
- * @since Phase 10 (Plan §十九)
+ * @param <T> value 型別
+ * @since 1.0.0
  */
 public final class WorldBackendResult<T> {
 

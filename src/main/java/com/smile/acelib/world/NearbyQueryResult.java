@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 鄰近查詢結果（{@link WorldResult} 子類型；Plan §十九 Phase 10 共同契約）。
+ * 鄰近查詢結果（{@link WorldResult} 子類型）。
  *
  * <p>對應 {@link WorldService#findNearbyEntities(LocationSnapshot, double, String)} 與
  * {@link WorldService#findNearbyPlayers(LocationSnapshot, double)} 的回傳型別。
@@ -13,7 +13,7 @@ import java.util.Objects;
  * 或含 N 筆命中；FAILURE 時清單一律為不可變的空集合。</p>
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class NearbyQueryResult extends WorldResult {
 

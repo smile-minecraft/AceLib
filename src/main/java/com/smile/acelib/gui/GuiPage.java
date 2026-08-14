@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 不可變分頁 model（Phase 11 延伸第一切片：分頁、空資料與 loading/error fallback）。
+ * 不可變分頁 model（Supported API）。
  *
  * <p>本 model 與 {@link GuiSession} 完全獨立：它不持有 {@code Player} reference、
  * 不依賴 session generation，也不會污染 registry 的 generation 計數。後續插件可單獨
@@ -28,7 +28,7 @@ import java.util.Objects;
  *
  * @param <T> 頁面項目型別
  * @see GuiErrorCode
- * @since Phase 11 延伸（Plan §十六 分頁需求）
+ * @since 1.0.0
  */
 public final class GuiPage<T> {
 

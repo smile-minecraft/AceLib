@@ -3,7 +3,7 @@ package com.smile.acelib.item;
 /**
  * 物品 migration 介面：從 {@link #fromVersion()} 升級到 {@link #toVersion()}。
  *
- * <p>對應 Plan Phase 12「舊版資料升級」需求。多個 {@code ItemMigration}
+ * <p>多個 {@code ItemMigration}
  * 透過 {@link ItemMigrationChain} 串接，依序執行；任一失敗觸發 rollback，
  * <strong>輸入 ItemStack 不被部分修改</strong>。</p>
  *

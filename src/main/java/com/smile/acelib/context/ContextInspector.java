@@ -5,9 +5,9 @@ import java.util.Objects;
 import org.bukkit.Bukkit;
 
 /**
- * 上下文檢查器。
+ * 上下文檢查器（Supported）。
  *
- * <p>對應 Plan §八 Phase 3：根據「目前執行緒/區域上下文」+「平台」+「操作類型」
+ * <p>根據「目前執行緒/區域上下文」+「平台」+「操作類型」
  * 判定該操作是否允許執行。規則表：</p>
  *
  * <h2>規則表</h2>
@@ -35,11 +35,15 @@ import org.bukkit.Bukkit;
  * </ul>
  *
  * <h2>執行緒安全</h2>
- * 所有方法為純函式（無 mutable state），可在多 region 並行環境下安全呼叫。
+ * <p>本類別無自身 mutable state，可跨 thread 呼叫；但它不是嚴格意義的純函式：
+ * {@link #currentContext(Platform)} 會讀取 Bukkit 當下環境
+ * （{@code Bukkit.isPrimaryThread()} 等），回傳值依賴呼叫當下的執行緒/平台狀態；
+ * {@link #check(ThreadContext, OperationType, Platform)} 則完全由輸入決定
+ * （輸入決定型檢查），不讀取外部狀態。</p>
  *
  * @see ThreadContext
  * @see OperationType
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public final class ContextInspector {
 

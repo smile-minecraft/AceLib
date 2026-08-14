@@ -34,10 +34,12 @@ class PluginDescriptorJarTest {
     private static final Path LIBS_DIR = Path.of("build", "libs").toAbsolutePath();
     private static final String PLUGIN_YML_ENTRY = "plugin.yml";
     private static final String PLUGIN_NAME = "AceLib";
-    // Gradle `withSourcesJar()` 會額外產生 classifier 為 `sources` 的 jar，
-    // 與 runtime plugin jar 共存於 build/libs/。filter 必須排除此 classifier，
-    // 否則會誤把 `-sources.jar` 當成 runtime plugin jar。
-    private static final String SOURCES_CLASSIFIER_SUFFIX = "-sources.jar";
+        // Gradle `withSourcesJar()` / `withJavadocJar()` 會額外產生 classifier 為
+        // `sources` / `javadoc` 的 jar，與 runtime plugin jar 共存於 build/libs/。
+        // filter 必須排除這兩個 classifier，否則會誤把 auxiliary jar 當成
+        // runtime plugin jar。
+        private static final String SOURCES_CLASSIFIER_SUFFIX = "-sources.jar";
+        private static final String JAVADOC_CLASSIFIER_SUFFIX = "-javadoc.jar";
 
     private static Path jarPath;
     private static String pluginYmlContent;
@@ -56,7 +58,8 @@ class PluginDescriptorJarTest {
                     String name = p.getFileName().toString();
                     return name.startsWith(PLUGIN_NAME)
                         && name.endsWith(".jar")
-                        && !name.endsWith(SOURCES_CLASSIFIER_SUFFIX);
+                        && !name.endsWith(SOURCES_CLASSIFIER_SUFFIX)
+                        && !name.endsWith(JAVADOC_CLASSIFIER_SUFFIX);
                 })
                 .toList();
             assertEquals(1, jars.size(),

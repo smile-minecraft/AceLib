@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Item 例外（extends {@link RuntimeException}）。
  *
- * <p>對應 Plan Phase 12「錯誤分類代碼」：所有對外拋出或記錄的 item 錯誤
+ * <p>所有對外拋出或記錄的 item 錯誤
  * 必須攜帶 {@code ACELIB-ITEM-*} 格式分類代碼，方便
  * {@link com.smile.acelib.diagnostics.ErrorCodeRegistry} 正確歸類。</p>
  *

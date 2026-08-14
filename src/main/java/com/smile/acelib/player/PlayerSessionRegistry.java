@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 玩家 session registry（Plan §十四 Phase 9）。
+ * 玩家 session registry。
  *
  * <p>以 {@link UUID} 為唯一識別 key 維護 active session 清單；提供
  * start / get / end 三種 lifecycle 操作與 size / clear 觀察/管理方法。</p>
@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentMap;
  * 「alice」與「AliceRenamed」（不同 UUID）並存於 registry。</p>
  *
  * @see PlayerSession
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public final class PlayerSessionRegistry {
 

@@ -5,7 +5,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 對外不可變的 GUI session 物件（Plan §十六 Phase 11 共同契約）。
+ * 對外不可變的 GUI session 物件（Supported API）。
  *
  * <p>不持有 {@link org.bukkit.entity.Player} reference — 僅以
  * {@link UUID} 標記玩家；GUI 服務可透過 UUID 重新由 {@code Server.getPlayer(UUID)}
@@ -28,8 +28,8 @@ import java.util.UUID;
  * <h2>執行緒安全</h2>
  * <p>不可變物件，安全於多 region 並行環境下使用。</p>
  *
- * @see GuiSessionRegistry
- * @since Phase 11 (Plan §十六)
+ * @see GuiService
+ * @since 1.0.0
  */
 public final class GuiSession {
 

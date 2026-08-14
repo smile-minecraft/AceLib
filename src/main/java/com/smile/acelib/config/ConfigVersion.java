@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 設定檔版本（immutable record）。
  *
- * <p>對應 Plan §九 Phase 4「設定檔版本欄位存在；版本過舊自動觸發遷移」。
- * 設定檔在 YAML 內以 {@code version: "major.minor"} 形式存在；
+ * <p>設定檔在 YAML 內以 {@code version: "major.minor"} 形式存在；
  * {@link ConfigManager#load()} 會比對檔案版本與 schema 宣告的當前版本，
  * 若檔案版本較舊，自動呼叫 {@link MigrationChain} 進行遷移。</p>
  *
@@ -23,12 +22,14 @@ import java.util.Objects;
  *   <li>跨 major 視為不相容，必須透過 {@link MigrationChain} 升級</li>
  * </ul>
  *
- * @since Phase 4 (Plan §九)
+ * @param major major 版本號（先比較）
+ * @param minor minor 版本號（major 相同時比較）
+ * @since 1.0.0
  */
 public record ConfigVersion(int major, int minor) implements Comparable<ConfigVersion> {
 
     /**
-     * 預設當前版本常數 {@code 1.0}（Phase 4 起始版本）。
+     * 預設當前版本常數 {@code 1.0}。
      */
     public static final ConfigVersion V1_0 = new ConfigVersion(1, 0);
 
@@ -41,7 +42,7 @@ public record ConfigVersion(int major, int minor) implements Comparable<ConfigVe
      * if (major < 0) throw new IllegalArgumentException("major must be >= 0");
      * if (minor < 0) throw new IllegalArgumentException("minor must be >= 0");
      * }</pre>
-     * 並同步更新 {@code ConfigVersionTest}。</p>
+     * 並同步更新 {@code ConfigVersionTest}。
      */
     public ConfigVersion {
         // 目前不限制正負值；保持與 record 自動規範一致。

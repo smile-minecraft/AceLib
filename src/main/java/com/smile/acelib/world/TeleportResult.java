@@ -19,7 +19,7 @@ import java.util.UUID;
  * </ul>
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class TeleportResult extends WorldResult {
 

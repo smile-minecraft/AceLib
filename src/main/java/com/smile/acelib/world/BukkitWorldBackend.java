@@ -20,25 +20,31 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 /**
- * 預設的 {@link WorldBackend} 實作：直接呼叫 Bukkit/Paper API。
+ * 預設的 {@link WorldBackend} 實作：直接呼叫 Bukkit/Paper API（Internal）。
  *
  * <p>所有方法皆 <strong>立即</strong> 在呼叫端執行緒執行（不跨 region 切換）；
  * region 切換由 facade 層透過既有 {@code SafeScheduler} 安排。</p>
  *
- * <p>{@link #teleportAsync} 委派給 Bukkit {@link Entity#teleportAsync(Location, boolean)}
+ * <p>{@link #teleportAsync} 委派給 Bukkit {@code Entity#teleportAsync(Location, boolean)}
  * （Paper 26.1 API），回傳的 future 完成時 true/false 直接對應 ACCEPT/REJECT。
  * 若執行環境不支援 {@code teleportAsync}（例如部分 Spigot 版本）—
  * 退而求其次 fallback 為 {@link Entity#teleport(Location)} 同步結果，包進
  * {@link CompletableFuture#completedFuture} 回傳。</p>
  *
- * <p>本類別為 package-private，僅供 {@link WorldServiceImpl} 內部使用。</p>
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴；僅供
+ * {@link WorldServiceImpl} 內部使用。</p>
  *
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class BukkitWorldBackend implements WorldBackend {
 
     private final Server server;
 
+    /**
+     * 建立 backend 實作。
+     *
+     * @param server 供解析用的 Bukkit {@link Server}；不可為 null
+     */
     public BukkitWorldBackend(Server server) {
         this.server = Objects.requireNonNull(server, "server");
     }

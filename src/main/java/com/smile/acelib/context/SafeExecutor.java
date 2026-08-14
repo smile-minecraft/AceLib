@@ -14,19 +14,19 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * 上下文安全執行器。
+ * 上下文安全執行器（Supported）。
  *
- * <p>對應 Plan §八 Phase 3：為後續插件提供「自動選擇正確 scheduler + 主動攔截錯誤
+ * <p>為後續插件提供「自動選擇正確 scheduler + 主動攔截錯誤
  * 上下文 mutate」的統一入口。內部設計：</p>
  *
  * <ul>
  *   <li>{@link #executeAsync} — 派送到 async scheduler；接受 READ_ONLY；
  *       拒絕在 main thread 送出 mutate（CTX-002）</li>
- *   <li>{@link #executeOnRegion(Player, Runnable)} —
+ *   <li>{@link #executeOnRegion} —
  *       自動選擇 player scheduler（Folia 用 entity scheduler；Paper 用 main thread）</li>
- *   <li>{@link #executeOnRegion(Entity, Runnable)} —
+ *   <li>{@link #executeOnRegion} —
  *       自動選擇 entity scheduler</li>
- *   <li>{@link #executeOnRegion(Location, Runnable)} —
+ *   <li>{@link #executeOnRegion} —
  *       自動選擇 region scheduler（Folia 用 region scheduler；Paper 用 main thread）</li>
  * </ul>
  *
@@ -44,7 +44,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * @see ContextInspector
  * @see SafeScheduler
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public final class SafeExecutor {
 
@@ -142,6 +142,15 @@ public final class SafeExecutor {
 
     /**
      * 同上但允許指定操作類型。
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param player     目標玩家；不可為 null
+     * @param runnable   要執行的程式；不可為 null
+     * @param op         操作類型；可為 null（僅用於除錯模式的 annotate log，
+     *                   不影響實際派送路徑）
+     * @return {@link ScheduledTask} 控制代碼
      */
     public static ScheduledTask executeOnRegion(JavaPlugin plugin,
                                                  Platform platform,
@@ -165,6 +174,13 @@ public final class SafeExecutor {
 
     /**
      * 在實體所屬 region 執行一個 runnable（預設 {@link OperationType#ENTITY_MUTATE}）。
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param entity     目標實體；不可為 null
+     * @param runnable   要執行的程式；不可為 null
+     * @return {@link ScheduledTask} 控制代碼
      */
     public static ScheduledTask executeOnRegion(JavaPlugin plugin,
                                                  Platform platform,
@@ -177,6 +193,15 @@ public final class SafeExecutor {
 
     /**
      * 同上但允許指定操作類型。
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param entity     目標實體；不可為 null
+     * @param runnable   要執行的程式；不可為 null
+     * @param op         操作類型；可為 null（僅用於除錯模式的 annotate log，
+     *                   不影響實際派送路徑）
+     * @return {@link ScheduledTask} 控制代碼
      */
     public static ScheduledTask executeOnRegion(JavaPlugin plugin,
                                                  Platform platform,
@@ -199,6 +224,13 @@ public final class SafeExecutor {
 
     /**
      * 在位置所在 region 執行一個 runnable（預設 {@link OperationType#WORLD_MUTATE}）。
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param location   目標位置；不可為 null
+     * @param runnable   要執行的程式；不可為 null
+     * @return {@link ScheduledTask} 控制代碼
      */
     public static ScheduledTask executeOnRegion(JavaPlugin plugin,
                                                  Platform platform,
@@ -211,6 +243,15 @@ public final class SafeExecutor {
 
     /**
      * 同上但允許指定操作類型。
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param location   目標位置；不可為 null
+     * @param runnable   要執行的程式；不可為 null
+     * @param op         操作類型；可為 null（僅用於除錯模式的 annotate log，
+     *                   不影響實際派送路徑）
+     * @return {@link ScheduledTask} 控制代碼
      */
     public static ScheduledTask executeOnRegion(JavaPlugin plugin,
                                                  Platform platform,
@@ -233,7 +274,7 @@ public final class SafeExecutor {
     // -----------------------------------------------------------------
 
     /**
-     * 建立對應的 SafeScheduler。Phase 3 不另外持有 scheduler 狀態 — 每次呼叫
+     * 建立對應的 SafeScheduler。此 helper 不持有 scheduler 狀態 — 每次呼叫
      * new instance，dispatcher 內部使用弱一致的 recorder。
      */
     private static SafeScheduler getOrCreateScheduler(JavaPlugin plugin,

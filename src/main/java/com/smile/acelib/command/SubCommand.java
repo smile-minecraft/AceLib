@@ -3,7 +3,7 @@ package com.smile.acelib.command;
 import java.util.List;
 
 /**
- * 子指令處理器函式介面（Plan §十一 Phase 6）。
+ * 子指令處理器函式介面。
  *
  * <p>由 {@link SubCommandSpec#handler()} 持有；dispatcher 會在通過權限 / 玩家 /
  * console / 參數 / 冷卻檢查後呼叫。handler 內部可以：</p>
@@ -21,7 +21,7 @@ import java.util.List;
  *
  * @see CommandContext
  * @see SubCommandSpec
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface SubCommand {

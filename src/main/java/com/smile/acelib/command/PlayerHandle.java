@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 玩家 sender 的語意化 handle（Plan §十一 Phase 6）。
+ * 玩家 sender 的語意化 handle。
  *
  * <p>純抽象，不暴露 Bukkit Player；Bukkit adapter 透過實作本介面把
  * {@code org.bukkit.entity.Player} 包起來。</p>
@@ -15,7 +15,7 @@ import java.util.UUID;
  * 玩家離線後 sender 仍可能是玩家物件，但 {@code asPlayer().isOnline() = false}。</p>
  *
  * @see Sender
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public interface PlayerHandle {
 

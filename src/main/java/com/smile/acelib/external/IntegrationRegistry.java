@@ -29,6 +29,7 @@ import java.util.Set;
  *
  * @see IntegrationAdapter
  * @see IntegrationProbeResult
+ * @since 1.0.0
  */
 public class IntegrationRegistry {
 

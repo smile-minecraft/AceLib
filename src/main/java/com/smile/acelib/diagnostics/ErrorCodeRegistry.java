@@ -6,8 +6,7 @@ import java.util.Objects;
 /**
  * 錯誤代碼 → 分類與說明的 registry。
  *
- * <p>對應 Plan §十九 Phase 14「錯誤代碼可映射分類」需求。
- * 提供兩種查詢：</p>
+ * <p>提供兩種查詢：</p>
  * <ul>
  *   <li>{@link #categorize(String)} — 將 {@code ACELIB-<AREA>-<CODE>}
  *       抽出 {@code AREA} 並對應到 {@link ErrorCategory}；
@@ -31,7 +30,7 @@ import java.util.Objects;
  *
  * @see ErrorCategory
  * @see ErrorCodeInfo
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public final class ErrorCodeRegistry {
 
@@ -42,7 +41,7 @@ public final class ErrorCodeRegistry {
     /**
      * 預設已知代碼的 metadata 對照表。
      *
-     * <p>僅列出 Plan §七已有明確定義的代碼；未登錄的代碼回傳
+     * <p>僅列出已明確定義的代碼；未登錄的代碼回傳
      * {@link ErrorCategory#UNKNOWN} 與 lookup null。</p>
      */
     private static final Map<String, ErrorCodeInfo> KNOWN;
@@ -100,7 +99,7 @@ public final class ErrorCodeRegistry {
         // EVT
         m.put("ACELIB-EVT-001", new ErrorCodeInfo(ErrorCategory.EVENT,
             "事件監聽錯誤"));
-        // DATA
+        // 資料儲存區
         m.put("ACELIB-DATA-001", new ErrorCodeInfo(ErrorCategory.DATA,
             "資料儲存錯誤"));
         // EXT

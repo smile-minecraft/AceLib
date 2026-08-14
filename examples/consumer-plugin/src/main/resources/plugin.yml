@@ -1,0 +1,12 @@
+# fixture plugin descriptor：下游 plugin 依 README / Quick Start 的建議宣告。
+# `depend: [AceLib]` 是「載入順序保證 + 前置檢查」：
+# 伺服器會先載入並 enable AceLib，才載入本 plugin；
+# 若 AceLib 不在 plugins/ 或未通過 enable，伺服器會拒絕載入本 plugin。
+name: AcelibConsumerQuickStart
+main: com.example.acelibconsumer.QuickStartPlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+load: POSTWORLD
+depend:
+  - AceLib

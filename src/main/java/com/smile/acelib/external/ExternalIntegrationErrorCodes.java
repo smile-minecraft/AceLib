@@ -9,6 +9,8 @@ package com.smile.acelib.external;
  * {@link ExternalIntegrationService#NOT_READY} / {@link ExternalIntegrationService#SHUTDOWN} 使用。</p>
  *
  * <p>所有常數皆為 {@code ACELIB-EXT-<三位數字>} 形式，便於日誌與診斷報告聚合。</p>
+ *
+ * @since 1.0.0
  */
 public final class ExternalIntegrationErrorCodes {
 

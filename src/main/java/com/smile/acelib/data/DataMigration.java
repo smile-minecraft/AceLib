@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 資料遷移介面（從 {@link #fromVersion()} 升級到 {@link #toVersion()}）。
  *
- * <p>對應 Plan §十三 Phase 8「資料版本遷移」需求。
- * 多個 {@code DataMigration} 透過 {@link MigrationChain} 串接成鏈，依序執行；
+ * <p>多個 {@code DataMigration} 透過 {@link MigrationChain} 串接成鏈，依序執行；
  * 任一版本轉換失敗時觸發 rollback，<strong>不破壞既有資料</strong>。</p>
  *
  * <h2>使用情境</h2>
@@ -31,7 +30,7 @@ import java.util.Objects;
  *
  * @see MigrationChain
  * @see MigrationResult
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public interface DataMigration {
 

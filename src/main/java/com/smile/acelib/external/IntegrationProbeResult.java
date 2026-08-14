@@ -15,6 +15,7 @@ import java.util.Objects;
  * @param status 整合狀態；不可為 null
  * @param reason 管理員可理解的說明；null / 空白時採用狀態預設
  * @see IntegrationStatus
+ * @since 1.0.0
  */
 public record IntegrationProbeResult(IntegrationStatus status, String reason) {
 

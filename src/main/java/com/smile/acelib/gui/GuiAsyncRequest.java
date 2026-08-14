@@ -4,14 +4,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 非同步更新請求合約（Phase 11 延伸第三切片：非同步資料載入後安全更新 GUI）。
+ * 非同步更新請求合約（Supported API）。
  *
  * <p>後續插件在發起非同步資料載入前，先透過
  * {@link GuiService#beginAsyncUpdate(UUID, long, int)} 取得本物件；非同步結果回來後，
  * 將本物件連同 {@link GuiPage} 與 renderer 傳入
  * {@link GuiService#applyAsyncUpdate(GuiAsyncRequest, GuiPage, Runnable)}。</p>
  *
- * <p>本物件攜帶重新驗證所需的全部維度（Plan §十六「非同步結果回來時必須重新確認」）：</p>
+ * <p>本物件攜帶重新驗證所需的全部維度（非同步結果回來時必須重新確認）：</p>
  * <ul>
  *   <li>{@link #playerUuid()} — 目標玩家 UUID（不持有 {@code Player} reference）</li>
  *   <li>{@link #sessionGeneration()} — 請求建立時綁定的 session generation</li>
@@ -25,7 +25,7 @@ import java.util.UUID;
  * reference，可安全跨執行緒 / 跨 region 保存直到非同步結果回來。</p>
  *
  * @see GuiService
- * @since Phase 11 延伸（Plan §十六 非同步資料載入後更新 GUI）
+ * @since 1.0.0
  */
 public final class GuiAsyncRequest {
 

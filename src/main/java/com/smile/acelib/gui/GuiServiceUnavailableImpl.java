@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 未啟用 / 已停用狀態下的可診斷 facade（Plan §十六 Phase 11 共同契約）。
+ * 未啟用 / 已停用狀態下的可診斷 facade（Internal）。
  *
  * <p>任何狀態下呼叫本類別的操作，都會回傳 {@link GuiState#REJECTED} 或
  * {@link GuiState#FAILED} 並附帶對應的 {@link GuiErrorCode#NOT_READY} 或
@@ -13,8 +13,12 @@ import java.util.UUID;
  * 後續插件於 onEnable 之前或 plugin disable 之後呼叫
  * {@code AceLibApi.getGuiService()} 即取得此 instance。</p>
  *
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴；透過
+ * {@link GuiService#forUnavailable(String)} 或 {@link com.smile.acelib.AceLibApi}
+ * 取得 {@link GuiService} 介面。</p>
+ *
  * @see GuiService
- * @since Phase 11 (Plan §十六 §二十一)
+ * @since 1.0.0
  */
 final class GuiServiceUnavailableImpl implements GuiService {
 

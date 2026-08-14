@@ -5,10 +5,8 @@ import java.util.Objects;
 /**
  * 玩家狀態模組例外（extends {@link RuntimeException}）。
  *
- * <p>對應 Plan §十四 Phase 9「玩家狀態錯誤回報」與 §二十三 DoD「錯誤分類代碼」
- * 需求。所有對外拋出的玩家狀態例外必須攜帶
- * {@code ACELIB-PLAYER-<CODE>} 格式分類代碼，讓
- * {@link com.smile.acelib.diagnostics.ErrorCodeRegistry} 能正確歸類。</p>
+ * <p>所有對外拋出的玩家狀態例外必須攜帶 {@code ACELIB-PLAYER-<CODE>} 格式
+ * 分類代碼，讓 {@link com.smile.acelib.diagnostics.ErrorCodeRegistry} 能正確歸類。</p>
  *
  * <h2>錯誤代碼</h2>
  * <ul>
@@ -29,7 +27,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see PlayerDataService
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public class PlayerStateException extends RuntimeException {
 

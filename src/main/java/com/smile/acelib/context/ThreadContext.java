@@ -1,9 +1,9 @@
 package com.smile.acelib.context;
 
 /**
- * 執行緒/區域上下文列舉。
+ * 執行緒/區域上下文列舉（Supported）。
  *
- * <p>對應 Plan §八 Phase 3 規格：將 Bukkit/Paper/Folia 的執行環境分類為 6 種上下文，
+ * <p>將 Bukkit/Paper/Folia 的執行環境分類為 6 種上下文，
  * 供 {@link ContextInspector} 與 {@link SafeExecutor} 判斷「目前執行緒是否能 mutate
  * 遊戲物件」。</p>
  *
@@ -32,7 +32,7 @@ package com.smile.acelib.context;
  * @see OperationType
  * @see ContextInspector
  * @see SafeExecutor
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public enum ThreadContext {
 
@@ -54,11 +54,11 @@ public enum ThreadContext {
      *       與 read-only 皆回傳 {@code true}</li>
      *   <li>async / global：僅對 {@link OperationType#READ_ONLY} 回傳 {@code true}</li>
      *   <li>{@link #UNKNOWN}：永遠回傳 {@code false}（最保守）</li>
- * </ul>
+     * </ul>
      *
      * @param op 要檢查的操作類型；不可為 null（呼叫端需保證）
      * @return 此上下文是否允許執行該操作
-     * @since Phase 3 (Plan §八)
+     * @since 1.0.0
      */
     public boolean isSafeFor(OperationType op) {
         if (op == null) {

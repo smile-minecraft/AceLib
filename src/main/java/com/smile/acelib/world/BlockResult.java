@@ -16,7 +16,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class BlockResult extends WorldResult {
 
@@ -55,6 +55,10 @@ public final class BlockResult extends WorldResult {
 
     /**
      * 建立成功結果。
+     *
+     * @param location 目標位置；不可為 null
+     * @param blockKey 方塊 key（如 {@code "STONE"}）
+     * @return 成功結果（{@link WorldState#SUCCESS}，無錯誤碼）
      */
     public static BlockResult success(LocationSnapshot location, String blockKey) {
         return new BlockResult(WorldState.SUCCESS, null,
@@ -63,6 +67,12 @@ public final class BlockResult extends WorldResult {
 
     /**
      * 建立失敗結果（含錯誤代碼）。
+     *
+     * @param state     結果狀態；不可為 null
+     * @param errorCode 錯誤代碼（{@code ACELIB-WORLD-*}）
+     * @param detail    人類可讀訊息；不可為 null
+     * @param location  目標位置；不可為 null
+     * @return 失敗結果
      */
     public static BlockResult failure(WorldState state,
                                       String errorCode,

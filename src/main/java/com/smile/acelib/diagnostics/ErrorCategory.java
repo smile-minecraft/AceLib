@@ -3,10 +3,9 @@ package com.smile.acelib.diagnostics;
 import java.util.Objects;
 
 /**
- * 錯誤分類 enum（與 Plan §七 定義的 area 對應）。
+ * 錯誤分類 enum。
  *
- * <p>對應 Plan §十九 Phase 14「錯誤代碼可映射分類」需求。
- * 從 {@code ACELIB-<AREA>-<CODE>} 抽出 {@code AREA} 後可對應到對應分類。
+ * <p>從 {@code ACELIB-<AREA>-<CODE>} 抽出 {@code AREA} 後可對應到對應分類。
  * areaPrefix 為反向對應的字串前綴，用於報告輸出。</p>
  *
  * <h2>規範對應</h2>
@@ -17,7 +16,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see ErrorCodeRegistry
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public enum ErrorCategory {
 

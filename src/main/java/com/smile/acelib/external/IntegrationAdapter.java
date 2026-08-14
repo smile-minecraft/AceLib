@@ -1,7 +1,7 @@
 package com.smile.acelib.external;
 
 /**
- * 外部整合 adapter 生命週期契約。
+ * 外部整合 adapter 生命週期契約（SPI）。
  *
  * <p>每個 adapter 以 integration id（例如 {@code "vault"}）唯一識別，並具備冪等的
  * {@code initialize()} / {@code shutdown()} 生命週期：已啟用時再次 {@code initialize()}
@@ -16,6 +16,7 @@ package com.smile.acelib.external;
  * @see AbstractIntegrationAdapter
  * @see IntegrationRegistry
  * @see IntegrationProbeResult
+ * @since 1.0.0
  */
 public interface IntegrationAdapter {
 

@@ -12,7 +12,7 @@ import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 /**
- * 對外 API facade。
+ * 對外 API facade（Supported）。
  *
  * <p>設計原則：</p>
  * <ul>
@@ -28,10 +28,17 @@ import java.util.function.BooleanSupplier;
  *   <li>已啟用（ready）— 由
  *       {@link #ready(String, Platform, PlatformCapability, WorldService, GuiService, BooleanSupplier, Runnable)}
  *       建立</li>
+ *   <li>停用（shutdown）— 由 {@link #shutDown(WorldService, GuiService)} 建立；
+ *       {@code isReady()} 為 false，service 回傳 shutdown facade</li>
  * </ul>
+ *
+ * <p>取得方式：下游插件經由 Bukkit/Paper {@code ServicesManager} 取得
+ * {@link AceLibApi.AceLibProvider}，再呼叫 {@code api()}；不要直接依賴
+ * {@link AceLibPlugin} 或 static singleton。</p>
  *
  * @see PlatformCapability
  * @see WorldService
+ * @since 1.0.0
  */
 public final class AceLibApi {
 
@@ -375,10 +382,63 @@ public final class AceLibApi {
     /**
      * 觸發 plugin 端的 reload 流程。
      *
-     * <p>委派給 {@link AceLibPlugin#reload()} 的 callback；因此若 plugin 尚未 onEnable，
-     * 此方法為 no-op（不回傳值；如需明確失敗偵測請改用 {@link AceLibPlugin#reload()}）。</p>
+     * <p>回傳型別為 {@code void}：此方法只觸發 reload callback；若 plugin 尚未
+     * onEnable（例如 {@link #uninitialized()} instance），此方法為 no-op。</p>
+     *
+     * <p>Supported API（本 facade 與 {@link AceLibApi.AceLibProvider}）不提供
+     * reload 成敗的 boolean 結果。可觀察的邊界如下：</p>
+     * <ul>
+     *   <li>{@code provider.api()} 回傳新 facade 只代表成功路徑已生效；若 reload
+     *       rollback 至既有 binding，{@code api()} 可能維持舊 facade。</li>
+     *   <li>{@link #isReady()} 只反映一般生命週期狀態（enable/disable），作為
+     *       service 使用前的 guard；它不是 reload 成功/失敗的 outcome 指標。</li>
+     * </ul>
+     * <p>不要依賴任何 Internal class 來取得 reload 結果。</p>
      */
     public void reload() {
         onReload.run();
+    }
+
+    /**
+     * 動態取得目前 {@link AceLibApi} 的正式 provider 契約。
+     *
+     * <p>下游 plugin 應經由 Bukkit/Paper {@code ServicesManager} 取得本 provider，
+     * 而不是直接依賴 {@link AceLibPlugin} 或 static singleton：</p>
+     * <pre>{@code
+     * RegisteredServiceProvider<AceLibApi.AceLibProvider> registration =
+     *     server.getServicesManager().getRegistration(AceLibApi.AceLibProvider.class);
+     * AceLibApi api = registration == null ? null : registration.getProvider().api();
+     * if (api != null && api.isReady()) {
+     *     // 使用 api 提供的各 service
+     * }
+     * }</pre>
+     *
+     * <h2>Lifecycle 與 nullability</h2>
+     * <ul>
+     *   <li>plugin enable 後註冊、disable 時解除註冊；reload 不解除註冊。
+     *       reload 成功 commit 時 {@link #api()} 才會反映新的 facade；
+     *       若 reload rollback 至既有 binding，{@link #api()} 可能維持舊 facade。</li>
+     *   <li>{@link #api()} 本身永不回傳 null；但回傳物件的 {@link AceLibApi#isReady()}
+     *       可能為 false — 例如 disable 後仍持有 provider 的呼叫端，會取得
+     *       shutdown facade。呼叫端應檢查 {@code api().isReady()} 再使用服務。</li>
+     *   <li>registration 缺失時（例如 plugin 尚未 enable），
+     *       {@code getRegistration(...)} 回傳 null，呼叫端必須自行處理。</li>
+     * </ul>
+     *
+     * <h2>Thread context</h2>
+     * <p>provider 實作內部以 {@code volatile} 快照目前 facade；
+     * {@link #api()} 可在任何 thread 安全呼叫，且回傳的 {@link AceLibApi} 本身不可變。
+     * Paper 與 Folia 環境行為一致。</p>
+     */
+    public interface AceLibProvider {
+
+        /**
+         * 目前對外 facade。
+         *
+         * @return 永不為 null 的 {@link AceLibApi}；plugin 尚未 enable 時不會有
+         *         provider 可取得，disable 後則回傳 shutdown facade
+         *         （{@link AceLibApi#isReady()} 為 false）
+         */
+        AceLibApi api();
     }
 }

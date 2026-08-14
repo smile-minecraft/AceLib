@@ -7,11 +7,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Inventory mutation 路由到玩家 region context 的 adapter（Plan §十六 Phase 11）。
+ * Inventory mutation 路由到玩家 region context 的 adapter（Internal）。
  *
  * <p>{@link GuiServiceImpl} 透過此介面把「建立 / 開啟 / 關閉 inventory」這類
  * mutate 操作送到玩家所在的 region 內執行，避免 Folia 環境下跨 region mutate
- * �發 {@code ACELIB-CTX-001}。</p>
+ * 觸發 {@code ACELIB-CTX-001}。</p>
  *
  * <h2>Production 實作</h2>
  * <ul>
@@ -46,7 +46,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <p>本介面本身不持有 Player reference — 由 caller 透過 method 參數傳入；
  * adapter 在執行 runnable 期間使用 Player，執行完畢後即釋放。</p>
  *
- * @since Phase 11 (Plan §十六 §二十一)
+ * @since 1.0.0
  */
 @FunctionalInterface
 interface PlayerContextExecutor {
@@ -150,7 +150,7 @@ interface PlayerContextExecutor {
      * {@link #runPending()} / {@link #pendingCount()} 觀察與觸發佇列。production
      * 路徑使用 {@link SafeSchedulerPlayerContextExecutor}，不依賴本類別。</p>
      *
-     * @since Phase 11（Plan §十六 §二十一）
+     * @since 1.0.0
      */
     final class DeferredPlayerContextExecutor implements PlayerContextExecutor {
 

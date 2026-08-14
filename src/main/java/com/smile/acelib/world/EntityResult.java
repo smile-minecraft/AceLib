@@ -16,7 +16,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class EntityResult extends WorldResult {
 

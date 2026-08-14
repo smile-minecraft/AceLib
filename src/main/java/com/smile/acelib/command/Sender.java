@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 指令執行者抽象介面（Plan §十一 Phase 6）。
+ * 指令執行者抽象介面。
  *
  * <p>核心 dispatcher 不直接依賴 Bukkit {@code CommandSender}，而是透過本介面
  * 抽象 sender；Bukkit adapter（{@code com.smile.acelib.command.bukkit}）負責
@@ -21,7 +21,7 @@ import java.util.UUID;
  * </ul>
  *
  * @see PlayerHandle
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public interface Sender {
 

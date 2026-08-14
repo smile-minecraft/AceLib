@@ -5,14 +5,14 @@ import java.util.UUID;
 import org.bukkit.event.Listener;
 
 /**
- * GUI 服務對外 facade（Plan §十六 Phase 11 canonical public API）。
+ * GUI 服務對外 facade（Supported API）。
  *
  * <p>提供一組 Folia-safe 的 GUI 操作入口，後續插件不需要直接接觸
  * {@code Bukkit.createInventory} / {@code InventoryClickEvent} / 自行保存
  * session state 等容易跨執行緒 / 跨關閉事件丟失狀態的 API，
  * 改透過本介面取得統一、可重用 generation 的 session 物件與點擊驗證。</p>
  *
- * <h2>設計原則（Plan §十六 §二十一共同契約）</h2>
+ * <h2>設計原則</h2>
  * <ul>
  *   <li>對外輸入僅接受 {@link UUID} / {@link GuiArgument} —
  *       內部不長期保存 {@code Player} reference</li>
@@ -27,7 +27,7 @@ import org.bukkit.event.Listener;
  * @see GuiArgument
  * @see GuiResult
  * @see GuiSession
- * @since Phase 11 (Plan §十六 §二十一)
+ * @since 1.0.0
  */
 public interface GuiService {
 
@@ -43,7 +43,7 @@ public interface GuiService {
      * @param scheduler 對應平台 SafeScheduler；不可為 null
      * @return 新的 {@link GuiService} 實作實例；never null
      * @throws NullPointerException 當 {@code scheduler} 為 null
-     * @since Phase 11 (Plan §十六 §二十一)
+     * @since 1.0.0
      */
     static GuiService forProduction(SafeScheduler scheduler) {
         return GuiServiceImpl.forProduction(scheduler);
@@ -60,7 +60,7 @@ public interface GuiService {
      * @param code 狀態碼；不可為 null，且必須為 NOT_READY 或 SHUTDOWN
      * @return 新的 {@link GuiService} unavailable 實作實例；never null
      * @throws IllegalArgumentException 當 {@code code} 為 null 或不是 NOT_READY / SHUTDOWN
-     * @since Phase 11 (Plan §十六 §二十一)
+     * @since 1.0.0
      */
     static GuiService forUnavailable(String code) {
         return new GuiServiceUnavailableImpl(code);
@@ -180,7 +180,7 @@ public interface GuiService {
      * 綁定回 {@link #confirm} / {@link #cancel}。服務不保留 {@code Player} reference；
      * {@code callback} 為 domain action，由服務在 confirm 成功時一次性執行。</p>
      *
-     * <h2>callback 執行上下文（Folia / Paper 安全）</h2>
+     * <h4>callback 執行上下文（Folia / Paper 安全）</h4>
      * <p>{@code confirm} 會<strong>同步</strong>執行 {@code callback}（目前實作於呼叫端
      * 執行緒內直接呼叫）。因此 {@code callback} 不得直接操作 Bukkit / Folia 綁定的
      * 狀態（例如直接 mutate 玩家 inventory、實體、方塊或呼叫全域
@@ -196,7 +196,7 @@ public interface GuiService {
      * @return 對應 {@link GuiResult}（SUCCESS 帶 {@link GuiConfirmation}）
      * @implSpec 本方法為 default method：未 override 的既有實作會得到
      *           {@code FAILED + ACELIB-GUI-012} 的安全拒絕，不執行 callback，
-     *           以維持 binary/source compatibility（對應 Momus blocking finding）。
+     *           以維持 binary/source compatibility。
      */
     default GuiResult createConfirmation(UUID playerUuid, long generation,
                                          String actionId, Runnable callback) {
@@ -231,7 +231,7 @@ public interface GuiService {
      * @return 對應 {@link GuiResult}
      * @implSpec 本方法為 default method：未 override 的既有實作會得到
      *           {@code FAILED + ACELIB-GUI-012} 的安全拒絕，以維持
-     *           binary/source compatibility（對應 Momus blocking finding）。
+     *           binary/source compatibility。
      */
     default GuiResult confirm(UUID playerUuid, long generation, String actionToken) {
         requireNonNull(playerUuid, "playerUuid");
@@ -254,7 +254,7 @@ public interface GuiService {
      * @return 對應 {@link GuiResult}
      * @implSpec 本方法為 default method：未 override 的既有實作會得到
      *           {@code FAILED + ACELIB-GUI-012} 的安全拒絕，以維持
-     *           binary/source compatibility（對應 Momus blocking finding）。
+     *           binary/source compatibility。
      */
     default GuiResult cancel(UUID playerUuid, long generation, String actionToken) {
         requireNonNull(playerUuid, "playerUuid");
@@ -272,7 +272,7 @@ public interface GuiService {
     String getModuleStatus();
 
     /**
-     * 建立一個非同步更新請求合約（Phase 11 延伸第三切片：非同步資料載入後安全更新 GUI）。
+     * 建立一個非同步更新請求合約（非同步資料載入後安全更新 GUI）。
      *
      * <p>後續插件在發起非同步資料載入（資料庫查詢、網路請求、檔案讀寫等）之前呼叫本方法，
      * 取得一個 {@link GuiAsyncRequest}；非同步結果回來後，將其連同 {@link GuiPage} 與
@@ -298,7 +298,7 @@ public interface GuiService {
      * @return 對應 {@link GuiResult}（SUCCESS 帶 {@link GuiAsyncRequest}）
      * @implSpec 本方法為 default method：未 override 的既有實作會得到
      *           {@code FAILED + ACELIB-GUI-012} 的安全拒絕，以維持
-     *           binary/source compatibility（對應 Momus blocking finding）。
+     *           binary/source compatibility。
      */
     default GuiResult beginAsyncUpdate(UUID playerUuid, long sessionGeneration,
                                        int pageIndex) {
@@ -309,9 +309,9 @@ public interface GuiService {
     }
 
     /**
-     * 套用非同步更新結果到目前 GUI（Phase 11 延伸第三切片）。
+     * 套用非同步更新結果到目前 GUI。
      *
-     * <p>非同步結果回來後呼叫。本方法會在套用前重新驗證下列維度（Plan §十六），
+     * <p>非同步結果回來後呼叫。本方法會在套用前重新驗證下列維度，
      * 任一不符即拒絕且不執行 {@code renderer}、不留下 pending state，並回對應
      * {@code ACELIB-GUI-*}：</p>
      * <ul>
@@ -334,7 +334,7 @@ public interface GuiService {
      * <p>{@code page} 的種類（CONTENT / EMPTY / LOADING / ERROR）由 {@code renderer} 決定如何
      * 呈現；本方法只保證「在安全 context 內、且僅當重新驗證通過時」執行 {@code renderer}。</p>
      *
-     * <h2>回傳語意（同步 vs 延遲 executor）</h2>
+     * <h4>回傳語意（同步 vs 延遲 executor）</h4>
      * <ul>
      *   <li>同步 executor（{@code PlayerContextExecutor#direct()} / 實際立即執行）：
      *       {@code renderer} 已執行，回 {@code SUCCESS}（已套用）或
@@ -354,7 +354,7 @@ public interface GuiService {
      *         {@code ACCEPTED}（派送已接受，renderer 尚未執行）
      * @implSpec 本方法為 default method：未 override 的既有實作會得到
      *           {@code FAILED + ACELIB-GUI-012} 的安全拒絕，不執行 renderer，
-     *           以維持 binary/source compatibility（對應 Momus blocking finding）。
+     *           以維持 binary/source compatibility。
      */
     default <T> GuiResult applyAsyncUpdate(GuiAsyncRequest request, GuiPage<T> page,
                                            Runnable renderer) {

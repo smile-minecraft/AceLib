@@ -12,8 +12,7 @@ import java.util.Objects;
 /**
  * 不可變診斷快照（immutable record）。
  *
- * <p>對應 Plan §十九 Phase 14「狀態查詢」與「診斷報告」需求。
- * 由 {@link DiagnosticsService#buildSnapshot()} 建立，承載當下的
+ * <p>由 {@link DiagnosticsService#buildSnapshot()} 建立，承載當下的
  * 版本、平台、capability、ready／debug、模組狀態、錯誤摘要、節流統計等資訊。</p>
  *
  * <h2>不可變性</h2>
@@ -23,9 +22,18 @@ import java.util.Objects;
  *   <li>{@link #modules()} 嘗試修改會拋 {@link UnsupportedOperationException}</li>
  * </ul>
  *
+ * @param timestampMillis  建立快照的 epoch millis
+ * @param version          對外版本字串；不可為 null
+ * @param platform         對應平台；不可為 null
+ * @param capability       對應 capability；不可為 null
+ * @param ready            plugin 自身生命週期旗標
+ * @param debugEnabled     是否啟用 debug 模式
+ * @param modules          模組狀態映射（不可變視圖；不可為 null）
+ * @param recentErrors     錯誤摘要清單（不可變；不可為 null）
+ * @param throttleSnapshot 節流統計映射（不可變視圖；不可為 null）
  * @see DiagnosticsService
  * @see DiagnosticReport
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public record DiagnosticSnapshot(
     long timestampMillis,

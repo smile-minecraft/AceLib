@@ -6,7 +6,7 @@ import java.util.WeakHashMap;
 import org.bukkit.inventory.Inventory;
 
 /**
- * Inventory ↔ session generation 綁定表（Plan §十六 Phase 11 內部使用）。
+ * Inventory ↔ session generation 綁定表（Internal）。
  *
  * <p>用 {@link WeakHashMap} 保存，避免 listener 持有 strong reference 阻止
  * inventory 被 GC 回收。Listener 透過 {@link #generationOf(Inventory)} 查詢
@@ -17,7 +17,7 @@ import org.bukkit.inventory.Inventory;
  * 使用；不對外暴露。</p>
  *
  * @see GuiServiceImpl
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 final class GuiInventoryLink {
 

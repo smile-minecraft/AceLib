@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 指令系統例外（Plan §十一 Phase 6）。
+ * 指令系統例外。
  *
  * <p>所有 dispatcher 與 handler 內部錯誤（缺少參數、無權限、未知子指令、
  * 冷卻中、玩家離線等）皆應以 {@link CommandException} 表達；測試與 caller
@@ -24,7 +24,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see CommandErrorKind
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public class CommandException extends RuntimeException {
 

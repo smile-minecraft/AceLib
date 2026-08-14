@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * GUI session registry（Plan §十六 Phase 11 共同契約）。
+ * GUI session registry（Internal）。
  *
  * <p>以 {@link UUID} 為唯一識別 key 維護 active session 清單；提供
  * start / get / end / clear 等 lifecycle 方法。Session 一旦 end 即從
@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * </ul>
  *
  * @see GuiSession
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 final class GuiSessionRegistry {
 
@@ -73,7 +73,7 @@ final class GuiSessionRegistry {
      * @throws NullPointerException 當 {@code uuid} 或 {@code owner} 為 null
      * @throws IllegalArgumentException 當 {@code size} <= 0
      * @throws IllegalStateException 當 {@code uuid} 已有 active session
-     * @since Phase 11（Plan §十六 §二十一）
+     * @since 1.0.0
      */
     public GuiSession startSession(UUID uuid, String owner, int size,
                                    Set<Integer> protectedSlots, String title) {

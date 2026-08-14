@@ -11,13 +11,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * 排程錯誤紀錄器。
+ * 排程錯誤紀錄器（Supported）。
  *
- * <p>對應 Plan §七 Phase 2「任務錯誤留下可追蹤紀錄」的需求。
- * 內部以 {@link Deque}（容量預設 100）保存最近的錯誤紀錄，
+ * <p>內部以 {@link Deque}（容量預設 100）保存最近的錯誤紀錄，
  * 當超出容量時自動淘汰最舊的紀錄（FIFO）。</p>
  *
- * <h2>Recorder-level sink（Phase 14 wiring）</h2>
+ * <h2>Recorder-level sink</h2>
  * <p>{@link #setRecordSink(Consumer)} 注入一個 {@link Consumer} 後，
  * <strong>每次</strong> {@link #record(TaskErrorRecord)} 被呼叫
  * （包含 {@link SafeSchedulerImpl} 內部以及外部直接呼叫
@@ -48,11 +47,11 @@ import java.util.logging.Logger;
  * </ul>
  *
  * @see TaskErrorRecord
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public final class TaskErrorRecorder {
 
-    /** 預設保留容量（Plan §七 Phase 2 規格：100 筆）。 */
+    /** 預設保留容量（100 筆）。 */
     public static final int DEFAULT_CAPACITY = 100;
 
     /** Plugin logger name（sink 失敗時輸出 FINE-level 訊息）。 */
@@ -61,7 +60,7 @@ public final class TaskErrorRecorder {
     private final int capacity;
     private final Deque<TaskErrorRecord> deque = new ConcurrentLinkedDeque<>();
     /**
-     * Recorder-level sink（Phase 14 wiring）。
+     * Recorder-level sink。
      *
      * <p>由 {@link #setRecordSink(Consumer)} 注入；每次 {@link #record}
      * 寫入一筆紀錄後同步回呼 listener。為 {@code volatile}，支援
@@ -132,7 +131,7 @@ public final class TaskErrorRecorder {
     }
 
     /**
-     * 注入 recorder-level sink（Phase 14 diagnostics wiring）。
+     * 注入 recorder-level sink。
      *
      * <p>注入後，每次 {@link #record(TaskErrorRecord)} 寫入一筆紀錄
      * （無論來源是 {@link SafeSchedulerImpl} 內部或外部 caller 直接呼叫
@@ -149,14 +148,14 @@ public final class TaskErrorRecorder {
      *
      * @param sink 觀察者；可為 null
      * @see #clearRecordSink()
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void setRecordSink(Consumer<TaskErrorRecord> sink) {
         this.recordSink = sink;
     }
 
     /**
-     * 解除 recorder-level sink（Phase 14 diagnostics wiring）。
+     * 解除 recorder-level sink。
      *
      * <p>通常由 {@link com.smile.acelib.diagnostics.DiagnosticsService
      * DiagnosticsService} 在 {@code bindScheduler(null)} 或 plugin onDisable
@@ -164,7 +163,7 @@ public final class TaskErrorRecorder {
      *
      * <p>呼叫後，{@link #record(TaskErrorRecord)} 不會再回呼任何 listener。</p>
      *
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void clearRecordSink() {
         this.recordSink = null;

@@ -16,8 +16,7 @@ import javax.sql.DataSource;
 /**
  * 關聯式資料庫型 {@link DataStore}（標準 JDBC）。
  *
- * <p>對應 Plan §十三 Phase 8「關聯式資料庫基本需求」與「資料表 / 資料格式初始化」。
- * 內部以標準 {@link DataSource} 取得 {@link Connection}，不使用任何 ORM 框架；
+ * <p>內部以標準 {@link DataSource} 取得 {@link Connection}，不使用任何 ORM 框架；
  * 表格由 store 自動建立。</p>
  *
  * <h2>Schema</h2>
@@ -52,7 +51,7 @@ import javax.sql.DataSource;
  *   <li>{@code ACELIB-DATA-011}：table 名稱不是合法 SQL identifier</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class JdbcDataStore implements DataStore {
 

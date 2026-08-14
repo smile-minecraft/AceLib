@@ -7,7 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 玩家冷卻服務（Plan §十四 Phase 9）。
+ * 玩家冷卻服務。
  *
  * <p>獨立於指令系統的純 {@link UUID} + cooldown key 冷卻管理；提供
  * start / query / tryAcquire / end / clear 完整 API。與
@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 既有冷卻狀態。</p>
  *
  * @see PlayerSession
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public final class PlayerCooldownService {
 

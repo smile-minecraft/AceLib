@@ -3,7 +3,7 @@ package com.smile.acelib.external;
 import org.bukkit.plugin.PluginManager;
 
 /**
- * PlaceholderAPI 外部整合 adapter（reflection-only）。
+ * PlaceholderAPI 外部整合 adapter（reflection-only，Internal）。
  *
  * <p>以 {@link ExternalPluginProbe} 探測 PlaceholderAPI 的 marker API class、plugin 安裝 / 啟用
  * 狀態與版本；只有探測結果為 {@link IntegrationStatus#AVAILABLE} 時 {@code initialize()}
@@ -17,6 +17,10 @@ import org.bukkit.plugin.PluginManager;
  * <p>最低相容版本選擇保守值 {@code 2.11.0}：PlaceholderAPI 自 2.11.x 起即為廣泛部署且 API 相容的
  * 版本；低於此版本視為不支援，由 {@link ExternalPluginProbe} 回傳
  * {@link IntegrationStatus#VERSION_UNSUPPORTED}。</p>
+ *
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴。</p>
+ *
+ * @since 1.0.0
  */
 public final class PlaceholderApiIntegrationAdapter extends AbstractIntegrationAdapter {
 

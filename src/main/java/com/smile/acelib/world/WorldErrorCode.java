@@ -1,7 +1,7 @@
 package com.smile.acelib.world;
 
 /**
- * 集中錯誤代碼常數（Plan §十九 Phase 10 共同契約）。
+ * 集中錯誤代碼常數。
  *
  * <p>對應 {@code ACELIB-WORLD-<CODE>} 格式分類代碼。
  * 所有對外拒絕或失敗的 operation result 必須攜帶其中之一。</p>
@@ -34,7 +34,7 @@ package com.smile.acelib.world;
  * </ul>
  *
  * @see WorldResult
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public final class WorldErrorCode {
 

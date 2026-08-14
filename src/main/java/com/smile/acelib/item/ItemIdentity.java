@@ -3,7 +3,7 @@ package com.smile.acelib.item;
 /**
  * 自訂物品的唯一識別資料（immutable record）。
  *
- * <p>對應 Plan Phase 12 自訂物品核心：辨識物品必須依本結構，
+ * <p>辨識物品必須依本結構，
  * <strong>不依賴 display name / lore 等顯示層資料</strong>。</p>
  *
  * <h2>三欄位語意</h2>
@@ -20,6 +20,11 @@ package com.smile.acelib.item;
  *   <li>紀錄 equality 與 hashCode 採三欄位組合</li>
  *   <li>{@link #toString()} 採 {@code "namespace:key@major.minor"} 形式，方便人工檢查</li>
  * </ul>
+ *
+ * @param namespace 所屬 plugin 或模組命名空間；不可為 null 或空白
+ * @param key       該 namespace 內的物品識別字串；不可為 null 或空白
+ * @param major     format version major（>= 0）
+ * @param minor     format version minor（>= 0）
  */
 public record ItemIdentity(String namespace, String key, int major, int minor) {
 

@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 不可變的確認 action 合約（Phase 11 延伸第二切片：confirmation/cancellation）。
+ * 不可變的確認 action 合約（Supported API）。
  *
  * <p>後續插件透過 {@link GuiService#createConfirmation} 取得本物件，並將其
  * {@link #actionToken()} 綁定回 {@link GuiService#confirm} / {@link GuiService#cancel}。
@@ -24,7 +24,7 @@ import java.util.UUID;
  * reference。</p>
  *
  * @see GuiService
- * @since Phase 11 延伸（Plan §十六 確認與取消流程）
+ * @since 1.0.0
  */
 public final class GuiConfirmation {
 

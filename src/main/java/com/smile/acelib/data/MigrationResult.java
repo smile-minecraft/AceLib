@@ -6,8 +6,7 @@ import java.util.Objects;
 /**
  * 遷移結果（immutable record）。
  *
- * <p>對應 Plan §十三 Phase 8「遷移失敗有測試保護與回滾策略」需求。
- * 任何 migration 失敗都會被包裝為 {@link #failure(String, Throwable)}，
+ * <p>任何 migration 失敗都會被包裝為 {@link #failure(String, Throwable)}，
  * 並由 {@link DataStore} 觸發 rollback，<strong>既有資料不被破壞</strong>。</p>
  *
  * <h2>使用約定</h2>
@@ -17,7 +16,12 @@ import java.util.Objects;
  *   <li>呼叫端應以 {@link #success()} 分支判斷，失敗則拋 {@link DataStoreException}</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @param success      整個 chain 是否全部成功
+ * @param finalVersion 最終 schema 版本；失敗或無 migration 套用時可為 null
+ * @param errorMessage 失敗原因；成功時為 null
+ * @param cause        底層例外；成功時為 null
+ * @param appliedSteps 已套用的遷移步驟清單；不可為 null（可能為空）
+ * @since 1.0.0
  */
 public record MigrationResult(boolean success, SchemaVersion finalVersion,
                               String errorMessage, Throwable cause,

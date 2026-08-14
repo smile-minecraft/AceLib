@@ -15,8 +15,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * 語言檔管理器（多 locale 支援）。
  *
- * <p>對應 Plan §九 Phase 4「語言檔與訊息 key」「缺失訊息 key 回報」需求。
- * 從 {@code <dataFolder>/lang/<locale>.yml} 讀取多語字串，
+ * <p>從 {@code <dataFolder>/lang/<locale>.yml} 讀取多語字串，
  * 支援 {@code {var}} 變數替換與 fallback（請求 locale 缺失時退回 default）。</p>
  *
  * <h2>錯誤代碼</h2>
@@ -34,7 +33,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>首次啟動無對應 locale 檔案時自動生成空檔，方便管理員填入翻譯</li>
  * </ul>
  *
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public final class LangManager {
 

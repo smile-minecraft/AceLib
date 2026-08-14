@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 主指令規格（Plan §十一 Phase 6）。
+ * 主指令規格。
  *
  * <p>由 {@link CommandRegistry#register} 註冊；包含：</p>
  * <ul>
@@ -32,7 +32,7 @@ import java.util.Objects;
  *
  * @see SubCommandSpec
  * @see CommandRegistry
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class CommandSpec {
 

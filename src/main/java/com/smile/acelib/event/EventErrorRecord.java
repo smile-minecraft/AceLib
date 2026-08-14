@@ -6,8 +6,7 @@ import org.bukkit.event.Event;
 /**
  * 事件錯誤紀錄（immutable record）。
  *
- * <p>對應 Plan §十二 Phase 7「事件錯誤可記錄」的需求；當
- * {@link SafeEventRegistry} dispatch listener 時發生例外、重複註冊、
+ * <p>當 {@link SafeEventRegistry} dispatch listener 時發生例外、重複註冊、
  * 插件停用等情境，皆會包裝為 {@code EventErrorRecord} 並送入
  * {@link EventErrorRecorder}。</p>
  *
@@ -29,9 +28,14 @@ import org.bukkit.event.Event;
  *   <li>{@code tick} 可為 0（測試環境），不視為錯誤</li>
  * </ul>
  *
+ * @param eventType 觸發此錯誤的 Bukkit Event 型別；不可為 null
+ * @param code      錯誤分類代碼（{@code ACELIB-EVT-*} 格式）；不可為 null
+ * @param detail    人類可讀的詳細訊息；不可為 null
+ * @param cause     觸發此錯誤的例外；取消類錯誤可為 null
+ * @param tick      紀錄產生時的伺服器 tick；測試環境可能為 0
  * @see EventErrorRecorder
  * @see SafeEventRegistry
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public record EventErrorRecord(
     Class<? extends Event> eventType,

@@ -6,8 +6,8 @@ import org.bukkit.event.Event;
 /**
  * 安全事件註冊器介面。
  *
- * <p>對應 Plan §十二 Phase 7「安全註冊、解除、追蹤事件，避免 reload / disable
- * 後殘留 listener」的需求。本介面對外承諾：</p>
+ * <p>安全註冊、解除、追蹤事件，避免 reload / disable 後殘留 listener。
+ * 本介面對外承諾：</p>
  *
  * <ul>
  *   <li>註冊後 listener 會被呼叫；解除後不再被呼叫</li>
@@ -29,7 +29,7 @@ import org.bukkit.event.Event;
  * @see SafeEventListener
  * @see EventRegistration
  * @see EventErrorRecorder
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public interface SafeEventRegistry {
 

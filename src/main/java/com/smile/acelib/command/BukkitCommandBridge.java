@@ -11,11 +11,11 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Bukkit {@link CommandExecutor} + {@link TabCompleter} 適配（Plan §十一 Phase 6）。
+ * Bukkit {@link CommandExecutor} + {@link TabCompleter} 適配。
  *
  * <p>把 {@link CommandRegistry} 對接到 Bukkit 指令系統：</p>
  * <ul>
- *   <li>{@link #onCommand} → 包 {@link CommandSender} 為 {@link BukkitSender}，
+ *   <li>{@link #onCommand} → 包 {@link CommandSender} 為 {@code BukkitSender}，
  *       委派給 {@link CommandRegistry#dispatch}</li>
  *   <li>{@link #onTabComplete} → 同樣包 sender，委派給 {@link CommandRegistry#tabComplete}</li>
  * </ul>
@@ -29,13 +29,12 @@ import org.bukkit.plugin.java.JavaPlugin;
  * }</pre>
  *
  * <h2>plugin.yml 需求</h2>
- * <p>{@link #attach(JavaPlugin, String)} 透過 {@link PluginCommand#getCommand(String)}
+ * <p>{@link #attach(JavaPlugin, String)} 透過 {@link org.bukkit.Bukkit#getPluginCommand(String)}
  * 取得 Bukkit 端的 {@link PluginCommand} 物件，因此 plugin.yml 必須宣告對應指令。</p>
  *
  * @see CommandRegistry
- * @see BukkitSender
  * @see BukkitReplySink
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class BukkitCommandBridge implements CommandExecutor, TabCompleter {
 

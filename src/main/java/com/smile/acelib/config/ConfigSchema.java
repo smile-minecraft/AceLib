@@ -7,8 +7,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 /**
  * 設定檔 schema（immutable record）。
  *
- * <p>對應 Plan §九 Phase 4「預設設定檔生成」「缺失欄位補齊」需求。
- * 一個 {@link ConfigSchema} 描述設定檔的「目標版本」與「欄位清單」，
+ * <p>一個 {@link ConfigSchema} 描述設定檔的「目標版本」與「欄位清單」，
  * 用於 {@link ConfigManager} 載入流程中：</p>
  * <ul>
  *   <li>生成預設檔時依 schema 的 {@link FieldSpec} 填入 {@code defaultValue}</li>
@@ -27,7 +26,9 @@ import org.bukkit.configuration.file.YamlConfiguration;
  * );
  * }</pre>
  *
- * @since Phase 4 (Plan §九)
+ * @param version schema 宣告的目標版本；不可為 null
+ * @param fields  欄位規格清單；不可為 null，內容會以不可變清單保存
+ * @since 1.0.0
  */
 public record ConfigSchema(ConfigVersion version, List<FieldSpec> fields) {
 

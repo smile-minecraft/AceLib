@@ -18,6 +18,7 @@ package com.smile.acelib.external;
  *
  * @see ExternalPluginProbe
  * @see IntegrationProbeResult
+ * @since 1.0.0
  */
 public enum IntegrationStatus {
 

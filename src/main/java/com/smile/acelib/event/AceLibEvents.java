@@ -9,12 +9,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * {@link SafeEventRegistry} 的對外 facade + factory。
  *
- * <p>對應 Plan §十二 Phase 7「後續插件透過 AceLib 安全註冊事件」的統一入口。
- * 提供：</p>
+ * <p>後續插件透過 AceLib 安全註冊事件的統一入口。提供：</p>
  *
  * <ul>
  *   <li>{@link #create(JavaPlugin, Platform, PlatformCapability)} —
- *       從 plugin + platform + capability 建立 registry（內部用 {@link SafeEventRegistryImpl}）</li>
+ *       從 plugin + platform + capability 建立 registry（內部用 {@code SafeEventRegistryImpl}）</li>
  *   <li>{@link #create(AceLibPlugin)} — 從 {@link AceLibPlugin} 直接建立並
  *       自動綁定 lifecycle（推薦用法）</li>
  *   <li>{@link #bind(AceLibPlugin, SafeEventRegistry)} / {@link #unbind(AceLibPlugin)} —
@@ -30,8 +29,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * 確保 Bukkit {@code HandlerList} 不殘留 listener。</p>
  *
  * @see SafeEventRegistry
- * @see SafeEventRegistryImpl
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public final class AceLibEvents {
 
@@ -43,17 +41,17 @@ public final class AceLibEvents {
     // Factory 方法
     // -----------------------------------------------------------------
 
-    /**
-     * 從 plugin + platform + capability 建立 {@link SafeEventRegistryImpl}。
-     *
-     * <p>推薦使用 {@link #create(AceLibPlugin)} 以避免手動組合三個參數。</p>
-     *
-     * @param plugin     listener owner；不可為 null
-     * @param platform   偵測到的平台；不可為 null
-     * @param capability 對應的 capability profile；不可為 null
-     * @return 新的 {@link SafeEventRegistryImpl} 實例（永遠不為 null）
-     * @throws NullPointerException 當任一參數為 null
-     */
+     /**
+      * 從 plugin + platform + capability 建立 {@code SafeEventRegistryImpl}。
+      *
+      * <p>推薦使用 {@link #create(AceLibPlugin)} 以避免手動組合三個參數。</p>
+      *
+      * @param plugin     listener owner；不可為 null
+      * @param platform   偵測到的平台；不可為 null
+      * @param capability 對應的 capability profile；不可為 null
+      * @return 新的 {@code SafeEventRegistryImpl} 實例（永遠不為 null）
+      * @throws NullPointerException 當任一參數為 null
+      */
     public static SafeEventRegistry create(JavaPlugin plugin,
                                            Platform platform,
                                            PlatformCapability capability) {
@@ -74,7 +72,7 @@ public final class AceLibEvents {
      * listener leak）；因此重複呼叫本方法等同「重建一個乾淨的 registry」。</p>
      *
      * @param plugin AceLib 主類別實例；不可為 null（必須已通過 {@code onEnable}）
-     * @return 新建立且已綁定到 {@code plugin} 的 {@link SafeEventRegistryImpl}
+     * @return 新建立且已綁定到 {@code plugin} 的 {@code SafeEventRegistryImpl}
      *         實例（永遠不為 null）
      * @throws NullPointerException 當 {@code plugin} 為 null
      */
@@ -127,8 +125,8 @@ public final class AceLibEvents {
      * 解除綁定並主動停用 registry。
      *
      * <p>若 plugin 之前未綁定 registry，本方法為 no-op。
-     * 若綁定的 registry 為 {@link SafeEventRegistryImpl}，會同時呼叫
-     * {@link SafeEventRegistryImpl#onPluginDisable()} 解除所有 listener
+     * 若綁定的 registry 為 {@code SafeEventRegistryImpl}，會同時呼叫
+     * {@code SafeEventRegistryImpl#onPluginDisable()} 解除所有 listener
      * 並標記為 disabled。</p>
      *
      * <p>此方法由 {@link AceLibPlugin#onDisable()} 自動呼叫，亦可由

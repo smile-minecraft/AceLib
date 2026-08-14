@@ -7,8 +7,7 @@ import java.util.Objects;
 /**
  * 診斷報告（immutable）。
  *
- * <p>對應 Plan §十九 Phase 14「診斷報告」需求。
- * 將 {@link DiagnosticSnapshot} 格式化為人類可讀字串；
+ * <p>將 {@link DiagnosticSnapshot} 格式化為人類可讀字串；
  * debug 模式增加「throttle 統計」、「capability 細節」等額外區塊。</p>
  *
  * <h2>輸出區塊（非 debug）</h2>
@@ -31,7 +30,7 @@ import java.util.Objects;
  * </ul>
  *
  * @see DiagnosticSnapshot
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public final class DiagnosticReport {
 

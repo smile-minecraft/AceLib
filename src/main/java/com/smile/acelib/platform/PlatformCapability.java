@@ -3,7 +3,7 @@ package com.smile.acelib.platform;
 import java.util.Objects;
 
 /**
- * 平台能力描述（immutable record）。
+ * 平台能力描述（Supported，immutable record）。
  *
  * <p>用於讓後續插件明確知道目前執行環境支援哪些能力，而不必自己反射
  * classpath。本 record 與 {@link Platform} 解耦，使 {@link Platform}
@@ -19,13 +19,16 @@ import java.util.Objects;
  * </ul>
  *
  * <h2>保守策略</h2>
- * 對應 Plan §六 Phase 1 邊界條件「保守策略：部分 Paper 特徵 + 缺失能力時不會假設功能完整」，
  * {@link #forPlatform(Platform)} 對 {@link Platform#UNKNOWN} 一律回傳全 false，
  * 確保外部插件在不明環境下不會誤觸發受限能力。
  *
+ * @param regionScheduling       是否支援 Folia regionized 排程
+ * @param globalScheduler        是否支援 Paper 全域 scheduler（Folia 上為 GlobalRegionScheduler）
+ * @param bukkitApi              是否提供 Bukkit/Paper API
+ * @param foliaThreadedRegionsApi 是否提供 Folia RegionizedServer / GlobalRegionScheduler API
  * @see Platform
  * @see PlatformDetector
- * @since Phase 1 (Plan §六)
+ * @since 1.0.0
  */
 public record PlatformCapability(
     boolean regionScheduling,

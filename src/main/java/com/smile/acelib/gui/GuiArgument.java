@@ -8,11 +8,11 @@ import java.util.UUID;
 import org.bukkit.entity.Player;
 
 /**
- * 對外傳入的 GUI 開啟請求（Plan §十六 Phase 11 共同契約）。
+ * 對外傳入的 GUI 開啟請求（Supported API）。
  *
  * <p>不可變 value object；只在 GUI 開啟時攜帶必要 metadata（玩家 UUID、標題、
  * slot 數、受保護 slot 集合）。實際 GUI 渲染、物品配置、callback 等不在
- * 第一個可驗收切片範圍。</p>
+ * 本型別範圍。</p>
  *
  * <h2>使用情境</h2>
  * <ul>
@@ -21,10 +21,10 @@ import org.bukkit.entity.Player;
  * </ul>
  *
  * <p>不直接持有 {@link Player} reference — 內部只保存 {@link UUID}，
- * 避免跨執行緒保留 Bukkit entity reference（Plan §十六 §二十一共同契約）。</p>
+ * 避免跨執行緒保留 Bukkit entity reference。</p>
  *
  * @see GuiService
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 public final class GuiArgument {
 
@@ -56,7 +56,7 @@ public final class GuiArgument {
      * @param protectedSlots 受保護 slot 集合；可為 null 或空（視為無保護）
      * @return 新的 {@link GuiArgument}
      * @throws NullPointerException 當 {@code player} 或 {@code title} 為 null
-     * @throws IllegalArgumentException 當 {@code size} <= 0
+     * @throws IllegalArgumentException 當 {@code size} &lt;= 0
      */
     public static GuiArgument of(Player player, String title, int size,
                                  Collection<Integer> protectedSlots) {

@@ -1,7 +1,7 @@
 package com.smile.acelib.platform;
 
 /**
- * 執行平台列舉。
+ * 執行平台列舉（Supported）。
  *
  * <ul>
  *   <li>{@link #FOLIA} — Folia（Paper 的 regionized 分支）</li>
@@ -9,14 +9,15 @@ package com.smile.acelib.platform;
  *   <li>{@link #UNKNOWN} — 無法判定（classpath 完全沒有 Bukkit API）</li>
  * </ul>
  *
- * <p>Phase 0 僅需正確分類；Phase 1（§六）起，每個 enum value 攜帶對應的
- * {@link PlatformCapability} profile，方便後續插件依平台差異選擇正確路徑。</p>
+ * <p>每個 enum value 攜帶對應的 {@link PlatformCapability} profile，
+ * 方便後續插件依平台差異選擇正確路徑。</p>
  *
  * <h2>序列化相容</h2>
  * 列舉常數順序（FOLIA / PAPER / UNKNOWN）凍結，不得更動。
  *
  * @see PlatformCapability
  * @see PlatformDetector
+ * @since 1.0.0
  */
 public enum Platform {
 
@@ -58,10 +59,10 @@ public enum Platform {
      * 取得對應的 capability profile（immutable record）。
      *
      * <p>後續插件可改讀 {@link #getCapabilityProfile()} 而非反射 classpath，
-     * 依平台能力決定啟用哪些功能。Phase 1+ 的 scheduler / event 模組會用到。</p>
+     * 依平台能力決定啟用哪些功能。scheduler / event 模組會用到。</p>
      *
      * @return 此平台對應的 {@link PlatformCapability}，永遠不為 null
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public PlatformCapability getCapabilityProfile() {
         return capability;
@@ -71,7 +72,7 @@ public enum Platform {
      * 是否支援 Folia regionized 排程（RegionizedServer / EntityScheduler / RegionScheduler）。
      *
      * @return {@code true} 僅在 {@link #FOLIA}，其餘 false
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public boolean supportsRegionScheduling() {
         return capability.regionScheduling();
@@ -81,7 +82,7 @@ public enum Platform {
      * 是否支援 Paper 全域 scheduler（BukkitScheduler / GlobalRegionScheduler on Folia）。
      *
      * @return {@code true} 對 {@link #FOLIA} 與 {@link #PAPER}；{@link #UNKNOWN} 一律 false
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public boolean supportsGlobalScheduler() {
         return capability.globalScheduler();

@@ -3,7 +3,7 @@ package com.smile.acelib.command;
 import java.util.List;
 
 /**
- * 子指令 tab completion 提供者（Plan §十一 Phase 6）。
+ * 子指令 tab completion 提供者。
  *
  * <p>由 {@link SubCommandSpec#completer()} 持有；dispatcher 在 tab complete
  * 流程中呼叫，用於產生該子指令層級的補全候選。</p>
@@ -19,7 +19,7 @@ import java.util.List;
  * </ul>
  *
  * @see SubCommandSpec
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface SubCommandCompleter {

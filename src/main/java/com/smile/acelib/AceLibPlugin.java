@@ -52,58 +52,61 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * AceLib 主類別 — Folia-first 基礎函式庫插件。
+ * AceLib 主類別（Internal）— Folia-first 基礎函式庫插件。
  *
  * <h2>生命週期</h2>
  * <ul>
  *   <li>{@link #onEnable()} — 由 Bukkit/Paper/Folia 伺服器呼叫；內部委派給
  *       {@link #onEnable(Server, PlatformDetector, Clock)} 方便單元測試</li>
  *   <li>{@link #onDisable()} — 釋放所有資源；{@link #isReady()} 回傳 false</li>
- *   <li>{@link #reload()} — 重新偵測平台並發佈新的 {@link AceLibApi} instance</li>
+ *   <li>{@link #reload()} — 重新偵測平台並嘗試發佈新的 {@link AceLibApi} instance；
+ *       只有成功 commit 時才會發布新 facade，失敗可能進入 FAILED 狀態或 rollback
+ *       保留既有 facade</li>
  * </ul>
  *
- * <h2>Phase 1 範圍</h2>
- * 本類別在 Phase 1（Plan §六）加入：
+ * <h2>功能範圍</h2>
  * <ul>
- *   <li>平台偵測結果為 {@link Platform#UNKNOWN} 時輸出 warning log（ACELIB-PLAT-004）</li>
- *   <li>平台偵測為 {@link Platform#PAPER} 且 classpath 無 Folia 時輸出 fine-level 提示</li>
+ *   <li>平台偵測：結果為 {@link Platform#UNKNOWN} 時輸出 warning log（ACELIB-PLAT-004）；
+ *       偵測為 {@link Platform#PAPER} 且 classpath 無 Folia 時輸出 fine-level 提示</li>
  *   <li>{@link #getPlatformCapability()} — 對外暴露 platform capability profile</li>
- *   <li>AceLibApi 已升級為 5 參數 ready(...)，攜帶實際偵測的 capability</li>
- * </ul>
- *
- * <h2>Phase 14 範圍</h2>
- * 本類別在 Phase 14（Plan §十九）加入 production wiring：
- * <ul>
- *   <li>{@code onEnable} 建立並綁定 {@link SafeSchedulerImpl} 與
- *       {@link DiagnosticsService}（使用可注入的 {@link Clock}），並透過
+ *   <li>production wiring：{@code onEnable} 建立並綁定 {@link SafeSchedulerImpl}、
+ *       {@link DiagnosticsService}（使用可注入的 {@link Clock}）、玩家資料、
+ *       world / gui / external service 與管理指令，並透過
  *       {@code diagnostics.bindScheduler(...)} 自動注入 recordSink</li>
  *   <li>{@code onDisable} 安全降級：scheduler {@code onPluginDisable()}、
  *       diagnostics 解除綁定並重置 throttler；不留殘留 lifecycle 資源</li>
  *   <li>{@code reload} 重新偵測 platform/capability，重建 scheduler 並重新
- *       綁定 diagnostics；不殘留舊綁定</li>
+ *       綁定 diagnostics；成功 commit 後不留殘留舊綁定，失敗則可能降級為
+ *       FAILED 或 rollback 至既有綁定（保留既有 facade）</li>
  *   <li>{@link #getDiagnosticsService()} 與 {@link #buildDiagnosticsReport()}
  *       作為管理員/後續命令的查詢入口</li>
  * </ul>
  *
+ * <h2>對外取得方式</h2>
+ * <p>下游插件不要直接依賴本類別；應透過 Bukkit/Paper {@code ServicesManager}
+ * 取得 {@link AceLibApi.AceLibProvider}，再呼叫 {@code provider.api()}。</p>
+ *
  * <h2>執行緒安全</h2>
  * 狀態欄位使用 {@code volatile} 與 {@code synchronized} 保護；
  * Folia 的 regionized 環境下 reload 通常由 main thread 觸發，但仍須具備 thread-safe 行為。
+ *
+ * @since 1.0.0
  */
 public class AceLibPlugin extends JavaPlugin {
 
     /** Plugin 標籤，用於 fallback logger。 */
     private static final String LOG_NAME = "AceLib";
 
-    /** Plan §七 §三 (6) 規範的平台偵測錯誤代碼（未知環境警告）。 */
+    /** 平台偵測錯誤代碼（未知環境警告）。 */
     private static final String PLATFORM_UNKNOWN_ERROR_CODE = "ACELIB-PLAT-004";
 
     /**
-     * Phase 14 failure-path 交易語意：reload 流程中遇到 diagnostics/scheduler
-     * 重綁錯誤時輸出的錯誤代碼（既有 {@code ACELIB-DBG-001} =
-     * 「診斷模組自身錯誤」）。
+     * reload 流程中遇到 diagnostics/scheduler 重綁錯誤時輸出的錯誤代碼
+     * （既有 {@code ACELIB-DBG-001} =「診斷模組自身錯誤」）。
      */
     private static final String RELOAD_DIAGNOSTICS_FAILURE_CODE = "ACELIB-DBG-001";
 
@@ -115,7 +118,7 @@ public class AceLibPlugin extends JavaPlugin {
     private volatile PlatformDetector platformDetector;
     private volatile AceLibApi api;
     /**
-     * Phase 14：當前綁定的 SafeSchedulerImpl。
+     * 當前綁定的 SafeSchedulerImpl。
      *
      * <p>在 onEnable 建立、onDisable 標記 disabled；reload 時重建。
      * 即使 plugin 已被 disable，仍提供 reference 供測試與診斷使用
@@ -123,7 +126,7 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile SafeSchedulerImpl scheduler;
     /**
-     * Phase 14：當前綁定的 DiagnosticsService。
+     * 當前綁定的 DiagnosticsService。
      *
      * <p>在 onEnable 建立並 bind plugin 版本/平台/capability；
      * onDisable 時解除 scheduler 綁定並 reset throttler；reload 時重建並重新
@@ -169,7 +172,7 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile BukkitCommandBridge commandBridge;
     /**
-     * Phase 10: world/block/entity/teleport 安全 facade。
+     * world/block/entity/teleport 安全 facade。
      *
      * <p>於 {@link #bindWorldService(Server)} 建立並透過 {@link #unbindWorldService()}
      * shutdown。onEnable 之前若被取得，一律回 unavailable facade（{@link WorldErrorCode#NOT_READY}）。
@@ -177,7 +180,7 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile WorldService worldService;
     /**
-     * Phase 11: GUI service facade。
+     * GUI service facade。
      *
      * <p>於 {@link #bindGuiService(Server)} 建立並透過 {@link #unbindGuiService()}
      * shutdown。onEnable 之前若被取得，一律回 unavailable facade
@@ -186,7 +189,7 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile GuiService guiService;
     /**
-     * Phase 11：當前 GUI service 對應的 Bukkit listener；註冊延後到
+     * 當前 GUI service 對應的 Bukkit listener；註冊延後到
      * {@link #onPluginReady()}（比照 {@link PlayerLifecycleListener} 模式，
      * 避免 Bukkit 在 plugin is enabled 之前 allow register）。reload 時同步重建。
      */
@@ -204,6 +207,19 @@ public class AceLibPlugin extends JavaPlugin {
     private volatile ExternalIntegrationService externalService;
 
     /**
+     * 對外正式取得入口：動態 provider（{@link AceLibApi.AceLibProvider}）。
+     *
+     * <p>於 onEnable 建立並透過 Bukkit/Paper {@code ServicesManager} 註冊；
+     * reload 時更新同一 provider 的 facade reference（不回傳 stale facade）；
+     * onDisable 時解除註冊並把 reference 切換為 shutdown facade。</p>
+     *
+     * <p>欄位為 {@code volatile}：reload / disable 可能在 main thread 觸發，
+     * 但 provider 實作內部也以 volatile 快照目前 facade，任何 thread 讀取
+     * {@code api()} 都是安全的。</p>
+     */
+    private volatile AceLibApi.AceLibProvider apiProvider;
+
+    /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
      * 注入受控失敗，模擬 {@code SafeSchedulerImpl.onPluginDisable()} 拋錯的罕見
      * 路徑。Production 預設為 null；正常 reload 不會觸發。
@@ -211,8 +227,6 @@ public class AceLibPlugin extends JavaPlugin {
      * <p>僅供 {@code com.smile.acelib} 套件內測試使用；非測試 caller 應維持 null。
      * 此欄位為 volatile — 保證測試可在 {@code synchronized reload()} 之外安全
      * 寫入；reload 內部於 synchronized 區塊內讀取。</p>
-     *
-     * @since Phase 14 (Plan §十九, M-14-04)
      */
     volatile Runnable reloadOldTeardownFailureHook = null;
 
@@ -224,8 +238,6 @@ public class AceLibPlugin extends JavaPlugin {
      *
      * <p>僅供 {@code com.smile.acelib} 套件內測試使用；非測試 caller 應維持 null。
      * 此欄位為 volatile — 同上。</p>
-     *
-     * @since Phase 14 (Plan §十九, M-14-04)
      */
     volatile Runnable reloadRebindFailureHook = null;
 
@@ -237,13 +249,11 @@ public class AceLibPlugin extends JavaPlugin {
      * 預設為 null；正常 reload 不會觸發。
      *
      * <p>此 hook 讓測試能在不依賴 call stack 入侵或 reflection 注入 constructor
-     * 例外的情況下，明確驗證 Phase B 失敗路徑（M-14-04 補強）：
-     * reload 必須回傳 false 並與 Phase A 一致進入 FAILED/non-ready policy。</p>
+     * 例外的情況下，明確驗證建構失敗路徑：reload 必須回傳 false 並一致進入
+     * FAILED/non-ready policy。</p>
      *
      * <p>僅供 {@code com.smile.acelib} 套件內測試使用；非測試 caller 應維持 null。
      * 此欄位為 volatile — 同上。</p>
-     *
-     * @since Phase 14 (Plan §十九, M-14-04 補強)
      */
     volatile Runnable reloadNewSchedulerConstructionFailureHook = null;
 
@@ -259,9 +269,9 @@ public class AceLibPlugin extends JavaPlugin {
         // DiagnosticsService 預設 instance：尚未 bind plugin，但允許 buildSnapshot()
         // 查詢（會以 AceLibVersion.VERSION / Platform.UNKNOWN / not ready 呈現）
         this.diagnostics = new DiagnosticsService(Clock.system());
-        // Phase 10: worldService 的 NOT_READY unavailable facade；於 onEnable 後被 bindWorldService() 替換。
+        // worldService 的 NOT_READY unavailable facade；於 onEnable 後被 bindWorldService() 替換。
         this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
-        // Phase 11: guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
+        // guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
         this.guiService = GuiService.forUnavailable(GuiErrorCode.NOT_READY);
     }
 
@@ -301,7 +311,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * Phase 14：對外測試 seam，允許注入 deterministic {@link Clock}。
+     * 對外測試 seam，允許注入 deterministic {@link Clock}。
      *
      * <p>建立並綁定 {@link SafeSchedulerImpl} + {@link DiagnosticsService}；
      * 兩者皆透過 {@link Clock} 取得時間，避免測試依賴系統時鐘。冪等
@@ -310,7 +320,7 @@ public class AceLibPlugin extends JavaPlugin {
      * @param s        當前 server（測試情境下可為 mock）
      * @param detector 平台偵測器（測試情境下可注入固定回傳）
      * @param clock    時鐘來源；不可為 null
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public synchronized void onEnable(Server s, PlatformDetector detector, Clock clock) {
         if (ready) {
@@ -328,10 +338,10 @@ public class AceLibPlugin extends JavaPlugin {
         // 2. 推導 capability profile
         PlatformCapability capability = detector.detectCapability(detected);
 
-        // 3. 建立 scheduler（Phase 14 統一管理 lifecycle）
+        // 3. 建立 scheduler（由 plugin 統一管理 lifecycle）
         SafeSchedulerImpl newScheduler = new SafeSchedulerImpl(this, detected, capability);
 
-        // 4. 建立 diagnostics service（Phase 14 統一入口），並 bind 版本/平台/capability
+        // 4. 建立 diagnostics service（統一入口），並 bind 版本/平台/capability
         DiagnosticsService newDiagnostics = new DiagnosticsService(clock);
         newDiagnostics.bindPlugin(AceLibVersion.VERSION, detected, capability);
         newDiagnostics.setReady(true);
@@ -343,10 +353,10 @@ public class AceLibPlugin extends JavaPlugin {
         // 建立玩家資料服務與事件 listener；註冊延後到 Bukkit 確認 plugin enabled。
         bindPlayerDataService(s);
 
-        // Phase 10: 建立 world 服務（在 player 服務與管理指令之後）。
+        // 建立 world 服務（在 player 服務與管理指令之後）。
         bindWorldService(s);
 
-        // Phase 11: 建立 GUI 服務（world 之後），並註冊 listener。
+        // 建立 GUI 服務（world 之後），並註冊 listener。
         bindGuiService(s);
 
         // 建立外部整合服務（world/gui 之後），並向 diagnostics 註冊 integration 模組狀態。
@@ -370,6 +380,11 @@ public class AceLibPlugin extends JavaPlugin {
         );
 
         this.ready = true;
+
+        // 對外正式取得入口：於 facade 就緒後註冊 provider（disabled 之後
+        // onDisable 會解除註冊，reload 期間不解除）。
+        registerApiProvider(s);
+
         logInfo("AceLib {0} enabled on {1} (capability={2})",
             api.getVersion(), api.getPlatform().getDisplayName(), capability);
     }
@@ -380,6 +395,10 @@ public class AceLibPlugin extends JavaPlugin {
             logFine("AceLib.onDisable() called before onEnable; safe no-op.");
             return;
         }
+        // 先解除對外 provider registration，避免 disable 流程中仍有呼叫端
+        // 新取得 provider；已持有 provider 的呼叫端稍後切換為 shutdown facade。
+        unregisterApiProvider();
+
         SafeSchedulerImpl oldScheduler = this.scheduler;
         DiagnosticsService oldDiagnostics = this.diagnostics;
         PlayerDataService oldPlayerService = this.playerDataService;
@@ -423,12 +442,12 @@ public class AceLibPlugin extends JavaPlugin {
             }
         }
 
-        // Phase 10: world 服務 shutdown（標記 stopped、取消 in-flight handle、
+        // world 服務 shutdown（標記 stopped、取消 in-flight handle、
         // 註冊 FAILED module state）。順序置於 player 與 scheduler 卸載之後，
         // 確保任何 in-flight teleport 不會被殘留 scheduler 接走。
         unbindWorldService();
 
-        // Phase 11: GUI 服務 shutdown（清除 listener + 移除所有 session）。
+        // GUI 服務 shutdown（清除 listener + 移除所有 session）。
         unbindGuiService();
 
         // 外部整合服務 shutdown（釋放 registry 資源）並解除 integration 模組狀態註冊。
@@ -439,13 +458,17 @@ public class AceLibPlugin extends JavaPlugin {
         this.platformDetector = null;
         // 保留 SHUTDOWN worldService 與 guiService reference，避免 double-fork 既有 contract。
         this.api = AceLibApi.shutDown(this.worldService, this.guiService);
+        // 已持有 provider 的呼叫端改讀 shutdown facade（與 plugin.getApi() 一致），
+        // 再清除 plugin 端 reference 協助 GC。
+        updateApiProvider(this.api);
+        this.apiProvider = null;
 
         // 安全降級：
         // 1. scheduler 標記 disabled（解除其 recorder listener 避免 disable 後仍收到通知）
         // 2. diagnostics 保留同一 reference；scheduler 模組降級為 FAILED + ACELIB-SCHED-006，
         //    ready 設為 false，throttler 重置。供既有 reference（管理員命令、測試 seam）
         //    仍可查詢「曾 bind 但現已 disable」的狀態。
-        // Phase 10: 先 shutdown 既有的 worldService（標記 stopped），
+        // 先 shutdown 既有的 worldService（標記 stopped），
         // 確保 reload 期間 in-flight handle 不會被舊 backend 殘留繼續執行。
         if (worldService != null) {
             try {
@@ -474,6 +497,65 @@ public class AceLibPlugin extends JavaPlugin {
         }
 
         logInfo("AceLib disabled");
+    }
+
+    // ---------------------------------------------------------------------
+    // 對外 provider（AceLibApi.AceLibProvider）lifecycle
+    // ---------------------------------------------------------------------
+
+    /**
+     * 建立動態 provider 並註冊到 Bukkit/Paper {@code ServicesManager}。
+     *
+     * <p>於 onEnable 最後（facade 已就緒）呼叫；reload 不重新註冊 —
+     * 既有 registration 保留，reload 時只更新 provider 內的 facade reference。
+     * 重複 onEnable 會因 {@code ready} 旗標提早 return，不會重複註冊。</p>
+     *
+     * @param server 當前 server；不可為 null
+     */
+    private void registerApiProvider(Server server) {
+        Objects.requireNonNull(server, "server");
+        AceLibApi.AceLibProvider provider = new AceLibProviderImpl(api);
+        this.apiProvider = provider;
+        server.getServicesManager().register(
+            AceLibApi.AceLibProvider.class, provider, this, ServicePriority.Normal);
+    }
+
+    /**
+     * 更新已註冊 provider 的目前 facade reference。
+     *
+     * <p>reload commit 成功後與 onDisable 末尾呼叫；使已持有 provider 的呼叫端
+     * 讀到 reload 後的新 facade、或 disable 後的 shutdown facade。若 provider
+     * 尚未建立（從未 onEnable），此方法為 no-op。</p>
+     *
+     * @param currentApi 目前 facade；不可為 null
+     */
+    private void updateApiProvider(AceLibApi currentApi) {
+        AceLibApi.AceLibProvider provider = this.apiProvider;
+        if (provider instanceof AceLibProviderImpl impl) {
+            impl.updateApi(Objects.requireNonNull(currentApi, "currentApi"));
+        }
+    }
+
+    /**
+     * 解除對外 provider registration。
+     *
+     * <p>於 onDisable 開始時呼叫，確保 disable 流程中不會再有呼叫端新取得
+     * provider。此處不更動 {@code apiProvider} reference —
+     * 末尾的 {@link #updateApiProvider(AceLibApi)} 負責把 cached provider
+     * 切換為 shutdown facade，再清除 plugin 端 reference。</p>
+     */
+    private void unregisterApiProvider() {
+        Server s = this.server;
+        if (s == null) {
+            return;
+        }
+        try {
+            // 解除本 plugin 註冊的全部 services（目前僅 provider 一項）；
+            // disable 後 getRegistration(...) 回傳 null。
+            s.getServicesManager().unregisterAll(this);
+        } catch (Throwable t) {
+            logFine("api provider unregister failed (ignored): " + t.getMessage());
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -506,54 +588,54 @@ public class AceLibPlugin extends JavaPlugin {
      * Paper global scheduler、或降級為不可用。</p>
      *
      * @return 永遠不為 null 的 {@link PlatformCapability}
-     * @since Phase 1 (Plan §六)
+     * @since 1.0.0
      */
     public PlatformCapability getPlatformCapability() {
         return api.getPlatformCapability();
     }
 
     /**
-     * 取得當前綁定的 {@link DiagnosticsService}（Phase 14 統一診斷入口）。
+     * 取得當前綁定的 {@link DiagnosticsService}（統一診斷入口）。
      *
      * <p>永遠不為 null：</p>
      * <ul>
      *   <li>onEnable 之前 → 建構子預先建立的 safe default instance（未 bind、not ready）</li>
      *   <li>onEnable 之後 → 已 bind plugin 版本/平台/capability 且已 ready 的實例</li>
      *   <li>onDisable 之後 → 同一 reference；{@code isReady} 回傳 false，scheduler 模組
-     *       狀態降級為 FAILED（不�例外）</li>
+     *       狀態降級為 FAILED（不會丟例外）</li>
      * </ul>
      *
      * <p>此 getter 供管理員命令（後續 plugin）或測試 seam 取得 diagnostics 物件；
      * 不會回傳 {@code null}，呼叫端可放心 chain 呼叫。</p>
      *
      * @return 永遠不為 null 的 {@link DiagnosticsService}
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public DiagnosticsService getDiagnosticsService() {
         return diagnostics;
     }
 
     /**
-     * 取得當前綁定的 {@link SafeSchedulerImpl}（Phase 14 diagnostics wiring 入口）。
+     * 取得當前綁定的 {@link SafeSchedulerImpl}（diagnostics wiring 入口）。
      *
      * <p>onEnable 之前回傳 null；onEnable 之後回傳當前綁定的 scheduler。
      * 即使 onDisable 後仍回傳 reference（已 disabled），供測試驗證 lifecycle。</p>
      *
      * @return 當前 scheduler，可能為 null（plugin 未啟用）
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public SafeSchedulerImpl getSchedulerForDiagnostics() {
         return scheduler;
     }
 
     /**
-     * 便捷方法：建立當下不可變 {@link DiagnosticReport}（Phase 14 對外查詢入口）。
+     * 便捷方法：建立當下不可變 {@link DiagnosticReport}（對外查詢入口）。
      *
      * <p>內部委派給 {@link DiagnosticsService#buildReport()}。
      * 等同 {@code getDiagnosticsService().buildReport()}。</p>
      *
      * @return 新的 {@link DiagnosticReport}；永遠不為 null
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public DiagnosticReport buildDiagnosticsReport() {
         return diagnostics.buildReport();
@@ -588,9 +670,9 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * 重新偵測平台並發佈新 API 實例（Phase 14：既有 diagnostics reference in-place 重綁）。
+     * 重新偵測平台並發佈新 API 實例（既有 diagnostics reference in-place 重綁）。
      *
-     * <h2>交易式失敗語意（M-14-04）</h2>
+     * <h4>交易式失敗語意</h4>
      * <p>reload 採四階段 commit 流程，<strong>任一階段失敗 → 中止 commit、回傳
      * {@code false}、不發布半完成狀態</strong>：</p>
      * <ol>
@@ -676,8 +758,7 @@ public class AceLibPlugin extends JavaPlugin {
         // 失敗 → 舊 scheduler 已 disabled（Phase A），不需額外 rollback；
         // 但為避免「diagnostics 顯示 READY 但實際 scheduler 半失效」的假象，
         // 必須與 Phase A 一致明確降級 diagnostics 與 plugin 為 FAILED 狀態，
-        // 保留 scheduler / api reference。M-14-04 補強。
-        // -----------------------------------------------------------------
+        // 保留 scheduler / api reference。
         SafeSchedulerImpl newScheduler;
         try {
             // 測試 seam：允許在建構前注入受控失敗，模擬 new SafeSchedulerImpl(...)
@@ -702,7 +783,7 @@ public class AceLibPlugin extends JavaPlugin {
         // ACELIB-SCHED-006，語意「曾 bind 但 reload 失敗」）。
         // this.scheduler / this.api 不被修改（保留原值，rollback 完成）。
         //
-        // M-14-04 補強：Phase C 開始前先 snapshot 既有 version/platform/capability/
+        // Phase C 開始前先 snapshot 既有 version/platform/capability/
         // ready metadata；rollback 時完整還原（restoreMetadata + setReady），
         // 避免留下「scheduler reference 雖未 commit、但 diagnostics 內容已
         // 是新平台」的 partial commit 假狀態。
@@ -813,15 +894,15 @@ public class AceLibPlugin extends JavaPlugin {
         }
         this.playerLifecycleRegistered = false;
         bindPlayerDataService(this.server);
-        // Phase 14: 先 commit 新 scheduler 至 this.scheduler，再 bind GUI service。
+        // 先 commit 新 scheduler 至 this.scheduler，再 bind GUI service。
         // 順序理由：bindGuiService() 內部讀取 this.scheduler 來建立 SafeSchedulerPlayerContextExecutor，
         // 若 scheduler 仍指向 Phase A 已 disabled 的舊 scheduler，新 GUI service 會
         // 捕獲 disabled scheduler，導致 reload 後 openInventory 一律回
         // ACELIB-GUI-013 SCHEDULER_REJECTED 即為此順序錯誤的具體症狀。
         this.scheduler = newScheduler;
-        // Phase 10: reload 成功後重新建立 world 服務（既有 worldService 已 shutdown）。
+        // reload 成功後重新建立 world 服務（既有 worldService 已 shutdown）。
         bindWorldService(this.server);
-        // Phase 11: reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
+        // reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
         // 必須在 this.scheduler = newScheduler 之後呼叫。
         bindGuiService(this.server);
 
@@ -835,13 +916,15 @@ public class AceLibPlugin extends JavaPlugin {
             () -> ready,
             () -> reload()
         );
+        // 更新 provider 的 facade reference，使已持有 provider 的呼叫端讀到新 facade。
+        updateApiProvider(this.api);
         onPluginReady();
         logInfo("AceLib reloaded on {0}", reDetected.getDisplayName());
         return true;
     }
 
     /**
-     * Phase C rebind 失敗時的 rollback 輔助方法（M-14-04 補強：metadata 還原）。
+     * Phase C rebind 失敗時的 rollback 輔助方法（metadata 還原）。
      *
      * <p>動作順序：</p>
      * <ol>
@@ -916,7 +999,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * Diagnostics metadata snapshot（Phase 14 reload rollback 內部使用）。
+     * Diagnostics metadata snapshot（reload rollback 內部使用）。
      *
      * <p>於 Phase C 開始前捕獲既有 {@link DiagnosticsService} 的
      * version/platform/capability/ready；當 Phase C rebind 失敗時，
@@ -960,7 +1043,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * Phase A 失敗後的狀態降級（M-14-04 補強：避免 READY 假象）。
+     * Phase A 失敗後的狀態降級（避免 READY 假象）。
      *
      * <p>Phase A 任一步驟（{@code clearRecordSink} / {@code onPluginDisable} /
      * 測試 seam {@code reloadOldTeardownFailureHook}）失敗時，oldScheduler
@@ -986,7 +1069,6 @@ public class AceLibPlugin extends JavaPlugin {
      *
      * @param ds 既有 diagnostics reference（不可為 null；傳入時須保證非 null，
      *            內部仍以 null-guard 保護）
-     * @since Phase 14 (Plan §十九, M-14-04 補強)
      */
     private void downgradeAfterReloadPhaseAFailure(DiagnosticsService ds) {
         if (ds != null) {
@@ -1011,7 +1093,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     // ---------------------------------------------------------------------
-    // 平台狀態輸出（Phase 1 新增；對應 §六 驗收標準 #3 / #4）
+    // 平台狀態輸出
     // ---------------------------------------------------------------------
 
     /**
@@ -1025,14 +1107,14 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private void logPlatformStatus(Platform detected, PlatformDetector detector) {
         if (detected == Platform.UNKNOWN) {
-            // §六 驗收標準 #3：不支援環境下給出明確警告，不誤判為 Folia
+            // 不支援環境下給出明確警告，不誤判為 Folia
             safeLogger().log(Level.WARNING,
                 "AceLib could not detect a Folia or Paper classpath; "
                     + "some features may be unavailable. " + PLATFORM_UNKNOWN_ERROR_CODE);
             return;
         }
         if (detected == Platform.PAPER && !detector.isFoliaClasspathAvailable()) {
-            // §六 邊界條件「保守策略」：明確告知 caller 此環境不支援 Folia 專屬能力
+            // 保守策略：明確告知 caller 此環境不支援 Folia 專屬能力
             safeLogger().log(Level.FINE,
                 "(non-Folia environment detected; RegionizedServer API unavailable)");
         }
@@ -1063,8 +1145,8 @@ public class AceLibPlugin extends JavaPlugin {
     /**
      * 輸出含 {@code ACELIB-<AREA>-<CODE>} 錯誤代碼的 WARNING/SEVERE 等級 log。
      *
-     * <p>Phase 14 failure-path（M-14-04）規範：reload 流程中的可追蹤錯誤必須
-     * 以 WARNING/SEVERE + 結構化 code 形式輸出，禁止吞錯或僅 FINE 記錄。</p>
+     * <p>reload 流程中的可追蹤錯誤必須以 WARNING/SEVERE + 結構化 code 形式輸出，
+     * 禁止吞錯或僅 FINE 記錄。</p>
      *
      * @param code    錯誤代碼（不可為 null；必須為 {@code ACELIB-*} 格式）
      * @param message 詳細訊息
@@ -1258,7 +1340,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * Phase 10：建立 world 服務與其 diagnostics 綁定。
+     * 建立 world 服務與其 diagnostics 綁定。
      *
      * <p>於 onEnable / reload commit 階段呼叫，建立 {@link BukkitWorldBackend} +
      * {@link WorldServiceImpl} 並委派 {@code WorldServiceImpl} 於
@@ -1268,25 +1350,22 @@ public class AceLibPlugin extends JavaPlugin {
      * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
      *
      * @param server 當前 Bukkit/Paper/Folia server；不可為 null
-     * @since Phase 10 (Plan §十九 §二十一)
      */
     private void bindWorldService(Server server) {
         Objects.requireNonNull(server, "server");
         WorldBackend backend = new BukkitWorldBackend(server);
         WorldService newService = new WorldServiceImpl(backend, diagnostics);
         this.worldService = newService;
-        logFine("Phase 10 world service bound to server=" + server.getName());
+        logFine("world service bound to server=" + server.getName());
     }
 
     /**
-     * Phase 10：解除並 shutdown world 服務。
+     * 解除並 shutdown world 服務。
      *
      * <p>呼叫現有 {@code worldService.shutdown()}（idempotent），然後把
      * {@code this.worldService} 替換為 {@code SHUTDOWN} unavailable facade。
      * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
      * 也保證 AceLibApi 的 worldService 永不為 null。</p>
-     *
-     * @since Phase 10 (Plan §十九 §二十一)
      */
     private void unbindWorldService() {
         WorldService old = this.worldService;
@@ -1302,7 +1381,7 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * Phase 11：建立 GUI 服務。
+     * 建立 GUI 服務。
      *
      * <p>於 onEnable / reload commit 階段呼叫，建立 {@link GuiService} 實作
      * （透過 {@code GuiService.forProduction} 隱藏內部實作類別）。
@@ -1315,29 +1394,26 @@ public class AceLibPlugin extends JavaPlugin {
      * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
      *
      * @param server 當前 Bukkit/Paper/Folia server；不可為 null
-     * @since Phase 11 (Plan §十六 §二十一)
      */
     private void bindGuiService(Server server) {
         Objects.requireNonNull(server, "server");
         // production 必須走 SafeScheduler：Paper main thread、Folia entity scheduler。
-        // 對應 Evidence Pack「inventory mutation 透過既有 SafeExecutor/region-aware adapter」。
+        // inventory mutation 透過既有 SafeExecutor/region-aware adapter。
         GuiService newService = GuiService.forProduction(this.scheduler);
         this.guiService = newService;
         this.guiListener = newService.getListener();
         this.guiListenerRegistered = false;
-        logFine("Phase 11 gui service bound to server=" + server.getName());
+        logFine("gui service bound to server=" + server.getName());
     }
 
     /**
-     * Phase 11：解除並 shutdown GUI 服務。
+     * 解除並 shutdown GUI 服務。
      *
      * <p>解除 listener 註冊（{@link HandlerList#unregisterAll(Listener)}），
      * 然後呼叫現有 {@code guiService.shutdown()}（idempotent），最後把
      * {@code this.guiService} 替換為 {@code SHUTDOWN} unavailable facade。
      * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
      * 也保證 AceLibApi 的 guiService 永不為 null。</p>
-     *
-     * @since Phase 11 (Plan §十六 §二十一)
      */
     private void unbindGuiService() {
         org.bukkit.event.Listener oldListener = this.guiListener;

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 子指令規格（Plan §十一 Phase 6）。
+ * 子指令規格。
  *
  * <p>由 {@link CommandSpec} 持有；dispatcher 透過本規格判斷「給定 sender + args
  * 是否能執行該子指令」，包含以下檢查：</p>
@@ -31,7 +31,7 @@ import java.util.Objects;
  *
  * @see CommandSpec
  * @see CommandContext
- * @since Phase 6 (Plan §十一)
+ * @since 1.0.0
  */
 public final class SubCommandSpec {
 

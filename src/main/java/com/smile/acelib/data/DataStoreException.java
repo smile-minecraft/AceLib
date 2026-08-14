@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 資料儲存例外（extends {@link RuntimeException}）。
  *
- * <p>對應 Plan §十三 Phase 8「資料操作錯誤回報」與 §二十三 DoD「錯誤分類代碼」
- * 需求。所有對外拋出的儲存例外必須攜帶 {@code ACELIB-DATA-<CODE>} 格式分類代碼，
+ * <p>所有對外拋出的儲存例外必須攜帶 {@code ACELIB-DATA-<CODE>} 格式分類代碼，
  * 讓 {@link com.smile.acelib.diagnostics.ErrorCodeRegistry} 能正確歸類。</p>
  *
  * <h2>錯誤代碼</h2>
@@ -15,7 +14,7 @@ import java.util.Objects;
  *   <li>{@code ACELIB-DATA-002}：資料損壞（檔案格式錯誤、反序列化失敗、解碼失敗）</li>
  *   <li>{@code ACELIB-DATA-003}：索引錯誤（key/path 為 null、空白、不合法）</li>
  *   <li>{@code ACELIB-DATA-004}：遷移失敗（migration chain 中任一版本轉換失敗；攜帶 from/to 版本）</li>
- *   <li>{@code-DATA-005}：儲存已關閉（store 已被 {@link DataStore#close() close} 後仍嘗試操作）</li>
+ *   <li>{@code ACELIB-DATA-005}：儲存已關閉（store 已被 {@link DataStore#close() close} 後仍嘗試操作）</li>
  *   <li>{@code ACELIB-DATA-006}：序列化失敗（型別不支援、循環參考）</li>
  *   <li>{@code ACELIB-DATA-007}：非同步逾時（async 等待超過 deadline）</li>
  *   <li>{@code ACELIB-DATA-008}：資料源不可用（JDBC 連線拒絕、SQL 語法錯誤）</li>
@@ -33,7 +32,7 @@ import java.util.Objects;
  *
  * @see DataStore
  * @see com.smile.acelib.diagnostics.ErrorCodeRegistry
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public class DataStoreException extends RuntimeException {
 

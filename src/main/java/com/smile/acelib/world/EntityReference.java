@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 不可變實體參考（Plan §十九 Phase 10 共同契約）。
+ * 不可變實體參考。
  *
  * <p>對外識別 entity 的最小資訊集合 — <strong>不可</strong>將
  * {@link org.bukkit.entity.Entity} 或 {@link org.bukkit.entity.Player}
@@ -20,8 +20,11 @@ import java.util.UUID;
  * <h2>執行緒安全</h2>
  * 不可變 record；執行緒安全。
  *
+ * @param entityId     entity 唯一 UUID；不可為 null
+ * @param worldId      所屬世界 UUID；不可為 null
+ * @param entityTypeKey Bukkit EntityType 列舉名；不可為 null
  * @see LocationSnapshot
- * @since Phase 10 (Plan §十九)
+ * @since 1.0.0
  */
 public record EntityReference(
     UUID entityId,

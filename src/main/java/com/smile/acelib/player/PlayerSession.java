@@ -4,11 +4,11 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 玩家 session 物件（Plan §十四 Phase 9）。
+ * 玩家 session 物件。
  *
  * <p>不持有 {@code org.bukkit.entity.Player} reference — 僅以
  * {@link UUID} + 建構時 name snapshot 表達 session，避免長期持有已失效
- * Player 物件（Plan §十四驗收標準）。當 session 被移除（END 狀態）時，
+ * Player 物件。當 session 被移除（END 狀態）時，
  * 唯一被釋放的是 session 物件本身；外部 caller 必須自行保證不保留任何
  * Player reference。</p>
  *
@@ -28,11 +28,11 @@ import java.util.UUID;
  *
  * <h2>執行緒安全</h2>
  * <p>狀態變更使用 {@code volatile} 保證可見性；不支援並發 transition —
- * 預期由單一 owner thread（{@link PlayerDataService}）�動轉換。</p>
+ * 預期由單一 owner thread（{@link PlayerDataService}）驅動轉換。</p>
  *
  * @see PlayerSessionState
  * @see PlayerSessionRegistry
- * @since Phase 9 (Plan §十四)
+ * @since 1.0.0
  */
 public final class PlayerSession {
 

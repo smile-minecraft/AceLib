@@ -9,8 +9,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 /**
  * 設定遷移鏈。
  *
- * <p>對應 Plan §九 Phase 4「設定檔版本欄位存在；版本過舊自動觸發遷移」。
- * 維護一組 {@link ConfigMigration}，按 {@link ConfigMigration#fromVersion()}
+ * <p>維護一組 {@link ConfigMigration}，按 {@link ConfigMigration#fromVersion()}
  * 排序，並依序執行直到達成目標版本。</p>
  *
  * <h2>執行語意</h2>
@@ -25,7 +24,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
  * 包裝為 {@link MigrationResult#failure} 並附帶警告訊息，
  * 確保 plugin 載入流程不會因單一 migration bug 而崩潰。</p>
  *
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public final class MigrationChain {
 

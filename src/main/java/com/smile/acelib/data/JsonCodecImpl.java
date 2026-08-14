@@ -9,10 +9,9 @@ import java.util.Objects;
 /**
  * 極簡 JSON 編解碼器（內建實作）。
  *
- * <p>對應 Plan §十三 Phase 8「本地輕量資料儲存」與「資料表 / 資料格式初始化」需求。
- * 刻意不依賴 Gson / Jackson 等外部函式庫，僅使用 Java 標準 API；目的：</p>
+ * <p>刻意不依賴 Gson / Jackson 等外部函式庫，僅使用 Java 標準 API；目的：</p>
  * <ul>
- *   <li>避免引入大型序列化依賴（與 Plan §三 (2) 「不引入複雜 ORM」一致）</li>
+ *   <li>避免引入大型序列化依賴（與「不引入複雜 ORM」的輕量方針一致）</li>
  *   <li>支援型別嚴格白名單：基本型別、{@code null}、{@link Map}/{@link List}</li>
  *   <li>JSON 結構可控，方便 round-trip 測試</li>
  * </ul>
@@ -31,7 +30,7 @@ import java.util.Objects;
  *   <li>{@code ACELIB-DATA-006}：不支援的型別（round-trip 白名單外）</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class JsonCodecImpl implements JsonCodec {
 

@@ -1,7 +1,7 @@
 package com.smile.acelib.gui;
 
 /**
- * GUI 操作結果狀態（Plan §十六 Phase 11 共同契約）。
+ * GUI 操作結果狀態。
  *
  * <p>所有 {@link GuiResult} 皆攜帶下列狀態之一：</p>
  *
@@ -30,7 +30,7 @@ package com.smile.acelib.gui;
  * （如 {@code ACCEPTED(5)}）只能追加到末尾，不得插入既有常數之間。
  *
  * @see GuiResult
- * @since Phase 11 (Plan §十六)
+ * @since 1.0.0
  */
 public enum GuiState {
     SUCCESS,

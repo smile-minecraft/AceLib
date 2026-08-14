@@ -22,9 +22,9 @@ import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * {@link SafeScheduler} 的標準實作。
+ * {@link SafeScheduler} 的標準實作（Internal）。
  *
- * <p>對應 Plan §七 Phase 2 規格，內含：</p>
+ * <p>內含：</p>
  * <ul>
  *   <li>6 種基本任務（global / async / later / timer）+ 3 種上下文任務
  *       （player / player-later / entity / location）共 8 種 dispatch</li>
@@ -37,7 +37,7 @@ import org.bukkit.scheduler.BukkitTask;
  *   <li>任務內部拋錯時以 {@code ACELIB-SCHED-001} 紀錄，但不影響後續任務</li>
  * </ul>
  *
- * <h2>錯誤代碼一覽（§七 + §二十三 DoD）</h2>
+ * <h2>錯誤代碼一覽</h2>
  * <ul>
  *   <li>{@code ACELIB-SCHED-001} — 任務內部拋 exception</li>
  *   <li>{@code ACELIB-SCHED-002} — 玩家離線</li>
@@ -60,13 +60,13 @@ import org.bukkit.scheduler.BukkitTask;
  * {@link #disabled} 為 {@code volatile}。</p>
  *
  * @see SafeScheduler
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public final class SafeSchedulerImpl implements SafeScheduler {
 
     private static final Logger LOGGER = Logger.getLogger("AceLib");
 
-    // 錯誤代碼（§七 Phase 2 + §二十三 DoD）
+    // 錯誤代碼（ACELIB-SCHED-* 格式）
     static final String ERR_TASK_EXCEPTION = "ACELIB-SCHED-001";
     static final String ERR_PLAYER_OFFLINE = "ACELIB-SCHED-002";
     static final String ERR_ENTITY_INVALID = "ACELIB-SCHED-003";
@@ -82,7 +82,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private final AtomicLong fallbackTick = new AtomicLong(0L);
     private volatile boolean disabled = false;
     /**
-     * 錯誤紀錄 sink（Phase 14 wiring）。
+     * 錯誤紀錄 sink。
      *
      * <p>當 {@code DiagnosticsService} 透過 {@link #setRecordSink(BiConsumer)}
      * 注入後，每次 {@link #recorder} 收到一筆紀錄，scheduler 都會以
@@ -257,7 +257,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     }
 
     /**
-     * 設定錯誤紀錄 sink（Phase 14 diagnostics wiring）。
+     * 設定錯誤紀錄 sink。
      *
      * <p>注入後，每次內部 {@link #recorder} 收到一筆 {@link TaskErrorRecord}，
      * scheduler 都會以 {@code (code, detail)} 形式回呼 sink；通常由
@@ -270,20 +270,20 @@ public final class SafeSchedulerImpl implements SafeScheduler {
      * 與 recorder 記錄。</p>
      *
      * @param sink 錯誤 sink；可為 null
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void setRecordSink(BiConsumer<String, String> sink) {
         this.recordSink = sink;
     }
 
     /**
-     * 解除錯誤紀錄 sink（Phase 14 diagnostics wiring）。
+     * 解除錯誤紀錄 sink。
      *
      * <p>通常由 {@link com.smile.acelib.diagnostics.DiagnosticsService
      * DiagnosticsService} 在 {@code bindScheduler(null)} 或 plugin onDisable
      * 時呼叫，確保 disable 後的 sink 不會繼續被觸發。</p>
      *
-     * @since Phase 14 (Plan §十九)
+     * @since 1.0.0
      */
     public void clearRecordSink() {
         this.recordSink = null;

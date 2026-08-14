@@ -11,9 +11,8 @@ import org.bukkit.event.Event;
 /**
  * 事件錯誤紀錄器。
  *
- * <p>對應 Plan §十二 Phase 7「事件錯誤可記錄並定位來源」的需求。
- * 內部以 {@link Deque}（容量預設 100）保存最近的錯誤紀錄，
- * 當超出容量時自動淘汰最舊的紀錄（FIFO）。</p>
+ * <p>事件錯誤可記錄並定位來源。內部以 {@link Deque}（容量預設 100）保存
+ * 最近的錯誤紀錄，當超出容量時自動淘汰最舊的紀錄（FIFO）。</p>
  *
  * <h2>執行緒安全</h2>
  * <p>所有 {@code public} 方法皆為 thread-safe，可於 Folia 多 region 並行環境下
@@ -35,11 +34,11 @@ import org.bukkit.event.Event;
  * <h2>與 scheduler 模組關係</h2>
  * <p>本類別刻意不依賴 {@code com.smile.acelib.scheduler.TaskErrorRecorder}，
  * 維持 event 模組獨立性。介面與容量策略
- * 對齊 scheduler，方便未來診斷模組（Phase 14）統一呈現。</p>
+ * 對齊 scheduler，方便診斷介面統一呈現。</p>
  *
  * @see EventErrorRecord
  * @see SafeEventRegistry
- * @since Phase 7 (Plan §十二)
+ * @since 1.0.0
  */
 public final class EventErrorRecorder {
 

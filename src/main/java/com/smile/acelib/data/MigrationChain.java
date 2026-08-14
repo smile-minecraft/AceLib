@@ -8,8 +8,7 @@ import java.util.Objects;
 /**
  * 資料遷移鏈（多個 {@link DataMigration} 依序執行）。
  *
- * <p>對應 Plan §十三 Phase 8「資料版本遷移」需求。
- * 從「檔案現有版本」依序套用 migration 到「目標版本」；
+ * <p>從「檔案現有版本」依序套用 migration 到「目標版本」；
  * 任一失敗觸發 rollback（既有資料不變）。</p>
  *
  * <h2>失敗 rollback 語意</h2>
@@ -21,7 +20,7 @@ import java.util.Objects;
  *       失敗時不觸發磁碟 IO；對 {@link JdbcDataStore} 而言：使用 transaction + rollback</li>
  * </ul>
  *
- * @since Phase 8 (Plan §十三)
+ * @since 1.0.0
  */
 public final class MigrationChain {
 
@@ -160,7 +159,7 @@ public final class MigrationChain {
     /**
      * 用於在遷移鏈完成後將最終資料寫回底層的 hook。
      *
-     * @since Phase 8 (Plan §十三)
+     * @since 1.0.0
      */
     @FunctionalInterface
     public interface CommitHook {

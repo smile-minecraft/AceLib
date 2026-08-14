@@ -4,7 +4,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
 /**
- * 外部插件整合狀態探測器。
+ * 外部插件整合狀態探測器（Supported API）。
  *
  * <p>以 classpath 反射（沿用 {@code PlatformDetector.isPresent} 模式）判定
  * marker API class 是否存在，再以 Bukkit {@link PluginManager} 查詢安裝 /
@@ -30,6 +30,7 @@ import org.bukkit.plugin.PluginManager;
  *
  * @see IntegrationStatus
  * @see IntegrationProbeResult
+ * @since 1.0.0
  */
 public final class ExternalPluginProbe {
 

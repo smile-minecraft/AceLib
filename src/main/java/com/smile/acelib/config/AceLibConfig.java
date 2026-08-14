@@ -9,8 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * 設定檔 + 語言檔 facade（綁定到 plugin）。
  *
- * <p>對應 Plan §九 Phase 4「後續插件可用 AceLib 管理設定」需求。
- * 提供統一入口：</p>
+ * <p>消費者取得設定與語言檔管理服務的統一入口：</p>
  * <ul>
  *   <li>{@link #bind(JavaPlugin)} — 取得（或建立）綁定到 plugin 的 facade</li>
  *   <li>{@link #withConfigSchema(ConfigSchema, ConfigVersion)} — 設定 config schema</li>
@@ -36,7 +35,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * 同一個 plugin 重複 {@link #bind} 回傳同一 instance。
  * 跨 plugin 各自獨立（不會碰撞）。</p>
  *
- * @since Phase 4 (Plan §九)
+ * @since 1.0.0
  */
 public final class AceLibConfig {
 

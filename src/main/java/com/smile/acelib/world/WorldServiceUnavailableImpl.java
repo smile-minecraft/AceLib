@@ -5,7 +5,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
- * 未啟用 / 已停用狀態下的可診斷 facade（Plan §二十一未完成階段共同交付契約）。
+ * 未啟用 / 已停用狀態下的可診斷 facade（Internal）。
  *
  * <p>任何狀態下呼叫本類別的操作，都會回傳 {@code REJECTED} 與對應的
  * {@link WorldErrorCode#NOT_READY} 或 {@link WorldErrorCode#SHUTDOWN} 結果 —
@@ -13,8 +13,11 @@ import java.util.concurrent.CompletionStage;
  * 後續插件於 onEnable 之前或 plugin disable 之後呼叫
  * {@code AceLibApi.getWorldService()} 即取得此 instance。</p>
  *
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴；透過
+ * {@link com.smile.acelib.AceLibApi} 取得 {@link WorldService} 介面。</p>
+ *
  * @see WorldService
- * @since Phase 10 (Plan §二十一)
+ * @since 1.0.0
  */
 public final class WorldServiceUnavailableImpl implements WorldService {
 

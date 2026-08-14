@@ -5,8 +5,7 @@ import java.util.Objects;
 /**
  * 設定欄位規格（immutable record）。
  *
- * <p>對應 Plan §九 Phase 4「缺失欄位可被補齊（不破壞既有值）」需求。
- * 描述 schema 中一個欄位的「路徑」、「預設值」、「是否必填」。
+ * <p>描述 schema 中一個欄位的「路徑」、「預設值」、「是否必填」。
  * {@link ConfigManager} 在載入時會檢查每個欄位是否存在，
  * 若必填欄位缺失則補上 {@link #defaultValue()}。</p>
  *
@@ -23,7 +22,10 @@ import java.util.Objects;
  *   <li>{@code defaultValue} 不可為 null（避免補齊時出現歧義）</li>
  * </ul>
  *
- * @since Phase 4 (Plan §九)
+ * @param path         欄位路徑；不可為 null 或空白
+ * @param defaultValue 預設值；不可為 null
+ * @param required     是否必填（載入時缺失會補上預設值）
+ * @since 1.0.0
  */
 public record FieldSpec(String path, Object defaultValue, boolean required) {
 

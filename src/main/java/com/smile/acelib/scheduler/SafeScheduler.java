@@ -6,10 +6,9 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 /**
- * Folia-safe 排程器介面。
+ * Folia-safe 排程器介面（Supported）。
  *
- * <p>對應 Plan §七 Phase 2「Folia / Paper 安全排程」的需求：
- * 封裝 Bukkit/Folia 各種 scheduler API，確保後續插件不需要直接處理
+ * <p>封裝 Bukkit/Folia 各種 scheduler API，確保後續插件不需要直接處理
  * region / entity / global scheduler 的選擇與有效性檢查。</p>
  *
  * <h2>9 種任務方法 + cancelAll</h2>
@@ -38,7 +37,7 @@ import org.bukkit.entity.Player;
  *
  * @see SafeSchedulerImpl
  * @see AceLibScheduler
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public interface SafeScheduler {
 

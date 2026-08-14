@@ -21,7 +21,7 @@ import com.smile.acelib.scheduler.ScheduledTask;
  * 回 {@link GuiResult#failed} + {@link GuiErrorCode#SCHEDULER_REJECTED} 而非
  * 留下 stale session。</p>
  *
- * @since Phase 11 (Plan §十六 §二十一)
+ * @since 1.0.0
  */
 final class SafeSchedulerPlayerContextExecutor implements PlayerContextExecutor {
 

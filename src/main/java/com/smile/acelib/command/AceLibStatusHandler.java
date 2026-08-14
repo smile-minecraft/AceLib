@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * {@code /acelib status} 子指令處理器（Plan §十一 Phase 6 ＋ Plan §二十五 #7）。
+ * {@code /acelib status} 子指令處理器。
  *
  * <p>呼叫 {@link DiagnosticsService#buildReport()} 取得不可變快照，再以
  * {@link DiagnosticReport#format(boolean) format(false)} 輸出人類可讀字串；
@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  *       分流與 Folia region-safe 派送）</li>
  * </ul>
  *
- * @since v0.1.0
+ * @since 1.0.0
  */
 public final class AceLibStatusHandler implements SubCommand {
 

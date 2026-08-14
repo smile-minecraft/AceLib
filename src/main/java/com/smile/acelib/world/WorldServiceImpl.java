@@ -20,13 +20,12 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
 /**
- * 預設 {@link WorldService} 實作（Plan §十九 §二十一 Phase 10 主實作）。
+ * 預設 {@link WorldService} 實作（Internal）。
  *
  * <p>設計要點：</p>
  * <ul>
  *   <li>所有輸入以 {@link LocationSnapshot} / {@link EntityReference} 為單位；
- *       每次操作內部即時解析 Bukkit 物件，<strong>不長期保存 mutable reference</strong>
- *       （Plan §二十一共同契約）。</li>
+ *       每次操作內部即時解析 Bukkit 物件，<strong>不長期保存 mutable reference</strong>。</li>
  *   <li>每次操作前置驗證 region owner / world 有效 / chunk 已載入 / entity 存在；
  *       失敗回對應 {@code ACELIB-WORLD-*} 結果而非丟例外。</li>
  *   <li>Teleport 以 {@link CompletionStage} 暴露非同步結果；不把 future 視為
@@ -36,7 +35,10 @@ import org.bukkit.entity.Player;
  *   <li>模組狀態透過既有 {@link DiagnosticsService#registerModuleState} 註冊。</li>
  * </ul>
  *
- * @since Phase 10 (Plan §十九 §二十一)
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴；透過
+ * {@link com.smile.acelib.AceLibApi} 取得 {@link WorldService} 介面。</p>
+ *
+ * @since 1.0.0
  */
 public final class WorldServiceImpl implements WorldService {
 
@@ -388,7 +390,7 @@ public final class WorldServiceImpl implements WorldService {
 
     /**
      * 標記 stopped 並拒絕新請求；不主動中斷已 in-flight 的 teleport future —
-     * future 會在下個完成點自動回 CANCELLED（Plan §二十一共同契約）。
+     * future 會在下個完成點自動回 CANCELLED。
      */
     @Override
     public void shutdown() {

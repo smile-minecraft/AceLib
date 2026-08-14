@@ -3,8 +3,7 @@ package com.smile.acelib.diagnostics;
 /**
  * 模組狀態分類 enum。
  *
- * <p>對應 Plan §十九 Phase 14「狀態查詢」需求。
- * 描述 {@link ModuleState} 當前屬於哪一類狀態：</p>
+ * <p>描述 {@link ModuleState} 當前屬於哪一類狀態：</p>
  * <ul>
  *   <li>{@link #READY} — 已綁定並可運作</li>
  *   <li>{@link #NOT_INITIALIZED} — 尚未綁定（典型為該模組在 AceLib 內 opt-in）</li>
@@ -14,7 +13,7 @@ package com.smile.acelib.diagnostics;
  * </ul>
  *
  * @see ModuleState
- * @since Phase 14 (Plan §十九)
+ * @since 1.0.0
  */
 public enum ModuleStatus {
     READY,

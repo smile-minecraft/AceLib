@@ -12,10 +12,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 /**
- * 自訂物品工廠（公開 API facade）。
+ * 自訂物品工廠（Supported API facade）。
  *
- * <p>對應 Plan Phase 12 自訂物品核心：
- * 以 Paper API 的 {@link ItemStack} + {@link org.bukkit.persistence.PersistentDataContainer}
+ * <p>以 Paper API 的 {@link ItemStack} + {@link org.bukkit.persistence.PersistentDataContainer}
  * 建立可被辨識、可序列化、可升級的「自訂物品」。
  * 所有 {@link ItemStack} 上的「辨識資料」「display-only tag」「gameplay tag」
  * 統一透過此 factory 與其內部 PDC keying 處理，外部呼叫端無需感知 low-level 細節。</p>
@@ -40,8 +39,15 @@ import org.bukkit.persistence.PersistentDataType;
  *
  * <h2>執行緒與平台</h2>
  * <ul>
- *   <li>本類別不假設主執行緒；所有 ItemStack / meta / PDC 操作皆為同步、執行緒安全</li>
- *   <li>Paper 與 Folia 行為一致（Bukkit PDC API 跨平台定義）</li>
+ *   <li>本類別無可變狀態（{@code namespace} 與 PDC key 集皆為 immutable）；
+ *       單一 factory 實例可跨執行緒共用</li>
+ *   <li>但本類別讀寫的 {@link ItemStack} / {@link ItemMeta} /
+ *       {@link org.bukkit.persistence.PersistentDataContainer} 都是 mutable Bukkit
+ *       物件，其執行緒／上下文限制由伺服器實作定義（Paper 通常要求主執行緒；
+ *       Folia 對 inventory／世界綁定物件要求所屬 region thread）。本類別不做同步、
+ *       不派送排程，<strong>不承諾</strong>跨執行緒操作這些物件安全</li>
+ *   <li>呼叫端必須依執行環境（Paper／Folia）在伺服器允許的上下文內
+ *       建立／存取物品</li>
  * </ul>
  */
 public final class AceItemFactory {
@@ -308,6 +314,10 @@ public final class AceItemFactory {
 
     /**
      * 讀取 gameplay string。
+     *
+     * @param stack 不可為 null
+     * @param key   不可為 null 或空
+     * @return 若有則回傳，否則 {@link java.util.Optional#empty()}
      */
     public java.util.Optional<String> readGameplayString(ItemStack stack, String key) {
         Objects.requireNonNull(key, "key");
@@ -326,6 +336,10 @@ public final class AceItemFactory {
 
     /**
      * 讀取 display-only int（預期不存在；不該把 gameplay int 寫到 display）。
+     *
+     * @param stack 不可為 null
+     * @param key   不可為 null 或空
+     * @return 若有則回傳，否則 {@link java.util.Optional#empty()}
      */
     public java.util.Optional<Integer> readDisplayInt(ItemStack stack, String key) {
         Objects.requireNonNull(key, "key");
@@ -344,6 +358,10 @@ public final class AceItemFactory {
 
     /**
      * 讀取 display-only string。
+     *
+     * @param stack 不可為 null
+     * @param key   不可為 null 或空
+     * @return 若有則回傳，否則 {@link java.util.Optional#empty()}
      */
     public java.util.Optional<String> readDisplayString(ItemStack stack, String key) {
         Objects.requireNonNull(key, "key");
@@ -465,7 +483,7 @@ public final class AceItemFactory {
      * （連 serialize bytes 都保持原樣）。失敗時拋 {@link ItemException}
      * （{@link ItemErrorCode#MIGRATION_FAILED}）。</p>
      *
-     * <h2>atomicity 來源</h2>
+     * <h4>atomicity 來源</h4>
      * <ul>
      *   <li>輸入 {@code stack} 的 {@code ItemMeta} 在 migrate 開始時被 {@code clone()} 為
      *       {@code backupMeta}（rollback 用）與 {@code workingMeta}（工作複本）</li>
@@ -536,6 +554,12 @@ public final class AceItemFactory {
 
     /**
      * 加入附魔 enchantment（helper，方便測試建立 enchanted item）。
+     *
+     * @param stack 目標 ItemStack；不可為 null
+     * @param ench  Enchantment；不可為 null
+     * @param level 附魔等級
+     * @return 加入附魔後的 {@code stack}（原地修改）
+     * @throws ItemException 當 stack 不支援 ItemMeta 時拋出（{@code ACELIB-ITEM-001}）
      */
     public ItemStack withEnchantment(ItemStack stack, Enchantment ench, int level) {
         Objects.requireNonNull(stack, "stack");
@@ -631,12 +655,47 @@ public final class AceItemFactory {
             this.displayTags = displayTags == null ? null : Map.copyOf(displayTags);
         }
 
+        /**
+         * 取得材質。
+         *
+         * @return 材質；可為 null（尚未設定）
+         */
         public Material material() { return material; }
+        /**
+         * 取得數量。
+         *
+         * @return 數量（預設 1）
+         */
         public int amount() { return amount; }
+        /**
+         * 取得 identity。
+         *
+         * @return identity；可為 null（尚未設定）
+         */
         public ItemIdentity identity() { return identity; }
+        /**
+         * 取得顯示名稱。
+         *
+         * @return 顯示名稱；可為 null
+         */
         public Component displayName() { return displayName; }
+        /**
+         * 取得 lore 行。
+         *
+         * @return lore 行；可為 null
+         */
         public List<Component> lore() { return lore; }
+        /**
+         * 取得 gameplay tags。
+         *
+         * @return gameplay tags；可為 null
+         */
         public Map<String, GameplayTag> gameplayTags() { return gameplayTags; }
+        /**
+         * 取得 display tags。
+         *
+         * @return display tags；可為 null
+         */
         public Map<String, Object> displayTags() { return displayTags; }
 
         /**
@@ -664,36 +723,78 @@ public final class AceItemFactory {
         private final Map<String, GameplayTag> gameplayTags = new LinkedHashMap<>();
         private final Map<String, Object> displayTags = new LinkedHashMap<>();
 
+        /**
+         * 設定材質（必填）。
+         *
+         * @param material 材質；不可為 null
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder material(Material material) {
             this.material = material;
             return this;
         }
 
+        /**
+         * 設定數量（預設 1）。
+         *
+         * @param amount 數量；必須 &gt;= 1
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder amount(int amount) {
             this.amount = amount;
             return this;
         }
 
+        /**
+         * 設定物品 identity（必填）。
+         *
+         * @param identity 自訂物品識別；不可為 null
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder identity(ItemIdentity identity) {
             this.identity = identity;
             return this;
         }
 
+        /**
+         * 設定顯示名稱（Adventure Component）。
+         *
+         * @param name 顯示名稱；可為 null（不設定）
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder displayName(Component name) {
             this.displayName = name;
             return this;
         }
 
+        /**
+         * 設定顯示名稱（字串形式）。
+         *
+         * @param name 顯示名稱；可為 null（不設定）
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder displayName(String name) {
             this.displayName = name == null ? null : Component.text(name);
             return this;
         }
 
+        /**
+         * 設定 lore 行（Component 清單）。
+         *
+         * @param lines lore 行；可為 null
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder lore(List<Component> lines) {
             this.lore = lines;
             return this;
         }
 
+        /**
+         * 設定 lore 行（字串可變參數）。
+         *
+         * @param lines lore 行；可為 null
+         * @return this（支援鏈式呼叫）
+         */
         public ItemSpecBuilder lore(String... lines) {
             if (lines == null) {
                 this.lore = null;
@@ -707,7 +808,11 @@ public final class AceItemFactory {
         }
 
         /**
-         * 新增 gameplay int tag。
+         * 新增 gameplay int tag（參與實際遊戲邏輯）。
+         *
+         * @param key   tag key；對自家 factory 內唯一
+         * @param value 整數值
+         * @return this（支援鏈式呼叫）
          */
         public ItemSpecBuilder gameplayTag(String key, int value) {
             gameplayTags.put(key, GameplayTag.intTag(value));
@@ -715,7 +820,11 @@ public final class AceItemFactory {
         }
 
         /**
-         * 新增 gameplay string tag。
+         * 新增 gameplay string tag（參與實際遊戲邏輯）。
+         *
+         * @param key   tag key；對自家 factory 內唯一
+         * @param value 字串值；不可為 null
+         * @return this（支援鏈式呼叫）
          */
         public ItemSpecBuilder gameplayTag(String key, String value) {
             gameplayTags.put(key, GameplayTag.stringTag(value));
@@ -723,7 +832,11 @@ public final class AceItemFactory {
         }
 
         /**
-         * 新增 display-only tag（只接受 String / int）。
+         * 新增 display-only tag（僅顯示，不參與遊戲邏輯；接受 String）。
+         *
+         * @param key   tag key；對自家 factory 內唯一
+         * @param value 字串值；不可為 null
+         * @return this（支援鏈式呼叫）
          */
         public ItemSpecBuilder displayTag(String key, String value) {
             displayTags.put(key, value);
@@ -731,7 +844,11 @@ public final class AceItemFactory {
         }
 
         /**
-         * 新增 display-only int tag。
+         * 新增 display-only int tag（僅顯示，不參與遊戲邏輯）。
+         *
+         * @param key   tag key；對自家 factory 內唯一
+         * @param value 整數值
+         * @return this（支援鏈式呼叫）
          */
         public ItemSpecBuilder displayTag(String key, int value) {
             displayTags.put(key, value);

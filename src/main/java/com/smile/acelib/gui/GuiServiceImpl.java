@@ -18,7 +18,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 
 /**
- * 預設 {@link GuiService} 實作（Plan §十六 §二十一 Phase 11 主實作）。
+ * 預設 {@link GuiService} 實作（Internal）。
  *
  * <p>設計要點：</p>
  * <ul>
@@ -41,8 +41,12 @@ import org.bukkit.inventory.Inventory;
  * {@link Server#getPlayer(UUID)} 拿當下 Player 物件（已存在的 inventory
  * reference 立即釋放）。</p>
  *
+ * <p>本類別為 Internal 實作細節，下游不得直接依賴；透過
+ * {@link GuiService#forProduction(com.smile.acelib.scheduler.SafeScheduler)}
+ * 或 {@link com.smile.acelib.AceLibApi} 取得 {@link GuiService} 介面。</p>
+ *
  * @see GuiService
- * @since Phase 11 (Plan §十六 §二十一)
+ * @since 1.0.0
  */
 final class GuiServiceImpl implements GuiService {
 
@@ -51,14 +55,14 @@ final class GuiServiceImpl implements GuiService {
     private final GuiSessionRegistry registry = new GuiSessionRegistry();
     private final AtomicBoolean running = new AtomicBoolean(true);
     /**
-     * 待確認 action 表（Phase 11 延伸第二切片：confirmation/cancellation）。
+     * 待確認 action 表（confirmation/cancellation）。
      * key 為服務產生的不透明 action token；value 為對應 {@link PendingAction}。
      * 不持有 {@code Player} reference — 僅保存 UUID 與 domain callback。
      */
     private final ConcurrentMap<String, PendingAction> pendingActions
         = new ConcurrentHashMap<>();
     /**
-     * 每個玩家目前的 request generation（Phase 11 延伸第三切片：非同步更新 stale 防護）。
+     * 每個玩家目前的 request generation（非同步更新 stale 防護）。
      * key 為玩家 UUID；value 為該玩家目前有效（最大）的 request generation。
      * {@link #beginAsyncUpdate} 每次呼叫遞增並取得新值；{@link #applyAsyncUpdate}
      * 比對請求的 requestGeneration 是否仍等於此值，否則視為過時（被取代）。
@@ -113,7 +117,7 @@ final class GuiServiceImpl implements GuiService {
      * @param scheduler 對應平台 SafeScheduler；不可為 null
      * @return 新的 {@link GuiServiceImpl}
      * @throws NullPointerException 當 {@code scheduler} 為 null
-     * @since Phase 11（Plan §十六 §二十一）
+     * @since 1.0.0
      */
     static GuiServiceImpl forProduction(
             com.smile.acelib.scheduler.SafeScheduler scheduler) {
@@ -280,7 +284,7 @@ final class GuiServiceImpl implements GuiService {
     }
 
     // -----------------------------------------------------------------
-    // 非同步更新請求合約（Phase 11 延伸第三切片）
+    // 非同步更新請求合約
     // -----------------------------------------------------------------
 
     @Override
@@ -472,7 +476,7 @@ final class GuiServiceImpl implements GuiService {
     }
 
     // -----------------------------------------------------------------
-    // 確認 / 取消 action contract（Phase 11 延伸第二切片）
+    // 確認 / 取消 action contract
     // -----------------------------------------------------------------
 
     @Override
@@ -788,7 +792,7 @@ final class GuiServiceImpl implements GuiService {
     }
 
     /**
-     * 待確認 action 內部狀態（Phase 11 延伸第二切片）。
+     * 待確認 action 內部狀態。
      *
      * <p>不可變欄位記錄綁定資訊；{@link #state} 為唯一可變欄位，僅在
      * {@code synchronized(action)} 區塊內由 confirm/cancel 轉換，確保 callback

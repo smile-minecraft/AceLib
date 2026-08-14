@@ -1,10 +1,9 @@
 package com.smile.acelib.scheduler;
 
 /**
- * 排程任務類型列舉。
+ * 排程任務類型列舉（Supported）。
  *
- * <p>對應 Plan §七（Phase 2 安全排程需求）中定義的 8 種排程模式，
- * 用於在 {@link TaskErrorRecord} 與 {@link ScheduledTask} 中標記任務語意，
+ * <p>用於在 {@link TaskErrorRecord} 與 {@link ScheduledTask} 中標記任務語意，
  * 方便後續診斷與除錯。</p>
  *
  * <h2>語意對照</h2>
@@ -21,7 +20,7 @@ package com.smile.acelib.scheduler;
  *
  * @see SafeScheduler
  * @see ScheduledTask
- * @since Phase 2 (Plan §七)
+ * @since 1.0.0
  */
 public enum TaskType {
 

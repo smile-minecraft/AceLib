@@ -1,9 +1,9 @@
 package com.smile.acelib.context;
 
 /**
- * 操作類型列舉。
+ * 操作類型列舉（Supported）。
  *
- * <p>對應 Plan §八 Phase 3：將遊戲物件的操作語意分為 6 類，
+ * <p>將遊戲物件的操作語意分為 6 類，
  * 供 {@link ContextInspector} 與 {@link SafeExecutor} 決定該操作是否允許。</p>
  *
  * <h2>語意對照</h2>
@@ -21,7 +21,7 @@ package com.smile.acelib.context;
  *
  * @see ThreadContext
  * @see ContextInspector
- * @since Phase 3 (Plan §八)
+ * @since 1.0.0
  */
 public enum OperationType {
 
