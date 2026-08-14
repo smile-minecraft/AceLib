@@ -16,7 +16,9 @@
 
 ## 2. 加入 dependency
 
-AceLib 目前（`1.0.0` Release Candidate）**尚未發布**到外部 repository。先在 AceLib 根目錄建立本機 artifact：
+`1.0.0` GitHub Release 已建立，repository 已公開。下游 dependency 分為本機 Maven 與 JitPack commit artifact 兩條路徑；JitPack `v1.0.0` tag 目前仍不可宣稱成功。
+
+本機 Maven 路徑：
 
 ```bash
 # 在 AceLib 根目錄：把最新 artifact 發布到本機 Maven repository
@@ -37,8 +39,22 @@ dependencies {
 }
 ```
 
-> 正式發布後（未來 `v1.0.0`）會改為外部 Maven / JitPack 座標；目前
-> `mavenLocal()` 是唯一可重現的解析方式。
+> `mavenLocal()` 可解析 `com.smile:acelib:1.0.0`。JitPack commit 驗證則使用
+> `com.github.smile-minecraft:AceLib:cbf4a80`；不宣稱 Maven Central。
+
+JitPack commit 路徑：
+
+```kotlin
+repositories {
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    compileOnly("com.github.smile-minecraft:AceLib:cbf4a80")
+}
+```
+
+`cbf4a80` 的 JitPack API status 為 `ok`；consumer fixture 以 dependency substitution 指向該 commit，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。JitPack `v1.0.0` tag 仍因服務端快取舊 commit `9b8e55d` 為 `Error`，刪除舊失敗 build 或服務端介入後才可重新驗證。
 
 ## 3. 宣告 `depend: [AceLib]`
 
@@ -164,6 +180,6 @@ fixture 同時證明「舊 README 教的 `AceLib.getApi()` 無法編譯」—
 ## 下一步
 
 - [provider 生命週期](provider-lifecycle.md)：missing / not-ready / reload / disable 深度說明
-- [相容性與發布狀態](compatibility.md)：Java 25 / 26.1.2 基線、26.2 未驗證、發布時程
+- [相容性與發布狀態](compatibility.md)：Java 25 / 26.1.2 基線、26.2 未驗證、目前發布狀態
 - [API 分類契約](../reference/api-surface.md)：Supported / SPI / Internal 分類
 - [docs 導航](../../docs/README.md)：三類受眾路徑

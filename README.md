@@ -1,6 +1,6 @@
 # AceLib
 
-> AceLib 是 Smile 系列 Minecraft 插件共用的基礎函式庫。目前版本為 `1.0.0` Release Candidate，尚未對外發布；repository 仍為 private。
+> AceLib 是 Smile 系列 Minecraft 插件共用的基礎函式庫。目前 `1.0.0` GitHub Release 已建立，repository 已公開。JitPack `v1.0.0` tag 仍待服務端重建；本機 Maven publication 與 JitPack commit artifact 的狀態分開說明如下。
 >
 > 支援 **Paper 26.1.2 / Folia 26.1.2**，需要 **Java 25**。
 
@@ -40,7 +40,7 @@
 開始前要有：
 
 - **Java 25**（開發機或 CI 有 JDK 25；AceLib 的 Gradle 也會自動下載）。
-- **AceLib 本機 artifact**：因為 `1.0.0` 還沒發布到外部倉庫，先在本機產生一份（見下方「取得 AceLib」）。
+- **AceLib dependency**：本機使用 `com.smile:acelib:1.0.0`；需要外部驗證時使用已確認的 JitPack commit artifact `cbf4a80`（見下方「取得 AceLib」）。
 - 下游插件的 `plugin.yml` 宣告 `depend: [AceLib]`，保證 AceLib 先載入。
 
 ### 第一步：宣告載入順序
@@ -139,9 +139,9 @@ if (api.getPlatformCapability().regionScheduling()) {
 
 ---
 
-## 取得 AceLib（本機，因為還沒發布）
+## 取得 AceLib（本機與 JitPack commit artifact）
 
-下游插件的座標是 **`com.smile:acelib:1.0.0`**。目前 artifact 還沒發布到外部倉庫，本機驗證流程如下（也是 [consumer fixture](examples/consumer-plugin/README.md) 用的流程）：
+本機 Maven publication 的座標是 **`com.smile:acelib:1.0.0`**。這條路徑只在本機 Maven repository 驗證，不代表 Maven Central 已發布。下列流程也是 [consumer fixture](examples/consumer-plugin/README.md) 的本機驗證方式：
 
 ```bash
 # 1. 在 AceLib 根目錄，把最新 artifact 發布到本機 Maven repository
@@ -160,7 +160,19 @@ dependencies {
 }
 ```
 
-`1.0.0` 為 Release Candidate、**尚未發布**：repository 仍為 private，外部 Maven / JitPack artifact 還沒產生。本文件一律以「未發布」與 `1.0.0` 為準；`v1.0.0` 正式 git 標籤與外部發布，只會在發布流程完成後才成立。
+GitHub repository 已公開，GitHub `v1.0.0` Release 已建立。JitPack commit artifact 可用下列座標驗證：
+
+```kotlin
+repositories {
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    compileOnly("com.github.smile-minecraft:AceLib:cbf4a80")
+}
+```
+
+`cbf4a80` 的 JitPack API status 為 `ok`；consumer fixture 以 dependency substitution 指向 `com.github.smile-minecraft:AceLib:cbf4a80`，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。JitPack `v1.0.0` tag 目前仍為 `Error`，原因是服務端快取舊 commit `9b8e55d`；刪除舊失敗 build 或服務端介入後，才可重新驗證 tag。文件不得宣稱 `com.github.smile-minecraft:AceLib:v1.0.0` 已成功，也不宣稱 Maven Central 已發布。
 
 ---
 
@@ -424,15 +436,18 @@ AceLib 所有對外拋出或記錄的錯誤，都帶 `ACELIB-<AREA>-<CODE>` 格�
 
 ---
 
-## 限制與未發布狀態
+## 限制與發布狀態
 
-- **`1.0.0` 還沒發布**：repository 為 private，外部 Maven / JitPack artifact 尚未產生；`v1.0.0` 正式標籤與外部發布只會在發布流程完成後成立。
+- **GitHub 發布**：repository 已公開，GitHub `v1.0.0` Release 已建立，tag 指向含 Gradle wrapper 修復的 commit。
+- **JitPack tag**：`v1.0.0` 仍為 `Error`，服務端快取舊 commit `9b8e55d`；刪除舊失敗 build 或服務端介入仍待完成，不得宣稱 tag artifact 已成功。
+- **JitPack commit artifact**：`cbf4a80` status 為 `ok`；乾淨 Gradle user home 與 consumer fixture build／`verifyConsumerDocs` 已驗證。
+- **Maven**：`com.smile:acelib:1.0.0` 僅在本機 Maven publication 驗證；不宣稱 Maven Central。
 - **Folia 真實執行環境**：MockBukkit 不提供 Folia entity scheduler API，Folia 區域化排程的真實路徑需在 Folia 26.1.2 執行環境上驗證（用 smoke harness）。
 - **Vault 整合**：以 reflection-only 方式探測，還沒在真實 Vault 安裝環境驗證完整流程。
 - **`26.2` 尚未驗證**：升級 Paper / Folia 前要先做真實執行環境驗證，不能當成已支援。
 - **Bukkit `/reload`**：AceLib 不支援，可能導致狀態不一致。
 
-歷史里程碑 `v0.5.0` 的能力範圍仍保留於 [CHANGELOG.md](CHANGELOG.md)；`1.0.0` 是把 `0.5.0-SNAPSHOT` 封存為歷史、以最小範圍同步為 RC，**未改變任何 runtime 行為、public API 簽章、API 範圍或基線**。
+歷史里程碑 `v0.5.0` 的能力範圍仍保留於 [CHANGELOG.md](CHANGELOG.md)；`1.0.0` 封存 `0.5.0-SNAPSHOT` 為歷史版本，並以最小範圍同步為目前公開版本，**未改變任何 runtime 行為、public API 簽章、API 範圍或基線**。
 
 ---
 

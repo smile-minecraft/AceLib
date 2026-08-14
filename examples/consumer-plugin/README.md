@@ -13,13 +13,14 @@
 ## 前置
 
 - Java 25（toolchain 自動下載，或本機已有 JDK 25）。
-- AceLib 目前（`1.0.0` Release Candidate）**尚未發布到外部 repository**；
-  fixture 依賴本地 Maven artifact，先發布一次：
+- GitHub repository 已公開，`v1.0.0` GitHub Release 已建立；fixture 預設依賴本地 Maven artifact，先發布一次：
 
 ```bash
 # 在 AceLib 根目錄執行
 ./gradlew publishToMavenLocal
 ```
+
+本地 Maven 座標為 `com.smile:acelib:1.0.0`，不代表 Maven Central 已發布。JitPack commit 驗證使用 `com.github.smile-minecraft:AceLib:cbf4a80`；consumer fixture 以 dependency substitution 指向該 commit，其 status 為 `ok`，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。JitPack `v1.0.0` tag 仍因服務端快取舊 commit `9b8e55d` 為 `Error`，刪除舊失敗 build 或服務端介入後才可重新驗證。
 
 ## 編譯與驗證
 

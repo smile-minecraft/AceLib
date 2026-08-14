@@ -9,7 +9,7 @@
 - AceLib repository 已在本機 checkout。
 - 下游插件 JAR 已準備完成，且其 `plugin.yml` 宣告 `depend: [AceLib]`。
 
-`1.0.0` 仍是 Release Candidate；repository 為 private，尚未發布到外部 Maven 或 JitPack。不要從外部 Maven／JitPack 下載，直接使用本機建置產物。
+GitHub repository 已公開，`v1.0.0` GitHub Release 已建立。伺服器部署流程使用本機建置產物；`com.smile:acelib:1.0.0` 僅在本機 Maven publication 驗證。JitPack `v1.0.0` tag 仍為 `Error`，不得視為可用；已驗證的 JitPack commit artifact 為 `cbf4a80`。
 
 ## 可複製的部署流程
 

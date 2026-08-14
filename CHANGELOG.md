@@ -1,18 +1,18 @@
 # Changelog
 
 本檔記錄 AceLib 各版本的顯著變更。版本號遵循語意化版本（SemVer）；
-目前 `1.0.0` 為 **Release Candidate（尚未發布）**，外部 Maven / JitPack artifacts 尚未產生。
+目前 `1.0.0` GitHub Release 已建立，repository 已公開。JitPack `v1.0.0` tag 仍待服務端重建；JitPack commit artifact `cbf4a80` 已驗證可用。
 
-> **未發布邊界**：repository 仍為 private；`v1.0.0` 正式 git 標籤與外部發布
-> 僅在 publishing 流程完成、外部 artifacts 可下載後才成立。本檔與
-> [README](README.md)、[相容性與發布狀態](docs/consumer/compatibility.md)
-> 一律以「未發布」與 `1.0.0` 為準。
+> **發布狀態**：repository 已公開，GitHub `v1.0.0` Release 已建立。JitPack
+> `v1.0.0` tag 仍因服務端快取舊 commit `9b8e55d` 為 `Error`；刪除舊失敗 build
+> 或服務端介入後才可重新驗證。JitPack commit `cbf4a80` status 為 `ok`；
+> `com.smile:acelib:1.0.0` 仍只在本機 Maven publication 驗證，不宣稱 Maven Central。
 
 ---
 
-## [1.0.0] - 2026-08-14（Release Candidate，未發布）
+## [1.0.0] - 2026-08-14（GitHub Release 已建立）
 
-本版本將 `0.5.0-SNAPSHOT` 封存為歷史里程碑，並以最小範圍同步為 `1.0.0` RC。
+本版本將 `0.5.0-SNAPSHOT` 封存為歷史里程碑，並以最小範圍同步為 `1.0.0`；GitHub Release 已建立。
 **未變更任何 runtime 行為、public API 簽章、API surface、Java 25 / Paper / Folia 基線、
 checker policy 或 CI docsCheck。** 僅調整版本來源、consumer fixture 座標與現行文件文字。
 
@@ -43,7 +43,9 @@ checker policy 或 CI docsCheck。** 僅調整版本來源、consumer fixture �
 
 - 取得入口：`AceLibApi.AceLibProvider`（Bukkit `ServicesManager` 註冊），
   下游 plugin 以 `depend: [AceLib]` 保證載入順序。
-- 座標：`com.smile:acelib:1.0.0`（Maven publication；本機可 `publishToMavenLocal`）。
+- 座標：`com.smile:acelib:1.0.0`（本機 Maven publication；可 `publishToMavenLocal`，不代表 Maven Central）。
+- **JitPack 驗證**：`com.github.smile-minecraft:AceLib:cbf4a80` status 為 `ok`；consumer fixture 以 dependency substitution 指向該 commit，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。
+- **JitPack tag 限制**：`v1.0.0` 仍因服務端快取舊 commit `9b8e55d` 為 `Error`；刪除舊失敗 build 或服務端介入仍待完成。
 - 生命週期：enable / disable / reload 三態安全 facade；disable 後資源釋放、
   provider 切換為 shutdown facade，呼叫方會收到明確拒絕而非 NPE。
 - 錯誤契約：對外錯誤均攜帶 `ACELIB-<AREA>-<CODE>` 分類代碼，不吞錯。
@@ -57,7 +59,7 @@ checker policy 或 CI docsCheck。** 僅調整版本來源、consumer fixture �
 
 ### 驗證狀態
 
-下列驗證在本 RC 均為 Green（本機可重現）：
+下列驗證在目前公開的 `1.0.0` 狀態下均為 Green（本機可重現）：
 
 - `./gradlew test`：全部既有單元測試通過（含 API surface / signature / docs coverage）。
 - `./gradlew docsCheck`：Javadoc（doclint 啟用）、publication、consumer docs、API tests 聚合通過。
@@ -78,12 +80,12 @@ checker policy 或 CI docsCheck。** 僅調整版本來源、consumer fixture �
 - **`/reload` 支援**：AceLib 的 reload 僅指內部交易式 reload，不支援 Bukkit `/reload`
   指令；使用 Bukkit `/reload` 可能導致狀態不一致。
 
-### 未發布邊界（Release Candidate）
+### 發布狀態與限制
 
-- repository 仍為 **private**；外部 Maven / JitPack artifacts **尚未產生**。
-- 未建立 git tag / release，未執行 push，未對外公開 repository 或外部發布。
-- `v1.0.0` 正式 git 標籤與外部發布僅在 publishing 流程完成後成立。
-- 本 RC 僅保證本機可重現的 artifact 與 consumer 驗證；不宣稱外部 artifact 存在。
+- repository 已公開，GitHub `v1.0.0` Release 已建立；tag 指向含 Gradle wrapper 修復的 commit。
+- JitPack `v1.0.0` tag 仍為 `Error`，服務端快取舊 commit `9b8e55d`；刪除舊失敗 build 或服務端介入後，才可重新驗證 tag。
+- JitPack commit `cbf4a80` status 為 `ok`；consumer fixture 以 dependency substitution 指向該 commit，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。
+- `com.smile:acelib:1.0.0` 僅在本機 Maven publication 驗證；不宣稱 Maven Central。
 
 ---
 

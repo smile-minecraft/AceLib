@@ -2,8 +2,9 @@
 // 就能用正式 AceLibApi.AceLibProvider contract 編譯出乾淨的 plugin。
 //
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
-// AceLib 目前（1.0.0 Release Candidate）尚未發布到外部 repository，
-// 因此 fixture 依賴「本地 mavenLocal artifact」：
+// AceLib 1.0.0 的 GitHub repository 已公開、GitHub Release 已建立；
+// 但 JitPack `v1.0.0` tag 仍為服務端 Error，故 fixture 仍以「本地 mavenLocal artifact」解析，
+// 不依賴 JitPack tag 或 Maven Central 作為成功依據：
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
@@ -26,7 +27,7 @@ repositories {
 }
 
 dependencies {
-    // AceLib 尚未發布外部 artifact：以 mavenLocal 解析本地 publish 產物。
+    // AceLib 1.0.0 仍以 mavenLocal 解析本地 publish 產物（JitPack tag 仍 Error，不宣稱外部 Maven Central）。
     compileOnly("com.smile:acelib:1.0.0")
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
@@ -203,10 +204,56 @@ val verifyConsumerDocs by tasks.registering {
             ?: throw IllegalStateException("build.gradle.kts 找不到 version 欄位")
         val readmeText = readme.readText()
         require(readmeText.contains(expectedVersion)) {
-            "README.md 必須提到目前版本 $expectedVersion（未發布狀態）"
+            "README.md 必須提到目前版本 $expectedVersion"
         }
-        require(!readmeText.contains("v1.0.0") || readmeText.contains("未發布")) {
-            "README.md 不得宣稱 v1.0.0 已發布"
+        // 發布狀態：GitHub repository 已公開且 GitHub v1.0.0 Release 已建立。
+        // 文件必須明確描述此 public/release 狀態（不依賴 JitPack tag 或 Maven Central 作為成功依據）。
+        require(readmeText.contains("GitHub Release") && readmeText.contains("repository 已公開")) {
+            "README.md 必須明確描述 GitHub Release 與 repository 已公開狀態"
+        }
+        // 不得把 current-state 寫成未發布／Release Candidate（歷史段落如 0.5.0 封存、RC 同步說明不含「未發布」，不誤判）。
+        val unpublishedCurrentState = Regex("""v?1\.0\.0[^\n]*(未發布|Release Candidate[^\n]*尚未發布)""")
+        require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
+            "README.md 不得把 1.0.0 現況宣稱為未發布／Release Candidate"
+        }
+        // 不得把 JitPack tag v1.0.0 或 Maven Central 宣稱為已成功發布。
+        // 僅在「非否定語境」下判斷（README 現有「不宣稱 ... 已發布／已成功」說明不誤判）。
+        val externalPublishClaim = readme.readLines().any { line ->
+            val jitpackTag = line.contains("JitPack") && line.contains("v1.0.0")
+                && (line.contains("已成功") || line.contains("已發布"))
+            val mavenCentral = line.contains("Maven Central") && line.contains("已發布")
+            (jitpackTag || mavenCentral) && !line.contains("不")
+        }
+        require(!externalPublishClaim) {
+            "README.md 不得宣稱 JitPack tag v1.0.0 或 Maven Central 已成功發布"
+        }
+
+        // 4b) CHANGELOG 目前 release section 檢查：避免只檢查 README 而漏掉 CHANGELOG 的 stale RC 描述。
+        // 僅擷取目前版本 section（從 `## [<version>]` 到下一個同層 `## ` heading），不掃描歷史版本段落。
+        val changelog = File(repoRoot, "CHANGELOG.md")
+        require(changelog.exists()) { "找不到 CHANGELOG.md：$changelog" }
+        val changelogLines = changelog.readLines()
+        val currentSectionStart = changelogLines.indexOfFirst {
+            it.matches(Regex("##\\s+\\[" + Regex.escape(expectedVersion) + "].*"))
+        }
+        require(currentSectionStart >= 0) {
+            "CHANGELOG.md 找不到目前版本 section '## [$expectedVersion]'"
+        }
+        val currentSectionEnd = changelogLines.subList(currentSectionStart + 1, changelogLines.size)
+            .indexOfFirst { it.startsWith("## ") }
+            .let { if (it < 0) changelogLines.size else currentSectionStart + 1 + it }
+        val currentSection = changelogLines.subList(currentSectionStart, currentSectionEnd).joinToString("\n")
+        require(currentSection.contains(expectedVersion)) {
+            "CHANGELOG.md 目前 $expectedVersion section 必須提到版本 $expectedVersion"
+        }
+        require(currentSection.contains("GitHub Release")) {
+            "CHANGELOG.md 目前 $expectedVersion section 必須描述 GitHub Release 狀態"
+        }
+        // 拒絕目前 release section 的 current-state RC 表述（歷史 section 不在此範圍，不誤判）。
+        // 以明確 marker「本 RC」／「Release Candidate」判定，不用廣泛的 !contains("RC") 破壞歷史版本。
+        val changelogCurrentRc = Regex("""本\s*RC|Release Candidate""")
+        require(!changelogCurrentRc.containsMatchIn(currentSection)) {
+            "CHANGELOG.md 目前 $expectedVersion section 不得把現況宣稱為本 RC／Release Candidate"
         }
 
         // 5) docs 導航：consumer quickstart 必須存在（IA 預留給本任務的頁面）
