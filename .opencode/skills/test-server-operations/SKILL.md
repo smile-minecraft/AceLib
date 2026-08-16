@@ -70,15 +70,33 @@ lsof -iTCP:25575 -sTCP:LISTEN -P
 rtk grep -E 'RCON running on 127\.0\.0\.1:25575|No rcon password' "$LOG"
 ```
 
-目前環境不預設提供 `mcrcon` 或 `rcon-cli`。若本機已安裝 RCON client，可用下列形式執行；不要把密碼直接寫進命令列或回報內容：
+mcrcon CLI 可以安裝在測試用 Python virtual environment，不要污染 Homebrew Python：
 
 ```bash
-[ -n "${RCON_PASSWORD:-}" ] || { printf "%s\n" "RCON_PASSWORD 未設定" >&2; exit 1; }
-mcrcon -H 127.0.0.1 -P 25575 -p "$RCON_PASSWORD" list
-mcrcon -H 127.0.0.1 -P 25575 -p "$RCON_PASSWORD" acelib status
+MCRCON_VENV="${TMPDIR:-/tmp}/acelib-mcrcon-venv"
+python3 -m venv "$MCRCON_VENV"
+"$MCRCON_VENV/bin/python" -m pip install mcrcon
+MCRCON_BIN="$MCRCON_VENV/bin/mcrcon"
+"$MCRCON_BIN" --help
 ```
 
-若沒有 RCON client，使用只存在於核准暫存目錄的 Python standard-library probe，透過 `RCON_PASSWORD` 環境變數認證；不要把 probe 或密碼存進 repository。Minecraft console/RCON 指令不需要前置 `/`，例如 `list`、`acelib status`。
+目前已驗證 `mcrcon 0.7.0`。它的參數格式是：host 為位置參數，`-p/--port` 指定 port，密碼由 `RCON_PASSWORD` 環境變數提供；不要把密碼放進 `--password`、shell history 或回報內容。
+
+```bash
+[ -x "$MCRCON_BIN" ] || { printf '%s\n' 'MCRCON_BIN 不存在' >&2; exit 1; }
+[ -n "${RCON_PASSWORD:-}" ] || { printf '%s\n' 'RCON_PASSWORD 未設定' >&2; exit 1; }
+
+# 以 exit 結束互動模式，避免 stdin EOF 造成 client 例外。
+printf 'list\nexit\n' \
+  | env RCON_PASSWORD="$RCON_PASSWORD" "$MCRCON_BIN" 127.0.0.1 --port 25575
+
+printf 'acelib status\nexit\n' \
+  | env RCON_PASSWORD="$RCON_PASSWORD" "$MCRCON_BIN" 127.0.0.1 --port 25575
+```
+
+`list` 應回傳玩家數量。`acelib status` 的回應可能由 AceLib 寫入 server log，而不是直接顯示在 RCON client；執行後必須讀取 `logs/latest.log`，確認有 `AceLib Diagnostics Report`，並分辨診斷內容中的 `ACELIB-*` 是插件狀態還是 RCON 連線錯誤。
+
+若沒有網路或不允許安裝套件，才使用只存在於核准暫存目錄的 Python standard-library probe。Minecraft console/RCON 指令不需要前置 `/`，例如 `list`、`acelib status`。
 
 RCON 驗證必須同時保留：
 
