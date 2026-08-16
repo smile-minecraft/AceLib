@@ -1,129 +1,25 @@
-# 指令系統
+# 指令模型
 
-本頁解決需要註冊 Bukkit 指令、處理子指令與安全回覆時，如何使用 command 模組的問題。
+Command 模組公開 `CommandSpec`、`SubCommandSpec`、`CommandContext`、`CommandRegistry`、`ReplySink` 等型別，用來描述子指令、權限、參數、冷卻與回覆行為。
 
-## 何時需要
+## 1.0.0 的使用限制
 
-需要權限、玩家／console 限制、參數檢查、冷卻或 Folia-safe 玩家回覆時使用此模組。指令註冊表（registry）是保存指令規格與冷卻狀態的物件。
+AceLib 1.0.0 沒有提供給下游 plugin 的 Supported factory，可直接建立並接上 Bukkit 的 `CommandRegistry`。目前的 `CommandRegistryImpl`、`BukkitReplySink` 與 `BukkitCommandBridge` 都屬於內部組裝類別。
 
-## 怎麼取得／建立
+因此一般 consumer 不應照著這些 public class 的建構子自行接線，也不應把它們當成穩定 API。若你的 plugin 需要註冊 Bukkit 指令，請先使用 Paper/Bukkit 自己的 command API；AceLib 的 command model 可在未來有正式 factory 或由其他 Supported 組裝入口提供時再採用。
 
-以自身 plugin 建立 `CommandRegistryImpl` 與 `BukkitReplySink`，再以 `BukkitCommandBridge` 接到 `plugin.yml` 的指令名稱。
+公開 API 的分類可查 [API surface](../reference/api-surface.md)。
 
-## 最短範例
+## 已公開的指令描述能力
 
-```java
-CommandRegistryImpl registry =
-    new CommandRegistryImpl(new BukkitReplySink(plugin));
-registry.register(CommandSpec.builder("mycmd")
-    .subCommand(SubCommandSpec.builder("reload")
-        .playerOnly()
-        .handler(ctx -> ctx.reply("Reloaded!"))
-        .build())
-    .build());
-```
+組裝端若提供 `CommandRegistry`，可以使用這些穩定型別：
 
-## 不能做什麼
+- `CommandSpec`：根指令名稱、權限、用途與子指令集合。
+- `SubCommandSpec`：handler、權限、玩家或 console 限制、參數數量、冷卻與補全器。
+- `CommandContext`：sender、參數、玩家檢查與回覆方法。
+- `CommandException`、`CommandErrorKind`：帶 `ACELIB-CMD-*` 的拒絕與錯誤。
+- `ReplySink`：由組裝端提供實際回覆方式。
 
-- 不要把玩家回覆直接送到錯誤執行緒；使用 `ReplySink` 的 region-safe 路徑。
-- 不要在 plugin 停用後繼續 `register` 或 `dispatch`；會得到 `ACELIB-CMD-009`。
-- `Internal` 是 AceLib 內部型別，不是穩定下游契約；`SPI` 是留給外部實作者的擴充介面。下游只依賴文件列出的穩定介面與必要建立方式。
+玩家回覆仍須遵守 Folia region 規則。不要從任意背景執行緒直接操作 Bukkit `Player`；請由提供 registry 的組裝端安排 region-safe 回覆。
 
-## 深入說明
-
-契約唯一來源是 `src/main/java/com/smile/acelib/command/**` source 與 tests；本頁為導覽鏡像，不複製完整 JavaDoc。
-
-## 1. 取得方式
-
-command 模組以「建構 registry + 註冊 spec」方式使用。AceLib 內部以
-`CommandRegistryImpl(new BukkitReplySink(plugin))` 建立 registry；下游插件
-可自行建立或取得既有 registry：
-
-```java
-import com.smile.acelib.command.BukkitReplySink;
-import com.smile.acelib.command.CommandRegistryImpl;
-
-CommandRegistryImpl registry = new CommandRegistryImpl(new BukkitReplySink(plugin));
-```
-
-- `BukkitReplySink` 是預設回覆出口：玩家回覆走 Folia region-safe 派送，
-  console 輸出到 plugin logger。
-- 若要把 registry 接到 Bukkit 指令系統，使用
-  `BukkitCommandBridge(registry).attach(plugin, "mycmd")`；plugin.yml 必須
-  宣告對應指令。
-
-## 2. 最小正確範例
-
-```java
-import com.smile.acelib.command.CommandContext;
-import com.smile.acelib.command.CommandException;
-import com.smile.acelib.command.CommandSpec;
-import com.smile.acelib.command.SubCommandSpec;
-
-registry.register(
-    CommandSpec.builder("mycmd")
-        .permission("myplugin.use")
-        .description("My plugin command")
-        .subCommand(
-            SubCommandSpec.builder("reload")
-                .permission("myplugin.reload")
-                .playerOnly()
-                .minArgs(0)
-                .handler(ctx -> ctx.reply("Reloaded!"))
-                .build())
-        .build());
-```
-
-- `SubCommandSpec` 可指定：`permission`（null = 無權限需求）、`playerOnly` /
-  `consoleOnly`（二擇一）、`minArgs` / `maxArgs`（-1 = 無上限）、
-  `cooldownMillis`（毫秒，≤0 表示無冷卻）、`handler`（不可為 null）、
-  `completer`（可為 null）。
-- handler 內可用 `ctx.sender()` / `ctx.requirePlayer()` /
-  `ctx.requireOnlinePlayer()` / `ctx.args()` / `ctx.reply(String)` /
-  `ctx.replyError(Throwable)` / `ctx.replyPlayerAsync(String)`。
-- 錯誤以 `CommandException`（含 `CommandErrorKind` + `ACELIB-CMD-*` code）
-  表達；dispatcher 會自動呼叫 `ReplySink.sendError`，handler 不需 try-catch。
-
-## 3. Folia／執行緒契約與生命週期
-
-- dispatch / tab complete 在 Bukkit 指令執行緒（Paper main thread / Folia
-  對應 context）被呼叫；registry 所有 public 方法 thread-safe。
-- 對玩家的回覆一律走 `ReplySink` 的 region-safe 派送：
-  - `reply(String)` 同步回覆；
-  - `replyPlayerAsync(String)` 跨執行緒回覆，內部經
-    `SafeExecutor.executeOnRegion` 派送到玩家 region（async 完成後 mutate
-    仍符合 Folia 上下文安全）。
-- `requirePlayer()` 不檢查離線；需要 mutate 玩家時使用 `requireOnlinePlayer()`
-  （非玩家拋 `ACELIB-CMD-004`，離線拋 `ACELIB-CMD-007`）。
-- disable / reload：呼叫 `registry.onPluginDisable()` 標記停用、清指令；
-  之後 `register` 拋 `ACELIB-CMD-009`、`dispatch` 回覆錯誤，但既有指令 map
-  與冷卻狀態保留供 reload 重新註冊（冷卻 / 防重複觸發不因 reload 破壞）。
-
-## 常見失敗與錯誤碼
-
-全部錯誤代碼見 `CommandErrorKind`（`ACELIB-CMD-001` ~ `ACELIB-CMD-011`）：
-
-- `ACELIB-CMD-001` 缺少必要參數
-- `ACELIB-CMD-002` 未知的子指令
-- `ACELIB-CMD-003` 沒有權限執行
-- `ACELIB-CMD-004` 此指令僅限玩家
-- `ACELIB-CMD-005` 此指令僅限 console
-- `ACELIB-CMD-006` 冷卻中（防止重複觸發）
-- `ACELIB-CMD-007` 玩家已離線 / 失效
-- `ACELIB-CMD-008` 非同步指令流程失敗
-- `ACELIB-CMD-009` registry 已停用（plugin disable）
-- `ACELIB-CMD-010` caller 自訂錯誤代碼
-- `ACELIB-CMD-011` 玩家回覆 backend 不可用（非 AceLib owner 無法 region-safe 派送）
-
-## 查核來源
-
-- 介面：`CommandRegistry`、`Sender`、`PlayerHandle`、`ReplySink`；
-  SPI：`SubCommand`、`SubCommandCompleter`
-- 型別：`CommandContext`、`CommandSpec`、`SubCommandSpec`、`CooldownTracker`、
-  `CommandException`、`CommandErrorKind`
-- 測試：`src/test/java/com/smile/acelib/command/CommandRegistryTest.java`、
-  `CommandRegistryBukkitTest.java`、`CommandExceptionTest.java`、
-  `CooldownTrackerTest.java`、`BukkitReplySinkSafetyTest.java`、
-  `AceLibStatusCommandTest.java`
-- 下一步：[docs/modules/message.md](message.md)（訊息格式化）、
-  [docs/modules/context.md](context.md)（SafeExecutor 派送）
+完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。

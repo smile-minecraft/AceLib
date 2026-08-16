@@ -1,64 +1,40 @@
-# Quick Start：讓下游插件取得 AceLib API
+# 在 plugin 中使用 AceLib
 
-本頁解決下游插件如何加入 AceLib、確保載入順序，以及在啟用時取得可用 API 的問題。
+這份教學會建立一個以 Java 25 編譯、可在 Paper 或 Folia 26.1.2 載入的下游 plugin。
 
-## 預期結果
+## 1. 加入 Gradle dependency
 
-下游插件能編譯，`plugin.yml` 含 `depend: [AceLib]`，啟用時經 `ServicesManager` 取得 `AceLibApi.AceLibProvider`，並在使用前確認 `isReady()`。
-
-## 1. 前置條件
-
-| 元件 | 版本 | 說明 |
-| --- | --- | --- |
-| JDK | 25+ | Paper 26.1.2（目前基線）的最低需求 |
-| Paper / Folia API | 26.1.2 | 目前支援基線（已驗證；26.2 尚未驗證） |
-| Gradle | 9.5.1+ | 可用任意 wrapper / 版本（toolchain 會自動下載 JDK 25） |
-
-## 2. 加入 dependency
-
-`1.0.0` GitHub Release 已建立，repository 已公開。下游 dependency 分為本機 Maven 與 JitPack commit artifact 兩條路徑；JitPack `v1.0.0` tag 目前仍不可宣稱成功。
-
-本機 Maven 路徑：
-
-```bash
-# 在 AceLib 根目錄：把最新 artifact 發布到本機 Maven repository
-./gradlew publishToMavenLocal
-```
-
-下游 `build.gradle.kts`：
+`build.gradle.kts` 的最小設定如下：
 
 ```kotlin
+plugins {
+    java
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
 repositories {
-    mavenLocal()
+    maven("https://jitpack.io")
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 
 dependencies {
-    compileOnly("com.smile:acelib:1.0.0")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.0.0")
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
 ```
 
-> `mavenLocal()` 可解析 `com.smile:acelib:1.0.0`。JitPack commit 驗證則使用
-> `com.github.smile-minecraft:AceLib:cbf4a80`；不宣稱 Maven Central。
+AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.0.0.jar` 提供。JitPack `v1.0.0` 已在不含 `mavenLocal()` 的乾淨環境解析並編譯成功。
 
-JitPack commit 路徑：
+若 Gradle 找不到 AceLib，先確認 repository URL 是 `https://jitpack.io`，座標的 group 是 `com.github.smile-minecraft`，版本包含 `v`：`v1.0.0`。
 
-```kotlin
-repositories {
-    maven("https://jitpack.io")
-}
+## 2. 宣告 server dependency
 
-dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:cbf4a80")
-}
-```
-
-`cbf4a80` 的 JitPack API status 為 `ok`；consumer fixture 以 dependency substitution 指向該 commit，並在乾淨 Gradle user home 完成 build／`verifyConsumerDocs`。JitPack `v1.0.0` tag 仍因服務端快取舊 commit `9b8e55d` 為 `Error`，刪除舊失敗 build 或服務端介入後才可重新驗證。
-
-## 3. 宣告 `depend: [AceLib]`
-
-`plugin.yml`：
+在你的 `src/main/resources/plugin.yml` 加入 `depend: [AceLib]`：
 
 ```yaml
 name: MyPlugin
@@ -66,120 +42,82 @@ main: com.example.myplugin.MyPlugin
 version: 1.0.0
 api-version: '26.1.2'
 folia-supported: true
-load: POSTWORLD
-depend:
-  - AceLib
+depend: [AceLib]
 ```
 
-`depend` 的意義：
+伺服器會先啟用 AceLib。若 `plugins/` 中沒有 AceLib，或 AceLib 啟用失敗，你的 plugin 不會載入。
 
-- **載入順序保證**：伺服器先載入並 enable AceLib，才載入下游 plugin。
-- **前置檢查**：AceLib 不在 `plugins/` 或 enable 失敗時，伺服器**拒絕載入**
-  下游 plugin（logs 會顯示 missing dependency）。
+## 3. 取得 provider
 
-`depend` 不是唯一防禦：AceLib 可能「已載入但尚未 ready」或「被 disable」，
-這兩種情境 `depend` 攔不住，必須在 runtime 檢查（見下節）。
-
-## 4. 取得 `AceLibApi.AceLibProvider`
-
-正式取得入口是 Bukkit/Paper `ServicesManager` 註冊的
-**`AceLibApi.AceLibProvider`**。`ServicesManager` 是插件服務的登錄表；provider 是登錄表中的 AceLib 入口。
+在 `JavaPlugin` 的 `onEnable()` 中透過 `ServicesManager` 取得 provider：
 
 ```java
+package com.example.myplugin;
+
 import com.smile.acelib.AceLibApi;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class MyPlugin extends JavaPlugin {
+public final class MyPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
         RegisteredServiceProvider<AceLibApi.AceLibProvider> registration =
-            getServer().getServicesManager().getRegistration(AceLibApi.AceLibProvider.class);
+            getServer().getServicesManager()
+                .getRegistration(AceLibApi.AceLibProvider.class);
 
         if (registration == null) {
-            // AceLib 尚未 enable 或已 disable：depend 攔不到的 runtime 情境
-            getLogger().warning("AceLib provider 未註冊；停用本 plugin。");
+            getLogger().severe("AceLib provider 未註冊；停用本 plugin。");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
         AceLibApi api = registration.getProvider().api();
         if (!api.isReady()) {
-            // AceLib 存在但尚未 ready（例如剛 reload 或已 shutdown）
-            getLogger().warning("AceLib 尚未 ready；停用本 plugin。");
+            getLogger().severe("AceLib 尚未就緒；停用本 plugin。");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        // 之後可安全使用 api
         getLogger().info("AceLib " + api.getVersion()
             + " on " + api.getPlatform().getDisplayName());
     }
 }
 ```
 
-**禁止**：
+成功編譯並部署兩個 JAR 後，啟動日誌會出現 AceLib 版本與偵測到的 `Paper` 或 `Folia`。
 
-- `import com.smile.acelib.AceLibPlugin` + unchecked cast（`AceLibPlugin` 是
-  Internal 類別，非穩定消費者契約）。
-- `AceLib.getApi()` static 呼叫（`com.smile.acelib.AceLib` 不存在）。
-
-## 5. 使用 facade 與平台分支
-
-`AceLibApi` 是不可變 facade（把內部實作包成穩定 API 外觀），永不回傳 null 的 service 包括：
-
-| 方法 | 用途 | 未 ready / shutdown 時 |
-| --- | --- | --- |
-| `getVersion()` | AceLib 版本字串 | 仍回傳版本 |
-| `getPlatform()` | `FOLIA` / `PAPER` / `UNKNOWN` | `UNKNOWN` |
-| `getPlatformCapability()` | 平台能力 profile（record） | 全 false |
-| `getWorldService()` | 世界操作安全 facade | `NOT_READY` / `SHUTDOWN`（操作被拒絕並帶錯誤碼） |
-| `getGuiService()` | GUI 安全 facade | `NOT_READY` / `SHUTDOWN` |
-| `getExternalIntegrationService()` | 外部整合查詢 facade | `NOT_READY` / `SHUTDOWN` |
-
-平台分支範例：
-
-```java
-if (api.getPlatformCapability().regionScheduling()) {
-    // Folia：操作實體 / 方塊 / 玩家必須在 region thread，走 AceLib 安全排程 API
-} else if (api.getPlatformCapability().globalScheduler()) {
-    // Paper：可安全使用全域 BukkitScheduler
-}
-```
-
-Folia 環境下不得以 `Bukkit.getServer().getScheduler()` 作為預設路徑；
-詳見 [provider 生命週期](provider-lifecycle.md#3-thread-context-與-folia-safe)。
-
-## 6. 可編譯範例（fixture）
-
-完整、可重現的 consumer plugin 位於
-[examples/consumer-plugin/](../../examples/consumer-plugin/README.md)：
-
-```bash
-# 前置：發布 AceLib 到本機 Maven
-./gradlew publishToMavenLocal
-
-# 編譯 consumer fixture（驗證正式 provider contract）
-./gradlew -p examples/consumer-plugin compileJava --console=plain
-
-# 完整驗證（compile + docs 檢查）
-./gradlew -p examples/consumer-plugin build --console=plain
-```
-
-fixture 同時證明「舊 README 教的 `AceLib.getApi()` 無法編譯」—
-把範例改成 stale contract 會得到 `cannot find symbol: class AceLib`。
+`provider.api()` 不會回傳 `null`，但 AceLib 停用後 `isReady()` 會變成 `false`。不要把 `AceLibApi` 永久快取後假設它不會改變；完整做法請看 [Provider 生命週期](provider-lifecycle.md)。
 
 ## 常見失敗
 
-- provider 為 `null`：AceLib 未啟用或已停用；不要直接取 API，停用下游插件或走 fallback。
-- `isReady()` 為 `false`：API facade 存在，但目前不可用；不要繼續呼叫 service。
-- 編譯找不到 `AceLib`：不要使用不存在的 `AceLib.getApi()`，改用 `ServicesManager` 入口。
-- Folia 發生上下文錯誤：不要以 `Bukkit.getServer().getScheduler()` 作為預設路徑，改用安全排程 API。
+### `Could not find com.github.smile-minecraft:AceLib:v1.0.0`
 
-## 下一步
+檢查是否加入 JitPack、大小寫是否為 `AceLib`，以及版本前面的 `v` 是否保留。不要改用 `com.smile:acelib:1.0.0`；那是 repository 貢獻者在本機執行 `publishToMavenLocal` 後才有的座標。
 
-- [provider 生命週期](provider-lifecycle.md)：missing / not-ready / reload / disable 深度說明
-- [相容性與發布狀態](compatibility.md)：Java 25 / 26.1.2 基線、26.2 未驗證、目前發布狀態
-- [API 分類契約](../reference/api-surface.md)：Supported / SPI / Internal 分類
-- [docs 導航](../../docs/README.md)：三類受眾路徑
+### Server 顯示 missing dependency
+
+你的 plugin JAR 已放進 `plugins/`，但 AceLib runtime JAR 不在。管理員可依[部署指南](../operator/README.md)從原始碼建立 `build/libs/AceLib-1.0.0.jar`。
+
+### Provider 是 `null`
+
+AceLib 沒有成功啟用，或已經停用。查看 AceLib 啟動日誌，不要直接依賴 `AceLibPlugin` 或自行 cast plugin instance。
+
+### `isReady()` 是 `false`
+
+API 物件存在，但服務目前不可用。停止使用 AceLib 服務，改走你自己的降級路徑，或停用下游 plugin。
+
+### Folia 出現 context 錯誤
+
+玩家、實體與方塊操作必須在所屬 region 執行。不要把全域 `BukkitScheduler` 當成 Folia 的預設路徑；請從[排程](../modules/scheduler.md)與[上下文安全](../modules/context.md)開始。
+
+## Repository 內的本機開發
+
+若你正在修改 AceLib 本身，可先發布本機 Maven 產物，再編譯附帶的 consumer 範例：
+
+```bash
+./gradlew publishToMavenLocal
+./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
+```
+
+該範例使用 `mavenLocal()` 與 `com.smile:acelib:1.0.0`，只用於驗證目前 checkout 的程式碼。一般 plugin 專案請使用本頁前面的 JitPack 座標。

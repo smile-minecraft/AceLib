@@ -1,79 +1,34 @@
 # 訊息服務
 
-本頁解決如何載入多語系訊息、格式化文字，以及在 Paper／Folia 傳送玩家訊息的問題。契約唯一來源是
-> `src/main/java/com/smile/acelib/message/MessageService.java` 與 tests；
-> 本頁為導覽鏡像，不複製完整 JavaDoc。
+`MessageService` 使用 `LangManager` 載入的語系內容，提供格式化、聊天、action bar、title、廣播與 console 輸出。Consumer 自行建立這兩個物件。
 
-## 前置條件與最短路徑
-
-先建立 `LangManager`，再以 plugin 與語系管理器建構 `MessageService`，最後使用 `format`、`sendChat` 或其他輸出方法。
-
-## 預期結果
-
-訊息可完成格式化與輸出；缺少 key 或玩家不可用時回傳安全的降級結果並記錄對應 warning，不中斷其他流程。
-
-## 1. 取得方式
-
-`MessageService` 以「建構注入」方式取得（不經 `AceLibApi` facade）：
+## 建立服務
 
 ```java
-import com.smile.acelib.config.LangManager;
-import com.smile.acelib.message.MessageService;
-import java.util.Locale;
-
-LangManager lang = new LangManager(plugin, Locale.TAIWAN);
-MessageService messages = new MessageService(plugin, lang);
+LangManager lang = new LangManager(this, Locale.TAIWAN);
+MessageService messages = new MessageService(this, lang);
 ```
 
-- 建構子會優先重用 `AceLibPlugin` 的 canonical platform / capability 快取；
-  一般 plugin 才透過 `PlatformDetector` 自行偵測。呼叫端不需手動注入
-  `Platform` 與 `PlatformCapability`。
-- 玩家導向訊息通用的 prefix key 為 `message.prefix`（在 `<locale>.yml` 內）。
+玩家訊息的共用前綴 key 是 `message.prefix`。
 
-## 2. 最小正確範例
+## 格式化與傳送
 
 ```java
-import java.util.Map;
+String text = messages.format(
+    "command.reload.done",
+    Map.of("plugin", getName()));
 
-// 純文字格式化（含 message.prefix）
-String text = messages.format("command.reload.done", Map.of("plugin", "MyPlugin"));
-
-// 玩家 chat / action bar / title（key 缺失時回傳空字串並記錄 warning，不中斷）
-messages.sendChat(player, "command.reload.done", Map.of("plugin", "MyPlugin"));
+messages.sendChat(player, "command.reload.done", Map.of("plugin", getName()));
 messages.sendActionBar(player, "actionbar.ready", Map.of());
-
-// title + 可選 subtitle（subtitleKey 為 null 時不送出）
-messages.sendTitle(player, "title.welcome", Map.of("name", player.getName()),
-    null, Map.of());
-
-// 全服廣播與 console
+messages.sendTitle(player, "title.welcome", Map.of("name", player.getName()));
 messages.broadcast("broadcast.announcement", Map.of());
 messages.sendConsole("console.started", Map.of());
 ```
 
-## 3. Folia／執行緒契約與生命週期
+缺少訊息 key 時會回傳空字串並記錄 warning，不會中斷其他流程。玩家為 `null` 或已離線時，玩家輸出會安全略過。
 
-- 玩家訊息在 Folia 環境下走 native API；若捕獲
-  `IllegalStateException`（non-owned region 的標準例外），記錄
-  `ACELIB-MSG-002` warning 並降級為 silent no-op。
-- Paper / UNKNOWN 平台下 player API 拋 `IllegalStateException`（非 Folia
-  context 語意）→ 視為一般格式/輸出降級，輸出 `ACELIB-MSG-003` warning；
-  不誤標為 `ACELIB-MSG-002`。
-- 玩家 null 或離線 → no-op + 適當警告，不中斷執行。
-- 執行緒安全：本類別為不可變狀態（所有欄位建構後不變），
-  符合多 region 並行安全。
+## Paper 與 Folia
 
-## 常見失敗與錯誤碼
+對玩家送訊息仍受 server 的執行緒規則約束。Folia 在不屬於玩家的 region 操作時，AceLib 會以 `ACELIB-MSG-002` 記錄並略過；其他格式或輸出問題使用 `ACELIB-MSG-003`。
 
-- `ACELIB-MSG-001` 訊息 key 缺失（回傳空字串 + warning）
-- `ACELIB-MSG-002` 在不安全上下文操作玩家訊息（Folia）
-- `ACELIB-MSG-003` 訊息格式錯誤，或 Paper / UNKNOWN 平台下 player API 拋
-  `IllegalStateException` 的安全降級
-
-## 查核來源
-
-- 型別：`MessageService`（依賴 `LangManager`、`Platform`、`PlatformCapability`）
-- 測試：`src/test/java/com/smile/acelib/message/MessageServiceTest.java`、
-  `MessageServiceFoliaTest.java`
-- 下一步：[docs/modules/config.md](config.md)（LangManager）、
-  [docs/modules/command.md](command.md)（指令回覆出口消費格式化結果）
+如果訊息來自背景工作，先用[安全排程](scheduler.md)或[上下文安全](context.md)回到玩家所在 region。完整代碼見[錯誤碼](../reference/error-codes.md)。

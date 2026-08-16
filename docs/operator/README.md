@@ -1,84 +1,86 @@
-# 部署、診斷與平台限制
+# 在 Paper 或 Folia 部署 AceLib
 
-本頁解決伺服器管理員如何從 AceLib repository 建立 runtime JAR、放入伺服器、啟動下游插件並確認服務狀態的問題。
+AceLib 1.0.0 需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 目前沒有 JAR asset，請從公開 repository 建置。
 
-## 前置條件
-
-- Java 25。
-- Paper 或 Folia `26.1.2` 伺服器。
-- AceLib repository 已在本機 checkout。
-- 下游插件 JAR 已準備完成，且其 `plugin.yml` 宣告 `depend: [AceLib]`。
-
-GitHub repository 已公開，`v1.0.0` GitHub Release 已建立。伺服器部署流程使用本機建置產物；`com.smile:acelib:1.0.0` 僅在本機 Maven publication 驗證。JitPack `v1.0.0` tag 仍為 `Error`，不得視為可用；已驗證的 JitPack commit artifact 為 `cbf4a80`。
-
-## 可複製的部署流程
-
-以下變數只代表本機路徑，依環境替換；不需要使用特定絕對路徑。
+## 建立 runtime JAR
 
 ```bash
-# AceLib repository 根目錄
-export ACELIB_ROOT="/path/to/AceLib"
-
-# Paper 或 Folia 伺服器目錄
-export SERVER_DIR="/path/to/minecraft-server"
-
-# 下游插件 JAR；替換成實際檔案
-export DOWNSTREAM_PLUGIN_JAR="/path/to/MyPlugin.jar"
-
-# 伺服器啟動 JAR；替換成實際檔案
-export SERVER_LAUNCHER="$SERVER_DIR/paper-26.1.2.jar"
-
-# 1. 在 AceLib repository 根目錄建立 runtime JAR
-cd "$ACELIB_ROOT"
+git clone https://github.com/smile-minecraft/AceLib.git
+cd AceLib
+git checkout v1.0.0
 ./gradlew clean build --no-daemon --console=plain
-
-# 2. 只複製 runtime JAR；不要複製 -sources 或 -javadoc artifact
-mkdir -p "$SERVER_DIR/plugins"
-cp "$ACELIB_ROOT/build/libs/AceLib-1.0.0.jar" \
-   "$SERVER_DIR/plugins/AceLib-1.0.0.jar"
-
-# 3. 放入下游插件
-cp "$DOWNSTREAM_PLUGIN_JAR" "$SERVER_DIR/plugins/"
-
-# 4. 啟動伺服器
-cd "$SERVER_DIR"
-java -jar "$SERVER_LAUNCHER" --nogui
 ```
 
-runtime JAR 的固定位置是 `build/libs/AceLib-1.0.0.jar`。`build/libs/` 可能同時有 `AceLib-1.0.0-sources.jar` 與 `AceLib-1.0.0-javadoc.jar`；伺服器只需要 `AceLib-1.0.0.jar`。
-
-## 啟動後確認
-
-伺服器完成啟動後，在 console 或具備 `acelib.admin` 權限的玩家執行：
+建置成功後會產生：
 
 ```text
-/acelib status
+build/libs/AceLib-1.0.0.jar
 ```
 
-預期報告包含：
+`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.0.0.jar`。
+
+## 放進 server
+
+1. 停止 server。
+2. 把 `AceLib-1.0.0.jar` 複製到 server 的 `plugins/`。
+3. 把需要 AceLib 的下游 plugin JAR 也放進 `plugins/`。下游 plugin 的 `plugin.yml` 應含 `depend: [AceLib]`。
+4. 以 Java 25 啟動 Paper 或 Folia。
+
+例如：
+
+```bash
+cp build/libs/AceLib-1.0.0.jar /path/to/server/plugins/
+cd /path/to/server
+java -jar paper-26.1.2.jar --nogui
+```
+
+Folia 請將最後一行換成實際的 Folia server JAR 檔名。
+
+## 啟動後檢查
+
+在 console 執行：
 
 ```text
+acelib status
+```
+
+玩家使用 `/acelib status` 需要 `acelib.admin`；此權限預設只給 op。正常輸出會包含：
+
+```text
+=== AceLib Diagnostics Report ===
 Version: 1.0.0
 Platform: Paper
 Ready: true
-Modules:
-  scheduler: READY - ...
-  config: READY - ...
 ```
 
-Folia 伺服器的 `Platform` 應顯示 `Folia`；Paper 伺服器應顯示 `Paper`。`Ready: true` 表示 AceLib 已啟用並可供下游插件使用。`Modules` 會列出模組狀態，例如 `READY`、`NOT_INITIALIZED`、`UNAVAILABLE`、`FAILED` 或 `DEGRADED`；異常狀態需繼續查看啟動日誌與 `ACELIB-*` 錯誤碼。
+Folia server 的 `Platform` 應顯示 `Folia`。報告也會列出模組狀態與最近的錯誤。`Ready: true` 表示 AceLib 可以提供服務；若為 `false`，請回頭查看啟動日誌。
 
-## 常見失敗
+## Paper 與 Folia 的差異
 
-- 找不到 `build/libs/AceLib-1.0.0.jar`：確認命令是在 AceLib repository 根目錄執行，並重新執行 `./gradlew clean build`。
-- 只放入下游插件、未放入 AceLib：`depend: [AceLib]` 會使下游插件無法載入。
-- `Ready: false`：檢查 AceLib 啟用日誌與 provider 狀態。
-- `ACELIB-CTX-003`：Folia 上在錯誤 region context 操作玩家、實體或方塊。
-- `ACELIB-SCHED-005`：目前平台不支援指定排程模式。
-- 不要使用 Bukkit `/reload`；AceLib 的 reload 只指內部交易式重載，Bukkit `/reload` 可能造成狀態不一致。
+Paper 使用全域同步排程；Folia 會把玩家、實體與世界位置分配到各自的 region。AceLib 會依平台選擇排程方式，但下游 plugin 仍須遵守 Folia 的 region 規則。
 
-## 下一步
+若 Folia 日誌出現 `ACELIB-CTX-*` 或 `ACELIB-SCHED-*`，通常是下游 plugin 在錯誤的執行緒操作玩家、實體或方塊。請將錯誤碼連同前後日誌交給 plugin 開發者，並對照[錯誤碼頁](../reference/error-codes.md)。
 
-- `/acelib status` 與完整錯誤表：根 [README.md](../../README.md)
-- 平台與 Folia 限制：根 [README.md](../../README.md#平台差異folia-與-paper)
-- 版本與發布限制：[Consumer 相容性指南](../consumer/compatibility.md)
+MockBukkit 測試不能代替真實 Folia region scheduler 驗證。升級或加入新的 region 相關功能後，應在測試 server 上先做完整啟動與操作測試。
+
+## 不要使用 Bukkit `/reload`
+
+AceLib 不支援 Bukkit `/reload`。請正常停止並重新啟動 server。文件或 API 中提到的 AceLib reload 是函式庫自己的生命週期操作，不等於 Bukkit 指令。
+
+## 常見問題
+
+### 下游 plugin 顯示 missing dependency
+
+確認 `plugins/` 同時有 AceLib JAR，並檢查 AceLib 是否在啟用時先發生錯誤。
+
+### 找不到 `build/libs/AceLib-1.0.0.jar`
+
+確認你在 AceLib repository 根目錄執行建置，並使用 Java 25。重新執行完整的 `./gradlew clean build --no-daemon --console=plain`，不要只找 GitHub Release asset。
+
+### `/acelib status` 沒有權限
+
+從 server console 執行，或授予玩家 `acelib.admin`。
+
+### 想升級到 26.2
+
+Paper 與 Folia 26.2 尚未驗證。先在獨立測試 server 驗證，再決定是否升級正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。

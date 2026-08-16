@@ -1,0 +1,50 @@
+# 如何取得 AceLib
+
+插件開發者取得的是編譯用 API；伺服器管理員需要的是可放進 `plugins/` 的 runtime JAR。兩者不是同一個安裝步驟。
+
+## 插件開發者：從 JitPack 取得 API
+
+Gradle repository 是 `https://jitpack.io`，`compileOnly` 座標是 `com.github.smile-minecraft:AceLib:v1.0.0`。可直接複製的完整設定與 Paper API dependency 請看[快速開始](../consumer/quickstart.md)。
+
+`v1.0.0` 已在乾淨且沒有 `mavenLocal()` 的 Gradle user home 中解析並編譯成功。JitPack 提供：
+
+- `AceLib-v1.0.0.jar`
+- `AceLib-v1.0.0-sources.jar`
+- `AceLib-v1.0.0-javadoc.jar`
+
+主 JAR 包含 `AceLibApi`、`AceLibApi.AceLibProvider` 與 `AceLibVersion`。POM 座標為 `com.github.smile-minecraft:AceLib:v1.0.0`，沒有 transitive dependencies；Gradle module metadata 要求 Java 25。
+
+JitPack 舊的建置紀錄可能與目前可下載檔案不同，請以本頁座標與實際解析結果為準。
+
+## 伺服器管理員：建立 plugin JAR
+
+GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 已公開，`v1.0.0` 是正式 Release。該 Release 目前沒有 binary asset，因此 Release 頁面沒有可直接下載的 server plugin JAR。
+
+請 checkout `v1.0.0` 後從原始碼建置：
+
+```bash
+git clone https://github.com/smile-minecraft/AceLib.git
+cd AceLib
+git checkout v1.0.0
+./gradlew clean build --no-daemon --console=plain
+```
+
+成功後使用：
+
+```text
+build/libs/AceLib-1.0.0.jar
+```
+
+不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。完整步驟請看[伺服器管理員指南](../operator/README.md)。
+
+Git tag `v1.0.0` 指向 commit `cbf4a80f69c83bf3095258b42321c5b6b359f8cf`。
+
+## 貢獻者：發布到本機 Maven
+
+修改 AceLib 或驗證 repository 內的 consumer 範例時，可執行：
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+這會在本機提供 `com.smile:acelib:1.0.0`。它不是 Maven Central 座標，也不應作為一般 plugin 開發者的安裝方式。
