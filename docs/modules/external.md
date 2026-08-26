@@ -1,6 +1,8 @@
 # 外部 plugin 狀態
 
-AceLib 可查詢 Vault、PlaceholderAPI 與 LuckPerms 是否存在、已啟用且版本可接受。從 ready 的 API 取得服務：
+AceLib 可查詢 Vault、PlaceholderAPI、LuckPerms 與 Floodgate 是否存在、已啟用且版本可接受。從 ready 的 API 取得服務：
+
+Floodgate 整合同時餵養 BedrockService（基岩玩家偵測與表單發送）；詳見[基岩版玩家模組](bedrock.md)。
 
 ```java
 ExternalIntegrationService external = api.getExternalIntegrationService();

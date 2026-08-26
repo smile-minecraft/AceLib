@@ -101,6 +101,7 @@ public final class MyPlugin extends JavaPlugin {
 - AceLib 不支援 Bukkit `/reload`。文件中的 AceLib reload 是函式庫自己的生命週期操作，兩者不同。
 - MockBukkit 測試不能取代 Folia 真實 region scheduler 的執行驗證。
 - 日誌中的對外錯誤使用 `ACELIB-<AREA>-<CODE>` 格式，可在[錯誤碼頁](docs/reference/error-codes.md)查詢。
+- 基岩（Geyser/Floodgate）玩家有平台限制——聊天連結不可點擊、GUI 無法區分左右鍵，詳見[模組指南的 bedrock 頁](docs/modules/bedrock.md)。
 
 ## MIT License
 

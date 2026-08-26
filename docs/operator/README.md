@@ -67,6 +67,25 @@ MockBukkit 測試不能代替真實 Folia region scheduler 驗證。升級或加
 
 AceLib 不支援 Bukkit `/reload`。請正常停止並重新啟動 server。文件或 API 中提到的 AceLib reload 是函式庫自己的生命週期操作，不等於 Bukkit 指令。
 
+## 基岩玩家支援（Geyser/Floodgate）
+
+AceLib 可偵測基岩版玩家（經 Geyser 連線、由 Floodgate 提供身分）並傳送原生表單。相關 API 見[基岩版玩家模組](../modules/bedrock.md)與[表單模組](../modules/form.md)。
+
+### 前提
+
+server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）。
+
+### Geyser 裝在 proxy 時的必要設定
+
+- proxy 端 `send-floodgate-data: true`（來源：GeyserMC Floodgate Setup 文件）。
+- 所有後端 server 使用同一份 `key.pem`，並妥善保護金鑰。
+
+### 啟動後如何確認
+
+執行 `acelib status`，或查看啟動日誌中的 Floodgate 整合狀態。未安裝 Floodgate 時 AceLib 仍正常運作，只是基岩查詢永遠回 false、表單發送被拒。
+
+版本資訊見[相容性](../consumer/compatibility.md)的基岩版支援段落。
+
 ## 常見問題
 
 ### 下游 plugin 顯示 missing dependency
