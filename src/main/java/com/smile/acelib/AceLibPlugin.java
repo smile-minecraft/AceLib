@@ -1,6 +1,7 @@
 package com.smile.acelib;
 
 import com.smile.acelib.command.AceLibStatusHandler;
+import com.smile.acelib.bedrock.BedrockService;
 import com.smile.acelib.command.BukkitCommandBridge;
 import com.smile.acelib.command.BukkitReplySink;
 import com.smile.acelib.command.CommandRegistryImpl;
@@ -16,6 +17,7 @@ import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.external.ExternalIntegrationServiceImpl;
+import com.smile.acelib.external.FloodgateIntegrationAdapter;
 import com.smile.acelib.external.IntegrationRegistry;
 import com.smile.acelib.external.LuckPermsIntegrationAdapter;
 import com.smile.acelib.external.PlaceholderApiIntegrationAdapter;
@@ -207,6 +209,17 @@ public class AceLibPlugin extends JavaPlugin {
     private volatile ExternalIntegrationService externalService;
 
     /**
+     * 基岩版玩家服務 facade。
+     *
+     * <p>於 {@link #bindExternalService(Server)} 成功後由 {@link #bindBedrockService()}
+     * 建立：floodgate adapter 啟用時攜帶 typed lookup，缺席時攜帶
+     * {@link BedrockService.PlayerLookup#absent()}（查詢安全回覆非基岩玩家，
+     * 對呼叫端零影響）。onEnable 之前若被取得，一律回 unavailable facade
+     * （{@link BedrockService#NOT_READY}）；disable 後為 SHUTDOWN facade。</p>
+     */
+    private volatile BedrockService bedrockService;
+
+    /**
      * 對外正式取得入口：動態 provider（{@link AceLibApi.AceLibProvider}）。
      *
      * <p>於 onEnable 建立並透過 Bukkit/Paper {@code ServicesManager} 註冊；
@@ -273,6 +286,8 @@ public class AceLibPlugin extends JavaPlugin {
         this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
         // guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
         this.guiService = GuiService.forUnavailable(GuiErrorCode.NOT_READY);
+        // bedrockService 的 NOT_READY unavailable facade；於 onEnable 後被 bindBedrockService() 替換。
+        this.bedrockService = BedrockService.forUnavailable(BedrockService.NOT_READY);
     }
 
     // ---------------------------------------------------------------------
@@ -375,6 +390,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.worldService,
             this.guiService,
             this.externalService,
+            this.bedrockService,
             () -> ready,
             () -> reload()
         );
@@ -452,6 +468,9 @@ public class AceLibPlugin extends JavaPlugin {
 
         // 外部整合服務 shutdown（釋放 registry 資源）並解除 integration 模組狀態註冊。
         unbindExternalService();
+
+        // 基岩服務 shutdown（external registry 之後；查詢改為 SHUTDOWN 拒絕）。
+        unbindBedrockService();
 
         this.ready = false;
         this.server = null;
@@ -828,6 +847,18 @@ public class AceLibPlugin extends JavaPlugin {
                     + t.getMessage());
             }
         }
+        // 舊基岩服務同步 shutdown：bindBedrockService 會在 commit 階段覆寫欄位，
+        // 但若 external bind 失敗進入 rollback，欄位仍指向舊 impl——先 shutdown
+        // 使其查詢轉為 SHUTDOWN 拒絕，避免 rollback 後殘留 READY 語意。
+        BedrockService oldBedrock = this.bedrockService;
+        if (oldBedrock != null) {
+            try {
+                oldBedrock.shutdown();
+            } catch (Throwable t) {
+                logFine("reload: old bedrock service shutdown failed (ignored): "
+                    + t.getMessage());
+            }
+        }
         if (reloadExternalBindFailureHook != null) {
             try {
                 reloadExternalBindFailureHook.run();
@@ -913,6 +944,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.worldService,
             this.guiService,
             this.externalService,
+            this.bedrockService,
             () -> ready,
             () -> reload()
         );
@@ -1442,7 +1474,7 @@ public class AceLibPlugin extends JavaPlugin {
     /**
      * 建立並綁定外部整合服務，並向 diagnostics 註冊 integration 模組狀態。
      *
-     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link IntegrationRegistry} 並註冊三個
+     * <p>於 onEnable / reload commit 階段呼叫，建立 {@link IntegrationRegistry} 並註冊四個
      * reflection-only adapter（Vault / LuckPerms / PlaceholderAPI），再以
      * {@link IntegrationRegistry#initializeAll()} 啟用，最後包裝為
      * {@link ExternalIntegrationServiceImpl} 並將其 {@code toModuleState()} 註冊到
@@ -1450,18 +1482,91 @@ public class AceLibPlugin extends JavaPlugin {
      *
      * @param server 當前 Bukkit/Paper/Folia server；不可為 null
      */
+    /**
+     * 外部整合探測使用的 classloader。
+     *
+     * <p>必須是 AceLib 自身的 plugin classloader，而非伺服器主 classloader。JVM 類別載入為
+     * 父優先委派：伺服器主 classloader 是所有 plugin classloader 的父，對子（各插件 JAR
+     * 提供的 API class）不可見；反之 AceLib 的 plugin classloader 會依 plugin.yml 的
+     * depend/softdepend 委派到依賴插件的 classloader，因此能看見 floodgate / vault /
+     * luckperms / PlaceholderAPI 等外部 API marker class。若改用
+     * {@code server.getClass().getClassLoader()}，所有只由插件 JAR 提供的 marker class 都會
+     * 永遠找不到，導致四個 adapter 全數 INIT_FAILED（ACELIB-EXT-001）。</p>
+     *
+     * @return 用於 classpath 探測的 classloader；永不為 null
+     */
+    ClassLoader externalProbeClassLoader() {
+        return getClass().getClassLoader();
+    }
+
     private void bindExternalService(Server server) {
         Objects.requireNonNull(server, "server");
-        ClassLoader classLoader = server.getClass().getClassLoader();
+        ClassLoader classLoader = externalProbeClassLoader();
         PluginManager pluginManager = server.getPluginManager();
         IntegrationRegistry registry = new IntegrationRegistry();
         registry.register(new VaultIntegrationAdapter(classLoader, pluginManager));
         registry.register(new LuckPermsIntegrationAdapter(classLoader, pluginManager));
         registry.register(new PlaceholderApiIntegrationAdapter(classLoader, pluginManager));
+        FloodgateIntegrationAdapter floodgateAdapter =
+            new FloodgateIntegrationAdapter(classLoader, pluginManager);
+        registry.register(floodgateAdapter);
         registry.initializeAll();
         ExternalIntegrationServiceImpl impl = new ExternalIntegrationServiceImpl(registry);
         this.diagnostics.registerModuleState(MODULE_INTEGRATION, impl.toModuleState());
         this.externalService = impl;
+        // 基岩服務綁定：floodgate 啟用 → typed lookup；缺席 → absent lookup（零影響）。
+        bindBedrockService(floodgateAdapter);
+    }
+
+    /**
+     * 依 floodgate adapter 狀態建立並綁定基岩版玩家服務。
+     *
+     * <p>adapter 啟用（探測 AVAILABLE）時攜帶其 typed lookup 與表單發送 seam；
+     * 缺席 / 未啟用 / 版本不符時攜帶 {@link BedrockService.PlayerLookup#absent()}
+     * 與 {@code FormService.FormSender.absent()}——查詢一律安全回覆「非基岩玩家」、
+     * 表單發送以 {@code ACELIB-FORM-001} 明確拒絕，達成 Floodgate 缺席零影響
+     * （不拋 NoClassDefFoundError）。本方法不拋例外：seam 建構只包裝 supplier，
+     * 不做任何外部呼叫。</p>
+     *
+     * @param floodgateAdapter 已註冊並 initialize 過的 floodgate adapter；不可為 null
+     */
+    private void bindBedrockService(FloodgateIntegrationAdapter floodgateAdapter) {
+        Objects.requireNonNull(floodgateAdapter, "floodgateAdapter");
+        boolean active = floodgateAdapter.isActive();
+        BedrockService.PlayerLookup lookup = active
+            ? floodgateAdapter.playerLookup()
+            : BedrockService.PlayerLookup.absent();
+        com.smile.acelib.form.FormService.FormSender formSender = active
+            ? floodgateAdapter.formSender()
+            : com.smile.acelib.form.FormService.FormSender.absent();
+        // 表單回應派送以 supplier 延遲綁定 scheduler（比照發送 seam 的延遲綁定先例）：
+        // reload Phase D 於此處建立新 FormService 時 this.scheduler 仍指向 Phase A
+        // 已停用的舊 scheduler，直到 commit 階段才覆寫；每次派送才讀取欄位，
+        // commit 後自動取到新 scheduler，不捕獲已停用實例。
+        com.smile.acelib.form.FormService formService = active
+            ? com.smile.acelib.form.FormService.forProduction(formSender,
+                () -> this.scheduler)
+            : com.smile.acelib.form.FormService.forProduction(formSender);
+        this.bedrockService = BedrockService.forProduction(lookup, formService);
+    }
+
+    /**
+     * 解除並 shutdown 基岩版玩家服務。
+     *
+     * <p>呼叫現有 {@code bedrockService.shutdown()}（冪等），然後把欄位替換為
+     * SHUTDOWN unavailable facade，保證既有 caller 在 disable 後讀到「已停用」訊號。</p>
+     */
+    private void unbindBedrockService() {
+        BedrockService old = this.bedrockService;
+        if (old != null) {
+            try {
+                old.shutdown();
+            } catch (Throwable t) {
+                logFine("bedrockService.shutdown failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.bedrockService = BedrockService.forUnavailable(BedrockService.SHUTDOWN);
     }
 
     /**

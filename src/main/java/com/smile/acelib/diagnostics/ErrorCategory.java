@@ -62,6 +62,12 @@ public enum ErrorCategory {
     /** 外部整合相關錯誤（{@code ACELIB-EXT-*}）。 */
     EXTERNAL("EXT"),
 
+    /** 基岩版玩家服務相關錯誤（{@code ACELIB-BED-*}）。 */
+    BEDROCK("BED"),
+
+    /** 表單服務相關錯誤（{@code ACELIB-FORM-*}）。 */
+    FORM("FORM"),
+
     /** 診斷／除錯模組自身錯誤（{@code ACELIB-DBG-*}）。 */
     DEBUG("DBG"),
 

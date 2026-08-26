@@ -36,6 +36,33 @@
       "mainCallers": "AceLibApi.uninitialized；DiagnosticsService。"
     },
     {
+      "fqcn": "com.smile.acelib.bedrock.BedrockErrorCodes",
+      "package": "com.smile.acelib.bedrock",
+      "simpleName": "BedrockErrorCodes",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "基岩服務錯誤代碼常數（ACELIB-BED-*）；與 ErrorCodeRegistry/error-codes.md 同步。",
+      "mainCallers": "BedrockService facade 與 unavailable impl。"
+    },
+    {
+      "fqcn": "com.smile.acelib.bedrock.BedrockPlayerInfo",
+      "package": "com.smile.acelib.bedrock",
+      "simpleName": "BedrockPlayerInfo",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "基岩玩家資訊值型別（裝置/輸入/語言/連結；nested DeviceOs/InputMode/LinkState 列舉）；上游未知列舉值映射 UNKNOWN。",
+      "mainCallers": "BedrockService.getPlayerInfo；Floodgate typed seam 映射。"
+    },
+    {
+      "fqcn": "com.smile.acelib.bedrock.BedrockService",
+      "package": "com.smile.acelib.bedrock",
+      "simpleName": "BedrockService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；v1 承諾相容，缺席環境以 absent lookup 零影響。",
+      "mainCallers": "AceLibApi.getBedrockService；消費者查詢基岩玩家。"
+    },
+    {
       "fqcn": "com.smile.acelib.command.AceLibStatusHandler",
       "package": "com.smile.acelib.command",
       "simpleName": "AceLibStatusHandler",
@@ -695,6 +722,16 @@
       "mainCallers": "IntegrationRegistry；IntegrationAdapter。"
     },
     {
+      "fqcn": "com.smile.acelib.external.FloodgateIntegrationAdapter",
+      "package": "com.smile.acelib.external",
+      "simpleName": "FloodgateIntegrationAdapter",
+      "kind": "class",
+      "classification": "Internal",
+      "reason": "Floodgate reflection-only 探測 adapter 與 typed provider seam 持有者；非消費者 API。",
+      "mainCallers": "AceLibPlugin.bindExternalService 註冊；bindBedrockService 讀取 lookup。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構並讀取 typed lookup（playerLookup）；v1 前保留 public，下游不得依賴。"
+    },
+    {
       "fqcn": "com.smile.acelib.external.IntegrationAdapter",
       "package": "com.smile.acelib.external",
       "simpleName": "IntegrationAdapter",
@@ -759,6 +796,69 @@
       "reason": "Vault 內建介面卡實作；消費者不應繼承。",
       "mainCallers": "AceLibPlugin 註冊內建。",
       "retention": "AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormErrorCodes",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormErrorCodes",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "表單服務錯誤代碼常數（ACELIB-FORM-*）；與 ErrorCodeRegistry/error-codes.md 同步。",
+      "mainCallers": "FormService.FormSender.absent；FormServiceImpl。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormResponse",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormResponse",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "表單回應值型別（immutable：狀態＋可選按鈕索引＋元件答案清單）；經 sendForm 三參數 overload 的 consumer 於玩家 region context 內交付。",
+      "mainCallers": "FormService.sendForm 三參數 overload；FormServiceImpl 回應派送；CumulusFormTranslator 映射產出。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormResponseStatus",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormResponseStatus",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "表單回應狀態語意列舉（VALID/CLOSED/INVALID）；描述玩家回應分類，回應的接收與派送機制不在本型別範圍。",
+      "mainCallers": "FormService 回應語意文件；後續回應派送以本語意為基礎。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormSendResult",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormSendResult",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "表單發送結果列舉（SENT/REJECTED）；把 Floodgate 內部 boolean 轉譯為具名遞送狀態，原始 boolean 不外洩。",
+      "mainCallers": "FormService.sendForm；FormService.FormSender.sendForm。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormService",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "表單服務 facade（forProduction 工廠、sendForm 發送與三參數回應註冊、生命週期語意）；發送 seam 以 nested FormSender 隔離外部型別，回應經重新派送於玩家 region context 交付且至多一次。",
+      "mainCallers": "BedrockService.forms()。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormSpec",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormSpec",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "基岩原生表單規格 DSL（Simple/Modal/Custom sealed 階層與 Component 元件）；消費者以此描述表單，Cumulus 外部型別不外洩。",
+      "mainCallers": "FormService.sendForm；CumulusFormTranslator 窮舉翻譯。"
+    },
+    {
+      "fqcn": "com.smile.acelib.form.FormValue",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormValue",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "custom 表單元件答案 sealed 介面（Text/Option/Number/Switch nested records）；label 不產值，答案依產值元件順序排列。",
+      "mainCallers": "FormResponse.values()；CumulusFormTranslator custom 回應映射。"
     },
     {
       "fqcn": "com.smile.acelib.gui.GuiArgument",

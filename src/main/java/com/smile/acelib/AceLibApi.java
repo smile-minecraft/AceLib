@@ -1,5 +1,6 @@
 package com.smile.acelib;
 
+import com.smile.acelib.bedrock.BedrockService;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
@@ -48,6 +49,7 @@ public final class AceLibApi {
     private final WorldService worldService;
     private final GuiService guiService;
     private final ExternalIntegrationService externalService;
+    private final BedrockService bedrockService;
     private final BooleanSupplier readyCheck;
     private final Runnable onReload;
 
@@ -57,6 +59,7 @@ public final class AceLibApi {
                       WorldService worldService,
                       GuiService guiService,
                       ExternalIntegrationService externalService,
+                      BedrockService bedrockService,
                       BooleanSupplier readyCheck,
                       Runnable onReload) {
         this.version = Objects.requireNonNull(version, "version");
@@ -65,6 +68,7 @@ public final class AceLibApi {
         this.worldService = Objects.requireNonNull(worldService, "worldService");
         this.guiService = Objects.requireNonNull(guiService, "guiService");
         this.externalService = Objects.requireNonNull(externalService, "externalService");
+        this.bedrockService = bedrockService;
         this.readyCheck = Objects.requireNonNull(readyCheck, "readyCheck");
         this.onReload = Objects.requireNonNull(onReload, "onReload");
     }
@@ -91,6 +95,7 @@ public final class AceLibApi {
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
+            BedrockService.forUnavailable(BedrockService.NOT_READY),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -122,6 +127,7 @@ public final class AceLibApi {
             worldService,
             GuiService.forUnavailable(GuiErrorCode.SHUTDOWN),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
+            BedrockService.forUnavailable(BedrockService.SHUTDOWN),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -148,6 +154,7 @@ public final class AceLibApi {
             worldService,
             guiService,
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
+            BedrockService.forUnavailable(BedrockService.SHUTDOWN),
             () -> false,
             () -> { /* no-op */ }
         );
@@ -178,7 +185,7 @@ public final class AceLibApi {
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
-            readyCheck, onReload);
+            BedrockService.forUnavailable(BedrockService.NOT_READY), readyCheck, onReload);
     }
 
     /**
@@ -210,7 +217,39 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
-            externalService, readyCheck, onReload);
+            externalService, BedrockService.forUnavailable(BedrockService.NOT_READY),
+            readyCheck, onReload);
+    }
+
+    /**
+     * 已啟用狀態的 instance（9 參數簽章，推薦使用）。
+     *
+     * @param version          plugin 版本字串
+     * @param platform         偵測到的平台
+     * @param capability       對應的 capability profile（不允許 null；請用
+     *                         {@link PlatformCapability#forPlatform(Platform)} 推導）
+     * @param worldService     對外 {@link WorldService} facade（不允許 null）
+     * @param guiService       對外 {@link GuiService} facade（不允許 null）
+     * @param externalService  對外 {@link ExternalIntegrationService} facade
+     *                         （不允許 null；plugin 端必須建立合適的 impl 並傳入）
+     * @param bedrockService   對外 {@link BedrockService} facade（不允許 null；
+     *                         plugin 端必須建立合適的 impl 並傳入）
+     * @param readyCheck       當前 lifecycle 是否 ready 的 callback
+     * @param onReload         reload 觸發時執行的 callback
+     * @return 不可變的 {@link AceLibApi}
+     * @throws NullPointerException 任何參數為 null
+     */
+    public static AceLibApi ready(String version,
+                                   Platform platform,
+                                   PlatformCapability capability,
+                                   WorldService worldService,
+                                   GuiService guiService,
+                                   ExternalIntegrationService externalService,
+                                   BedrockService bedrockService,
+                                   BooleanSupplier readyCheck,
+                                   Runnable onReload) {
+        return new AceLibApi(version, platform, capability, worldService, guiService,
+            externalService, bedrockService, readyCheck, onReload);
     }
 
     /**
@@ -236,7 +275,7 @@ public final class AceLibApi {
             version, platform, capability, worldService,
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
-            readyCheck, onReload
+            BedrockService.forUnavailable(BedrockService.NOT_READY), readyCheck, onReload
         );
     }
 
@@ -261,7 +300,7 @@ public final class AceLibApi {
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
-            readyCheck, onReload
+            BedrockService.forUnavailable(BedrockService.NOT_READY), readyCheck, onReload
         );
     }
 
@@ -281,7 +320,7 @@ public final class AceLibApi {
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
-            readyCheck, onReload
+            BedrockService.forUnavailable(BedrockService.NOT_READY), readyCheck, onReload
         );
     }
 
@@ -370,6 +409,13 @@ public final class AceLibApi {
  */
     public ExternalIntegrationService getExternalIntegrationService() {
         return externalService;
+    }
+
+    /**
+     * 取得對外 {@link BedrockService} facade（骨架）。
+     */
+    public BedrockService getBedrockService() {
+        return bedrockService;
     }
 
     /**

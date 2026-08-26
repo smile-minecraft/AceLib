@@ -3,6 +3,7 @@
   "description": "AceLib v1 Supported/SPI public signature baseline; 由 ApiSurfaceSignatureContractTest 驗證與產生。",
   "types": {
     "com.smile.acelib.AceLibApi": [
+      "method getBedrockService() : com.smile.acelib.bedrock.BedrockService",
       "method getExternalIntegrationService() : com.smile.acelib.external.ExternalIntegrationService",
       "method getGuiService() : com.smile.acelib.gui.GuiService",
       "method getPlatform() : com.smile.acelib.platform.Platform",
@@ -10,6 +11,7 @@
       "method getVersion() : java.lang.String",
       "method getWorldService() : com.smile.acelib.world.WorldService",
       "method isReady() : boolean",
+      "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
@@ -22,6 +24,36 @@
     ],
     "com.smile.acelib.AceLibVersion": [
       "field VERSION : java.lang.String"
+    ],
+    "com.smile.acelib.bedrock.BedrockErrorCodes": [
+      "field ACELIB_BED_INVALID_INPUT : java.lang.String",
+      "field ACELIB_BED_SERVICE_NOT_READY : java.lang.String",
+      "field ACELIB_BED_SERVICE_SHUTDOWN : java.lang.String"
+    ],
+    "com.smile.acelib.bedrock.BedrockPlayerInfo": [
+      "ctor(java.util.UUID,java.lang.String,com.smile.acelib.bedrock.BedrockPlayerInfo$DeviceOs,com.smile.acelib.bedrock.BedrockPlayerInfo$InputMode,java.lang.String,com.smile.acelib.bedrock.BedrockPlayerInfo$LinkState,java.lang.String)",
+      "method deviceOs() : com.smile.acelib.bedrock.BedrockPlayerInfo$DeviceOs",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method inputMode() : com.smile.acelib.bedrock.BedrockPlayerInfo$InputMode",
+      "method languageCode() : java.lang.String",
+      "method linkState() : com.smile.acelib.bedrock.BedrockPlayerInfo$LinkState",
+      "method linkedUsername() : java.lang.String",
+      "method playerId() : java.util.UUID",
+      "method toString() : java.lang.String",
+      "method username() : java.lang.String"
+    ],
+    "com.smile.acelib.bedrock.BedrockService": [
+      "field NOT_READY : java.lang.String",
+      "field SHUTDOWN : java.lang.String",
+      "method forProduction(com.smile.acelib.bedrock.BedrockService$PlayerLookup) : com.smile.acelib.bedrock.BedrockService",
+      "method forProduction(com.smile.acelib.bedrock.BedrockService$PlayerLookup,com.smile.acelib.form.FormService) : com.smile.acelib.bedrock.BedrockService",
+      "method forUnavailable(java.lang.String) : com.smile.acelib.bedrock.BedrockService",
+      "method forms() : com.smile.acelib.form.FormService",
+      "method getModuleStatus() : java.lang.String",
+      "method getPlayerInfo(java.util.UUID) : java.util.Optional<com.smile.acelib.bedrock.BedrockPlayerInfo>",
+      "method isBedrockPlayer(java.util.UUID) : boolean",
+      "method shutdown() : void"
     ],
     "com.smile.acelib.command.CommandContext": [
       "method args() : java.util.List<java.lang.String>",
@@ -436,6 +468,7 @@
       "method unregisterModuleState(java.lang.String) : void"
     ],
     "com.smile.acelib.diagnostics.ErrorCategory": [
+      "field BEDROCK : com.smile.acelib.diagnostics.ErrorCategory",
       "field COMMAND : com.smile.acelib.diagnostics.ErrorCategory",
       "field CONFIG : com.smile.acelib.diagnostics.ErrorCategory",
       "field CONTEXT : com.smile.acelib.diagnostics.ErrorCategory",
@@ -443,6 +476,7 @@
       "field DEBUG : com.smile.acelib.diagnostics.ErrorCategory",
       "field EVENT : com.smile.acelib.diagnostics.ErrorCategory",
       "field EXTERNAL : com.smile.acelib.diagnostics.ErrorCategory",
+      "field FORM : com.smile.acelib.diagnostics.ErrorCategory",
       "field GUI : com.smile.acelib.diagnostics.ErrorCategory",
       "field ITEM : com.smile.acelib.diagnostics.ErrorCategory",
       "field LANGUAGE : com.smile.acelib.diagnostics.ErrorCategory",
@@ -672,6 +706,51 @@
       "method valueOf(java.lang.String) : com.smile.acelib.external.IntegrationStatus",
       "method values() : com.smile.acelib.external.IntegrationStatus[]",
       "method versionUnsupported() : com.smile.acelib.external.IntegrationStatus"
+    ],
+    "com.smile.acelib.form.FormErrorCodes": [
+      "field ACELIB_FORM_SERVICE_NOT_READY : java.lang.String",
+      "field ACELIB_FORM_SERVICE_SHUTDOWN : java.lang.String"
+    ],
+    "com.smile.acelib.form.FormResponse": [
+      "ctor(com.smile.acelib.form.FormResponseStatus,java.lang.Integer,java.util.List<com.smile.acelib.form.FormValue>)",
+      "method clickedButton() : java.util.Optional<java.lang.Integer>",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method status() : com.smile.acelib.form.FormResponseStatus",
+      "method toString() : java.lang.String",
+      "method values() : java.util.List<com.smile.acelib.form.FormValue>"
+    ],
+    "com.smile.acelib.form.FormResponseStatus": [
+      "field CLOSED : com.smile.acelib.form.FormResponseStatus",
+      "field INVALID : com.smile.acelib.form.FormResponseStatus",
+      "field VALID : com.smile.acelib.form.FormResponseStatus",
+      "method valueOf(java.lang.String) : com.smile.acelib.form.FormResponseStatus",
+      "method values() : com.smile.acelib.form.FormResponseStatus[]"
+    ],
+    "com.smile.acelib.form.FormSendResult": [
+      "field REJECTED : com.smile.acelib.form.FormSendResult",
+      "field SENT : com.smile.acelib.form.FormSendResult",
+      "method isRejected() : boolean",
+      "method isSent() : boolean",
+      "method valueOf(java.lang.String) : com.smile.acelib.form.FormSendResult",
+      "method values() : com.smile.acelib.form.FormSendResult[]"
+    ],
+    "com.smile.acelib.form.FormService": [
+      "method forProduction(com.smile.acelib.form.FormService$FormSender) : com.smile.acelib.form.FormService",
+      "method forProduction(com.smile.acelib.form.FormService$FormSender,java.util.function.Supplier<com.smile.acelib.scheduler.SafeScheduler>) : com.smile.acelib.form.FormService",
+      "method getModuleStatus() : java.lang.String",
+      "method sendForm(java.util.UUID,com.smile.acelib.form.FormSpec) : com.smile.acelib.form.FormSendResult",
+      "method sendForm(java.util.UUID,com.smile.acelib.form.FormSpec,java.util.function.Consumer<com.smile.acelib.form.FormResponse>) : com.smile.acelib.form.FormSendResult",
+      "method shutdown() : void"
+    ],
+    "com.smile.acelib.form.FormSpec": [
+      "method custom(java.lang.String) : com.smile.acelib.form.FormSpec$Custom$Builder",
+      "method kind() : com.smile.acelib.form.FormSpec$Kind",
+      "method modal(java.lang.String) : com.smile.acelib.form.FormSpec$Modal$Builder",
+      "method simple(java.lang.String) : com.smile.acelib.form.FormSpec$Simple$Builder",
+      "method title() : java.lang.String"
+    ],
+    "com.smile.acelib.form.FormValue": [
     ],
     "com.smile.acelib.gui.GuiArgument": [
       "method builder(org.bukkit.entity.Player,java.lang.String) : com.smile.acelib.gui.GuiArgument$Builder",

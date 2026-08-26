@@ -105,6 +105,18 @@ public final class ErrorCodeRegistry {
         // EXT
         m.put("ACELIB-EXT-001", new ErrorCodeInfo(ErrorCategory.EXTERNAL,
             "外部整合錯誤"));
+        // BED
+        m.put("ACELIB-BED-001", new ErrorCodeInfo(ErrorCategory.BEDROCK,
+            "基岩服務尚未啟用"));
+        m.put("ACELIB-BED-002", new ErrorCodeInfo(ErrorCategory.BEDROCK,
+            "基岩服務已停用"));
+        m.put("ACELIB-BED-003", new ErrorCodeInfo(ErrorCategory.BEDROCK,
+            "基岩查詢輸入為 null 或語意不合法"));
+        // FORM（表單服務；常數表見 com.smile.acelib.form.FormErrorCodes）
+        m.put("ACELIB-FORM-001", new ErrorCodeInfo(ErrorCategory.FORM,
+            "表單服務尚未啟用"));
+        m.put("ACELIB-FORM-002", new ErrorCodeInfo(ErrorCategory.FORM,
+            "表單服務已停用"));
         KNOWN = Map.copyOf(m);
     }
 

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibBedrockTest
+main: com.example.acelibbedrocktest.BedrockTestPlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 基岩功能驗收工具：診斷 floodgate 整合狀態並測試基岩表單
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+softdepend:
+  - floodgate
+commands:
+  btest:
+    description: 基岩功能測試指令（info / form）
+    usage: /btest <info | form <simple|modal|custom>>
+    permission: acelibbedrocktest.use
+permissions:
+  acelibbedrocktest.use:
+    description: 使用 /btest 驗收指令
+    default: op

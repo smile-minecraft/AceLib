@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs132() throws IOException {
+    void canonicalTopLevelInventoryIs143() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -66,18 +66,43 @@ class ApiBoundaryRegressionTest {
                 default -> throw new IllegalStateException("非法分類：" + t.get("fqcn"));
             }
         }
-        // v1 canonical inventory：101 Supported + 12 SPI + 19 Internal = 132。
-        // 此為公開契約（provider 維持 nested 正是為了不讓此數變成 133）；
-        // 收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權 breaking change。
-        assertTrue(supported == 101,
-            "Supported 數量偏離 canonical 101，實際=" + supported);
+        // v1 canonical inventory：111 Supported + 12 SPI + 20 Internal = 143。
+        // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），新增十一個頂層型別：
+        //   Supported +10：
+        //     - com.smile.acelib.bedrock.BedrockService（interface）— 基岩玩家查詢 facade，
+        //       缺席環境以 absent lookup 零影響
+        //     - com.smile.acelib.bedrock.BedrockPlayerInfo（record）— 裝置/輸入/語言/連結
+        //       值型別；列舉以 nested 型別承載以控制頂層數量
+        //     - com.smile.acelib.bedrock.BedrockErrorCodes（class）— ACELIB-BED-* 常數表，
+        //       比照 ExternalIntegrationErrorCodes 模式
+        //     - com.smile.acelib.form.FormService（interface）— 表單服務 facade，供
+        //       BedrockService.forms() 使用；發送 seam 以 nested FormSender 承載
+        //     - com.smile.acelib.form.FormSpec（sealed class）— 基岩原生表單規格 DSL，
+        //       消費者描述表單的唯一入口；Cumulus 外部型別不外洩
+        //     - com.smile.acelib.form.FormSendResult（enum）— 發送結果具名狀態
+        //       （SENT/REJECTED），取代原始 boolean 外洩
+        //     - com.smile.acelib.form.FormResponseStatus（enum）— 回應狀態語意
+        //       （VALID/CLOSED/INVALID），供回應派送層引用
+        //     - com.smile.acelib.form.FormResponse（class）— 表單回應值型別（immutable），
+        //       經 sendForm 三參數 overload 的 consumer 於玩家 region context 交付
+        //     - com.smile.acelib.form.FormValue（sealed interface）— custom 元件答案
+        //       （Text/Option/Number/Switch 以 nested records 承載，label 不產值）
+        //     - com.smile.acelib.form.FormErrorCodes（class）— ACELIB-FORM-* 常數表，
+        //       比照 BedrockErrorCodes 模式
+        //   Internal +1：
+        //     - com.smile.acelib.external.FloodgateIntegrationAdapter — plugin 接線需跨
+        //       package 建構並讀取 typed lookup，比照既有三個內建 adapter 保留 public
+        // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
+        // breaking change。
+        assertTrue(supported == 111,
+            "Supported 數量偏離 canonical 111，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
-        assertTrue(internal == 19,
-            "Internal 數量偏離 canonical 19，實際=" + internal
+        assertTrue(internal == 20,
+            "Internal 數量偏離 canonical 20，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 132,
-            "top-level inventory 偏離 canonical 132，實際=" + types.size());
+        assertTrue(types.size() == 143,
+            "top-level inventory 偏離 canonical 143，實際=" + types.size());
     }
 
     @Test

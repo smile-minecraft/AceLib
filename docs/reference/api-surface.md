@@ -12,10 +12,10 @@
 
 ## 統計
 
-- 總數：132 個 public 頂層型別
-- Supported：101
+- 總數：143 個 public 頂層型別
+- Supported：111
 - SPI：12
-- Internal：19
+- Internal：20
 
 ## 分類明細
 
@@ -26,6 +26,14 @@
 | `com.smile.acelib.AceLibApi` | class | Supported | 對外 API facade；v1 承諾 source/binary 相容，是下游取得各 service 的入口。 |  | AceLibPlugin 建構；消費者經 v1 的 AceLibProvider 取得。 |
 | `com.smile.acelib.AceLibPlugin` | class | Internal | Bukkit plugin main class，因 plugin.yml 要求必須 public；非穩定消費者契約，穩定入口由 v1 的 AceLibProvider 提供。 | plugin.yml main class 必須 public（Bukkit framework 反射要求）；v1 穩定入口由 AceLibProvider 提供，本類不屬消費者契約。 | Bukkit server；AceLibApi 接收其 lifecycle callback。 |
 | `com.smile.acelib.AceLibVersion` | class | Supported | 對外版本常數 VERSION，與 plugin.yml / build 一致；v1 契約一部分。 |  | AceLibApi.uninitialized；DiagnosticsService。 |
+
+### com.smile.acelib.bedrock
+
+| Type | Kind | Classification | Reason | Retention | Main callers |
+| --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.bedrock.BedrockErrorCodes` | class | Supported | 基岩服務錯誤代碼常數（ACELIB-BED-*）；與 ErrorCodeRegistry/error-codes.md 同步。 |  | BedrockService facade 與 unavailable impl。 |
+| `com.smile.acelib.bedrock.BedrockPlayerInfo` | record | Supported | 基岩玩家資訊值型別（裝置/輸入/語言/連結；nested DeviceOs/InputMode/LinkState 列舉）；上游未知列舉值映射 UNKNOWN。 |  | BedrockService.getPlayerInfo；Floodgate typed seam 映射。 |
+| `com.smile.acelib.bedrock.BedrockService` | interface | Supported | 基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；v1 承諾相容，缺席環境以 absent lookup 零影響。 |  | AceLibApi.getBedrockService；消費者查詢基岩玩家。 |
 
 ### com.smile.acelib.command
 
@@ -133,6 +141,7 @@
 | `com.smile.acelib.external.ExternalIntegrationService` | interface | Supported | 外部整合查詢服務介面；v1 承諾相容。 |  | AceLibApi；消費者。 |
 | `com.smile.acelib.external.ExternalIntegrationServiceImpl` | class | Internal | ExternalIntegrationService 的內部實作；非消費者 API。 | AceLibPlugin 跨 package 建構並取 toModuleState() 註冊 diagnostics；v1 前保留 public。 | AceLibPlugin。 |
 | `com.smile.acelib.external.ExternalPluginProbe` | class | Supported | 外部插件探測工具（classpath/版本）；v1 穩定。 |  | IntegrationRegistry；IntegrationAdapter。 |
+| `com.smile.acelib.external.FloodgateIntegrationAdapter` | class | Internal | Floodgate reflection-only 探測 adapter 與 typed provider seam 持有者；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 建構並讀取 typed lookup（playerLookup）；v1 前保留 public，下游不得依賴。 | AceLibPlugin.bindExternalService 註冊；bindBedrockService 讀取 lookup。 |
 | `com.smile.acelib.external.IntegrationAdapter` | interface | SPI | 消費者實作的外部整合介面（extension point）；寫明冪等生命週期與相容性責任。 |  | IntegrationRegistry.register；消費者實作。 |
 | `com.smile.acelib.external.IntegrationProbeResult` | record | Supported | 整合探測結果值型別；v1 穩定。 |  | ExternalPluginProbe；IntegrationAdapter；ExternalIntegrationService。 |
 | `com.smile.acelib.external.IntegrationRegistry` | class | Supported | 整合介面卡註冊/查詢服務；v1 穩定。 |  | AceLibPlugin；消費者註冊 adapter。 |
@@ -140,6 +149,18 @@
 | `com.smile.acelib.external.LuckPermsIntegrationAdapter` | class | Internal | LuckPerms 內建介面卡實作；消費者不應繼承，請實作 IntegrationAdapter。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
 | `com.smile.acelib.external.PlaceholderApiIntegrationAdapter` | class | Internal | PlaceholderAPI 內建介面卡實作；消費者不應繼承。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
 | `com.smile.acelib.external.VaultIntegrationAdapter` | class | Internal | Vault 內建介面卡實作；消費者不應繼承。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
+
+### com.smile.acelib.form
+
+| Type | Kind | Classification | Reason | Retention | Main callers |
+| --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.form.FormErrorCodes` | class | Supported | 表單服務錯誤代碼常數（ACELIB-FORM-*）；與 ErrorCodeRegistry/error-codes.md 同步。 |  | FormService.FormSender.absent；FormServiceImpl。 |
+| `com.smile.acelib.form.FormResponse` | class | Supported | 表單回應值型別（immutable：狀態＋可選按鈕索引＋元件答案清單）；經 sendForm 三參數 overload 的 consumer 於玩家 region context 內交付。 |  | FormService.sendForm 三參數 overload；FormServiceImpl 回應派送；CumulusFormTranslator 映射產出。 |
+| `com.smile.acelib.form.FormResponseStatus` | enum | Supported | 表單回應狀態語意列舉（VALID/CLOSED/INVALID）；描述玩家回應分類，回應的接收與派送機制不在本型別範圍。 |  | FormService 回應語意文件；後續回應派送以本語意為基礎。 |
+| `com.smile.acelib.form.FormSendResult` | enum | Supported | 表單發送結果列舉（SENT/REJECTED）；把 Floodgate 內部 boolean 轉譯為具名遞送狀態，原始 boolean 不外洩。 |  | FormService.sendForm；FormService.FormSender.sendForm。 |
+| `com.smile.acelib.form.FormService` | interface | Supported | 表單服務 facade（forProduction 工廠、sendForm 發送與三參數回應註冊、生命週期語意）；發送 seam 以 nested FormSender 隔離外部型別，回應經重新派送於玩家 region context 交付且至多一次。 |  | BedrockService.forms()。 |
+| `com.smile.acelib.form.FormSpec` | class | Supported | 基岩原生表單規格 DSL（Simple/Modal/Custom sealed 階層與 Component 元件）；消費者以此描述表單，Cumulus 外部型別不外洩。 |  | FormService.sendForm；CumulusFormTranslator 窮舉翻譯。 |
+| `com.smile.acelib.form.FormValue` | interface | Supported | custom 表單元件答案 sealed 介面（Text/Option/Number/Switch nested records）；label 不產值，答案依產值元件順序排列。 |  | FormResponse.values()；CumulusFormTranslator custom 回應映射。 |
 
 ### com.smile.acelib.gui
 

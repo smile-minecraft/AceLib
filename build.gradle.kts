@@ -23,6 +23,17 @@ java {
 repositories {
     // Paper 與 Folia 官方 artifact 倉庫
     maven("https://repo.papermc.io/repository/maven-public/")
+    // GeyserMC / Floodgate 官方 artifact 倉庫（OpenCollab）。
+    // 僅直接取得 artifact（jar），不解析任何 descriptor：本倉庫只供下方鎖定
+    // unique snapshot 完整版本號的 floodgate/geyser/cumulus/events 依賴使用，
+    // isTransitive=false 下不需要 POM/module metadata；略去 descriptor 可避免
+    // 同一模組在 compile / test classpath 以不同 variant 解析時，
+    // dependency verification 產生重複 entry（Gradle 9.x 已知情境）。
+    maven("https://repo.opencollab.dev/main/") {
+        metadataSources {
+            artifact()
+        }
+    }
     mavenCentral()
 }
 
@@ -31,6 +42,28 @@ dependencies {
     // 版本固定為 26.1.2.build.72-stable 以對齊 MockBukkit 4.113.1 的 paper-api 版本，
     // 避免 binary incompatible 問題。如需升級 paper-api 須同步升級 MockBukkit。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
+
+    // Floodgate API（基岩玩家偵測）。compileOnly：運行期由伺服器上的 floodgate
+    // plugin 提供；缺席時 AceLib 以 reflection-only 探測安全降級。
+    // 版本鎖定 unique snapshot（2.2.5-SNAPSHOT 於 2026-08-09 解析為 build 20），
+    // 不使用浮動 -SNAPSHOT，避免上游重複發布造成建置漂移。
+    // isTransitive=false：只取 api jar 本身；其 POM 的 compile transitives 含
+    // 浮動 SNAPSHOT（geyser common / events），改為下方顯式鎖定需要的 jar。
+    val floodgateApiVersion = "2.2.5-20260809.110940-20"
+    compileOnly("org.geysermc.floodgate:api:$floodgateApiVersion") { isTransitive = false }
+
+    // DeviceOs / InputMode / LinkedPlayer 位於 geyser common（floodgate api 的
+    // compile transitive）；以 isTransitive=false 鎖單一 jar，避免上游 SNAPSHOT 漂移。
+    // 實際驗證版本組合：floodgate api 2.2.5-20260809.110940-20 + geyser common
+    // 2.2.1-20240128.225244-3（OpenCollab repo，2026-08-26 解析並記錄）。
+    val geyserCommonVersion = "2.2.1-20240128.225244-3"
+    compileOnly("org.geysermc.geyser:common:$geyserCommonVersion") { isTransitive = false }
+
+    // Cumulus（表單模型）：內部翻譯層（external 套件 package-private 類別）把 AceLib
+    // FormSpec 翻成 Cumulus form 後交給 FloodgateApi.sendForm；Cumulus 型別不出現在
+    // 任何公開簽章。運行期由 floodgate plugin 提供，故僅 compileOnly；
+    // testImplementation 同版本雙掛（比照 geyser common 模式）。
+    compileOnly("org.geysermc.cumulus:cumulus:1.1.2") { isTransitive = false }
 
     // JetBrains 註解 (org.jetbrains:annotations) — 標記 @NotNull 等
     compileOnly("org.jetbrains:annotations:24.1.0")
@@ -45,6 +78,19 @@ dependencies {
     // 因此這裡使用 testImplementation（讓 class 進入 runtime classpath）而非 testCompileOnly。
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 
+    // typed provider seam 測試需要真實 Floodgate 型別（mock FloodgateApi /
+    // FloodgatePlayer、列舉映射）；與 compileOnly 同一鎖定版本，受 dependency
+    // verification checksum 管控。
+    testImplementation("org.geysermc.floodgate:api:$floodgateApiVersion") { isTransitive = false }
+    testImplementation("org.geysermc.geyser:common:$geyserCommonVersion") { isTransitive = false }
+    // JVM 載入 FloodgateApi / FloodgatePlayer 介面時需解析全部方法簽章引用的型別：
+    // sendForm 簽章引用 cumulus Form、getEventBus 簽章引用 geyser events EventBus。
+    // 兩者皆為 floodgate api POM 宣告的 compile transitives；cumulus 為 release 版本，
+    // events 鎖 unique snapshot（1.1-SNAPSHOT 於 2023-08-15 解析為 build 4），
+    // 不使用浮動 -SNAPSHOT。
+    testImplementation("org.geysermc.cumulus:cumulus:1.1.2") { isTransitive = false }
+    testImplementation("org.geysermc.event:events:1.1-20230815.153219-4") { isTransitive = false }
+
     // Mockito 用於 mock JavaPlugin / Server
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.11.0")
@@ -58,6 +104,14 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // geyser common 是 fat jar（內嵌舊版 guava / gson）；將其移到 test classpath
+    // 尾端，讓 paper-api / MockBukkit 的正式 guava / gson 先被類別載入器解析，
+    // 避免 NoSuchMethodError；DeviceOs / InputMode / LinkedPlayer 僅存在於該 jar，
+    // 從尾端仍可正常載入。
+    val geyserCommonJar = configurations.testRuntimeClasspath.get().filter {
+        it.absolutePath.replace('\\', '/').contains("/org.geysermc.geyser/")
+    }
+    classpath = (classpath - geyserCommonJar) + geyserCommonJar
     // 把 CLI 的 -Dacelib.genSignatureBaseline 明確轉傳給 test worker，
     // 讓 signature baseline generation guard（fail-closed）在 system-property
     // 路徑同樣生效（否則 Gradle CLI -D 預設不會進 test JVM）。

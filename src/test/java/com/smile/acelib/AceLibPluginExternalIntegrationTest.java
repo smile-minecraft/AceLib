@@ -73,9 +73,9 @@ class AceLibPluginExternalIntegrationTest {
         assertNotNull(apiExt, "onEnable 後 api.getExternalIntegrationService 必須非 null");
         assertSame(pluginExt, apiExt,
             "plugin 與 api 必須攜帶同一 external service 實例（8 參數 ready 傳入）");
-        // 三個 reflection-only adapter 皆已註冊但外部插件缺席 → FAILED 模組狀態
+        // 四個 reflection-only adapter 皆已註冊但外部插件缺席 → FAILED 模組狀態
         assertEquals("FAILED", pluginExt.getModuleStatus(),
-            "註冊三個 adapter 但外部插件缺席時，external service 模組狀態必須為 FAILED");
+            "註冊四個 adapter 但外部插件缺席時，external service 模組狀態必須為 FAILED");
     }
 
     @Test
@@ -84,7 +84,7 @@ class AceLibPluginExternalIntegrationTest {
         ModuleState mod = integrationModule(plugin.getDiagnosticsService().buildSnapshot());
         assertNotNull(mod, "onEnable 後 diagnostics 必須註冊 integration 模組");
         assertEquals(ModuleStatus.FAILED, mod.status(),
-            "三個 adapter 皆未可用時 integration 模組必須為 FAILED");
+            "四個 adapter 皆未可用時 integration 模組必須為 FAILED");
         assertEquals("all external integrations failed", mod.detail(),
             "integration 模組 detail 必須來自 ExternalIntegrationServiceImpl.toModuleState()");
     }
@@ -123,7 +123,7 @@ class AceLibPluginExternalIntegrationTest {
         assertSame(afterReload, plugin.getApi().getExternalIntegrationService(),
             "reload 後 api 與 plugin 必須攜帶同一（新）external service 實例");
         assertEquals("FAILED", afterReload.getModuleStatus(),
-            "reload 後 external service 模組狀態仍為 FAILED（三個 adapter 缺席）");
+            "reload 後 external service 模組狀態仍為 FAILED（四個 adapter 缺席）");
 
         ModuleState mod = integrationModule(plugin.getDiagnosticsService().buildSnapshot());
         assertNotNull(mod, "reload 後 diagnostics 必須仍註冊 integration 模組");
@@ -219,11 +219,12 @@ class AceLibPluginExternalIntegrationTest {
             "失敗路徑下舊 external service 已被 shutdown（module status = SHUTDOWN）");
     }
 
-    private static final String[] REGISTERED_IDS = {"vault", "luckperms", "placeholderapi"};
+    private static final String[] REGISTERED_IDS =
+        {"vault", "luckperms", "placeholderapi", "floodgate"};
 
     @Test
-    @DisplayName("onEnable 後 vault / luckperms / placeholderapi 三個 adapter 皆已註冊且狀態可查詢")
-    void enabledPlugin_allThreeAdaptersRegisteredAndQueryable() {
+    @DisplayName("onEnable 後 vault / luckperms / placeholderapi / floodgate 四個 adapter 皆已註冊且狀態可查詢")
+    void enabledPlugin_allAdaptersRegisteredAndQueryable() {
         ExternalIntegrationService ext = plugin.getExternalIntegrationService();
         for (String id : REGISTERED_IDS) {
             IntegrationProbeResult result = ext.getStatus(id);
@@ -233,9 +234,45 @@ class AceLibPluginExternalIntegrationTest {
             assertFalse(result.reason().contains("is not registered"),
                 id + " 必須已註冊（不應出現 not registered 訊息）");
         }
-        // 未註冊 id 仍回傳 not registered 結果，證明只有這三個被註冊
+        // 未註冊 id 仍回傳 not registered 結果，證明只有這四個被註冊
         assertTrue(ext.getStatus("unknown-integration").reason().contains("is not registered"),
             "未註冊 id 必須回傳 not registered 結果");
+    }
+
+    @Test
+    @DisplayName("Floodgate 缺席環境：getStatus(\"floodgate\") 可診斷且底層為 NOT_INSTALLED，其他 adapter 不受影響")
+    void enabledPlugin_floodgateAbsent_notInstalledAndOthersUnaffected() {
+        ExternalIntegrationService ext = plugin.getExternalIntegrationService();
+        // adapter 狀態機契約（比照 vault）：缺席時 getStatus 為 INIT_FAILED，
+        // 但 reason 必須保留底層探測語意 NOT_INSTALLED 供管理員判讀
+        IntegrationProbeResult floodgate = ext.getStatus("floodgate");
+        assertNotEquals(IntegrationStatus.AVAILABLE, floodgate.status());
+        assertTrue(floodgate.reason().contains("NOT_INSTALLED"),
+            "缺席時 reason 必須保留底層 NOT_INSTALLED 語意，實際：" + floodgate.reason());
+        assertFalse(floodgate.reason().contains("is not registered"),
+            "floodgate 必須已註冊");
+        // 其他 adapter 不受影響：仍已註冊且可查詢
+        for (String id : new String[] {"vault", "luckperms", "placeholderapi"}) {
+            assertNotNull(ext.getStatus(id), id + " 仍必須可查詢");
+            assertFalse(ext.getStatus(id).reason().contains("is not registered"),
+                id + " 不得因 floodgate 加入而受影響");
+        }
+    }
+
+    @Test
+    @DisplayName("bindExternalService 注入探測器的 classloader 必須是 AceLib 自身的 plugin classloader，而非伺服器主 classloader")
+    void externalProbeClassLoader_isPluginClassLoader_notServerClassLoader() {
+        // 根因鎖定：舊實作使用 server.getClass().getClassLoader()（所有 plugin classloader 的父），
+        // 父優先委派下永遠看不到插件 JAR 提供的 marker class，導致四個 adapter 全數 INIT_FAILED。
+        // 修復後必須使用 AceLib 自身的 plugin classloader（會依 softdepend 委派到依賴插件）。
+        ClassLoader probeLoader = plugin.externalProbeClassLoader();
+        ClassLoader pluginLoader = plugin.getClass().getClassLoader();
+        ClassLoader serverLoader = server.getClass().getClassLoader();
+
+        assertSame(pluginLoader, probeLoader,
+            "探測 classloader 必須等於 plugin 自身的 classloader（才能看見依賴插件的 API class）");
+        assertNotSame(serverLoader, probeLoader,
+            "探測 classloader 不得是伺服器主 classloader（否則看不到任何插件提供的 marker class）");
     }
 
     @Test
@@ -255,7 +292,7 @@ class AceLibPluginExternalIntegrationTest {
     }
 
     @Test
-    @DisplayName("reload 後 external service 為新實例，舊服務已 SHUTDOWN，新服務仍註冊三個 adapter")
+    @DisplayName("reload 後 external service 為新實例，舊服務已 SHUTDOWN，新服務仍註冊四個 adapter")
     void reload_replacesService_oldShutdown_newRegistered() {
         ExternalIntegrationService before = plugin.getExternalIntegrationService();
         assertNotNull(before);
@@ -271,9 +308,9 @@ class AceLibPluginExternalIntegrationTest {
         assertEquals("SHUTDOWN", before.getModuleStatus(),
             "舊 external service 在 reload 後必須已 shutdown");
 
-        // 新服務仍註冊三個 adapter（且外部插件仍缺席 → FAILED）
+        // 新服務仍註冊四個 adapter（且外部插件仍缺席 → FAILED）
         assertEquals("FAILED", after.getModuleStatus(),
-            "新 external service 仍應為 FAILED（三個 adapter 缺席）");
+            "新 external service 仍應為 FAILED（四個 adapter 缺席）");
         for (String id : REGISTERED_IDS) {
             assertFalse(after.getStatus(id).reason().contains("is not registered"),
                 id + " 在新服務中必須已註冊");

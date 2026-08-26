@@ -12,6 +12,11 @@ authors:
   - Smile
 load: POSTWORLD
 depend: []
+# 四個外部整合皆為可選：缺席時 AceLib 以 reflection-only 探測安全降級（零影響）。
+# softdepend 同時授予 AceLib 的 plugin classloader 對這些依賴插件 API class 的可見性
+# （現代 Paper 採 access-backed classloader group，僅對宣告的 depend/softdepend 開放），
+# 否則即使改用正確的 plugin classloader 也看不到 marker class。
+softdepend: [floodgate, Vault, LuckPerms, PlaceholderAPI]
 commands:
   acelib:
     description: AceLib 管理指令根節點

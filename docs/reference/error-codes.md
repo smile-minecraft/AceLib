@@ -26,6 +26,8 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `GUI` | `ACELIB-GUI-*` | GUI |
 | `ITEM` | `ACELIB-ITEM-*` | Item |
 | `EXT` | `ACELIB-EXT-*` | 外部整合 |
+| `BED` | `ACELIB-BED-*` | 基岩版玩家服務 |
+| `FORM` | `ACELIB-FORM-*` | 表單服務 |
 | `DBG` | `ACELIB-DBG-*` | 診斷模組自身 |
 
 ### 排程器（SCHED）
@@ -183,6 +185,21 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-EXT-004` | 整合資源清理失敗 | shutdown 時釋放失敗 |
 | `ACELIB-EXT-005` | 整合服務尚未啟用 | facade NOT_READY |
 | `ACELIB-EXT-006` | 整合服務已停用 | facade SHUTDOWN |
+
+### 基岩版玩家服務（BED）
+
+| 代碼 | 說明 | 觸發情境 |
+| --- | --- | --- |
+| `ACELIB-BED-001` | 基岩服務尚未啟用 | uninitialized／bind 前，查詢或 forms() 被拒絕 |
+| `ACELIB-BED-002` | 基岩服務已停用 | onDisable／reload 失敗後查詢被拒絕 |
+| `ACELIB-BED-003` | 查詢輸入為 null 或語意不合法 | isBedrockPlayer / getPlayerInfo 傳入 null UUID |
+
+### 表單服務（FORM）
+
+| 代碼 | 說明 | 觸發情境 |
+| --- | --- | --- |
+| `ACELIB-FORM-001` | 表單服務尚未啟用 | Floodgate 缺席（綁定 absent 發送 seam）時 sendForm 被拒絕 |
+| `ACELIB-FORM-002` | 表單服務已停用 | onDisable／reload 失敗後 shutdown，sendForm 被拒絕 |
 
 ### 其他
 
