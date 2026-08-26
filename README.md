@@ -2,7 +2,7 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-目前穩定版是 **1.0.0**。repository 已公開，GitHub Release `v1.0.0` 已正式發布。
+目前版本是 **1.1.0**（新增基岩版玩家支援）。repository 已公開，GitHub Release `v1.1.0` 發布準備中；已發布的 `v1.0.0` 詳情見 CHANGELOG。
 
 ## 支援版本
 
@@ -24,7 +24,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.0.0")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.1.0")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 ```yaml
 name: MyPlugin
 main: com.example.myplugin.MyPlugin
-version: 1.0.0
+version: 1.1.0
 api-version: '26.1.2'
 folia-supported: true
 depend: [AceLib]
@@ -97,7 +97,7 @@ public final class MyPlugin extends JavaPlugin {
 
 ## 重要限制
 
-- GitHub Release `v1.0.0` 目前沒有可下載的 server plugin JAR。管理員需依[部署步驟](docs/operator/README.md)從原始碼建置。
+- GitHub Release 沒有可下載的 server plugin JAR。管理員需依[部署步驟](docs/operator/README.md)從原始碼建置。
 - AceLib 不支援 Bukkit `/reload`。文件中的 AceLib reload 是函式庫自己的生命週期操作，兩者不同。
 - MockBukkit 測試不能取代 Folia 真實 region scheduler 的執行驗證。
 - 日誌中的對外錯誤使用 `ACELIB-<AREA>-<CODE>` 格式，可在[錯誤碼頁](docs/reference/error-codes.md)查詢。

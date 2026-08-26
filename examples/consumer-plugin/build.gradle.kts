@@ -4,7 +4,7 @@
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
 // AceLib 1.0.0 的 GitHub repository 已公開、GitHub Release 已建立，
 // JitPack `v1.0.0` artifact endpoint 已驗證可解析（HTTP 200，無 transitive dependencies）。
-// 本 fixture 仍使用「本地 mavenLocal artifact」解析（com.smile:acelib:1.0.0），
+// 本 fixture 仍使用「本地 mavenLocal artifact」解析（com.smile:acelib:1.1.0），
 // 因為它是貢獻者本地開發用途；公開安裝請使用 JitPack 座標 com.github.smile-minecraft:AceLib:v1.0.0。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
@@ -28,9 +28,9 @@ repositories {
 }
 
 dependencies {
-    // AceLib 1.0.0 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.0.0，僅供貢獻者本地開發，
+    // AceLib 1.1.0 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.1.0，僅供貢獻者本地開發，
     // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.0.0（已驗證可解析）。
-    compileOnly("com.smile:acelib:1.0.0")
+    compileOnly("com.smile:acelib:1.1.0")
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
@@ -210,7 +210,7 @@ val verifyConsumerDocs by tasks.registering {
         }
         // 發布狀態：GitHub repository 已公開且 GitHub v1.0.0 Release 已建立。
         // 文件必須明確描述此 public/release 狀態；JitPack v1.0.0 endpoint 已驗證可解析，
-        // 本機 mavenLocal() 座標（com.smile:acelib:1.0.0）僅供貢獻者本地開發，不代表 Maven Central。
+        // 本機 mavenLocal() 座標（com.smile:acelib:1.1.0）僅供貢獻者本地開發，不代表 Maven Central。
         require(readmeText.contains("GitHub Release") && readmeText.contains("repository 已公開")) {
             "README.md 必須明確描述 GitHub Release 與 repository 已公開狀態"
         }
@@ -219,15 +219,16 @@ val verifyConsumerDocs by tasks.registering {
         require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
             "README.md 不得把 1.0.0 現況宣稱為未發布／Release Candidate"
         }
-        // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + v1.0.0 座標）。
-        // 對應已驗證的 public v1.0.0 狀態：JitPack v1.0.0 artifact endpoint 可解析（HTTP 200，無 transitive dependencies）。
+        // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + 當前版本座標）。
+        // 座標以根專案 version 為準（expectedVersion），避免版本前進時門禁本身寫死舊版號。
         require(readmeText.contains("jitpack.io", ignoreCase = true)) {
             "README.md 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
         }
-        require(readmeText.contains("com.github.smile-minecraft:AceLib:v1.0.0")) {
-            "README.md 必須包含公開 JitPack 座標 com.github.smile-minecraft:AceLib:v1.0.0"
+        val jitpackCoordinate = "com.github.smile-minecraft:AceLib:v$expectedVersion"
+        require(readmeText.contains(jitpackCoordinate)) {
+            "README.md 必須包含公開 JitPack 座標 $jitpackCoordinate"
         }
-        // 負向 current-state：不得宣稱 com.smile:acelib:1.0.0 已發布至 Maven Central。
+        // 負向 current-state：不得宣稱 com.smile:acelib:1.1.0 已發布至 Maven Central。
         // 本機 mavenLocal() 座標僅供貢獻者本地開發，不代表 Maven Central 已發布。
         // 以明確 forbidden marker 判定（同時出現 Maven Central 與「已發布/已成功/published」），
         // 並排除否定語境（「不」「不代表」「不得」「未」「不宣稱」），避免脆弱的單一否定判斷。
@@ -239,7 +240,7 @@ val verifyConsumerDocs by tasks.registering {
             mentionsCentral && claimsPublished && !negation
         }
         require(!mavenCentralPublishedClaim) {
-            "README.md 不得宣稱 com.smile:acelib:1.0.0 已發布至 Maven Central（本機 mavenLocal 僅供貢獻者）"
+            "README.md 不得宣稱 com.smile:acelib:1.1.0 已發布至 Maven Central（本機 mavenLocal 僅供貢獻者）"
         }
 
         // 4b) CHANGELOG 目前 release section 檢查：避免只檢查 README 而漏掉 CHANGELOG 的 stale RC 描述。

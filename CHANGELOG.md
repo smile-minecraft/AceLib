@@ -2,6 +2,24 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.1.0] - 2026-08-26
+
+`v1.1.0` 以 GitHub Release 發布，repository 已公開；Release 本身沒有 binary asset。
+
+### 主要功能
+
+- 基岩版玩家支援：透過 Floodgate 偵測基岩玩家，查詢裝置、輸入方式、語言與連結資訊（`BedrockService`）；未知列舉值回報 `UNKNOWN` 不拋例外，Floodgate 缺席時零影響。
+- 基岩原生表單：`FormSpec` DSL 支援 Simple / Modal / Custom 三種表單；送出結果明確區分「Floodgate 已接受」（SENT/REJECTED）與玩家回應（VALID/CLOSED/INVALID）。
+- 表單回應安全派送：不論上游從哪個執行緒回呼，一律重新派送到玩家 region context；有效結果最多執行一次，離線／關閉／過期／reload／disable 時執行零次。
+- 新錯誤分類 `ACELIB-BED-*` 與 `ACELIB-FORM-*`；公開 API 擴充為 143 個頂層型別（111 Supported + 12 SPI + 20 Internal）。
+
+### 版本與限制
+
+- 編譯期鎖定 floodgate api `2.2.5-SNAPSHOT`（unique snapshot `2.2.5-20260809.110940-20`）並啟用 Gradle dependency verification；整合最低門檻 2.2.0。
+- 實機驗證組合：Floodgate 2.2.5-SNAPSHOT b140 + Geyser-Spigot 2.11.2-b1232 on Folia 26.2-4（含真人基岩客戶端表單操作驗收）。
+- 修復外部整合探測使用伺服器 classloader 導致實機上外部整合永遠無法啟用的 v1.0.0 缺陷；`plugin.yml` softdepend 擴充為 floodgate / Vault / LuckPerms / PlaceholderAPI。
+- Cumulus/Floodgate 型別不出現在任何公開簽章；transfer 指令與訊息互動降級不在本版範圍。
+
 ## [1.0.0] - 2026-08-14
 
 `v1.0.0` 已作為正式 GitHub Release 發布，repository 已公開。Release 本身沒有 binary asset。

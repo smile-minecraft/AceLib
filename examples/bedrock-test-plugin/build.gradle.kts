@@ -6,7 +6,7 @@
 //   2. 再執行 `./gradlew -p examples/bedrock-test-plugin build`
 //
 // 本專案是測試服驗收工具，不發布；AceLib 以 mavenLocal 座標
-// com.smile:acelib:1.0.0 解析本地 publish 產物（僅供貢獻者本地開發，
+// com.smile:acelib:1.1.0 解析本地 publish 產物（僅供貢獻者本地開發，
 // 公開安裝請使用 JitPack com.github.smile-minecraft:AceLib:v1.0.0）。
 plugins {
     java
@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.smile:acelib:1.0.0")
+    compileOnly("com.smile:acelib:1.1.0")
     // Paper/Folia API 由伺服器 runtime 提供，編譯期只需要 API 面。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
