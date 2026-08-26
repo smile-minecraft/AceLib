@@ -2,7 +2,7 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-目前版本是 **1.1.0**（新增基岩版玩家支援）。repository 已公開，GitHub Release `v1.1.0` 發布準備中；已發布的 `v1.0.0` 詳情見 CHANGELOG。
+目前版本是 **1.1.0**（新增基岩版玩家支援），已作為 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases/tag/v1.1.0) 發布；歷史版本詳情見 CHANGELOG。
 
 ## 支援版本
 
