@@ -1,35 +1,48 @@
 # 在 Paper 或 Folia 部署 AceLib
 
-AceLib 1.0.0 需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 目前沒有 JAR asset，請從公開 repository 建置。
+> 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
+
+
+AceLib 1.1.0 需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 目前沒有 JAR asset，請從公開 repository 建置。
+
+## 目錄
+
+- [建立 runtime JAR](#建立-runtime-jar)
+- [放進 server](#放進-server)
+- [啟動後檢查](#啟動後檢查)
+- [Paper 與 Folia 的差異](#paper-與-folia-的差異)
+- [不要使用 Bukkit `/reload`](#不要使用-bukkit-reload)
+- [基岩玩家支援（Geyser/Floodgate）](#基岩玩家支援geyserfloodgate)
+- [常見問題](#常見問題)
 
 ## 建立 runtime JAR
 
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.0.0
+git checkout v1.1.0
 ./gradlew clean build --no-daemon --console=plain
 ```
 
 建置成功後會產生：
 
 ```text
-build/libs/AceLib-1.0.0.jar
+build/libs/AceLib-1.1.0.jar
 ```
 
-`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.0.0.jar`。
+`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.1.0.jar`。
 
 ## 放進 server
 
 1. 停止 server。
-2. 把 `AceLib-1.0.0.jar` 複製到 server 的 `plugins/`。
+2. 把 `AceLib-1.1.0.jar` 複製到 server 的 `plugins/`。
 3. 把需要 AceLib 的下游 plugin JAR 也放進 `plugins/`。下游 plugin 的 `plugin.yml` 應含 `depend: [AceLib]`。
 4. 以 Java 25 啟動 Paper 或 Folia。
 
 例如：
 
 ```bash
-cp build/libs/AceLib-1.0.0.jar /path/to/server/plugins/
+cp build/libs/AceLib-1.1.0.jar /path/to/server/plugins/
 cd /path/to/server
 java -jar paper-26.1.2.jar --nogui
 ```
@@ -48,7 +61,7 @@ acelib status
 
 ```text
 === AceLib Diagnostics Report ===
-Version: 1.0.0
+Version: 1.1.0
 Platform: Paper
 Ready: true
 ```
@@ -92,7 +105,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 確認 `plugins/` 同時有 AceLib JAR，並檢查 AceLib 是否在啟用時先發生錯誤。
 
-### 找不到 `build/libs/AceLib-1.0.0.jar`
+### 找不到 `build/libs/AceLib-1.1.0.jar`
 
 確認你在 AceLib repository 根目錄執行建置，並使用 Java 25。重新執行完整的 `./gradlew clean build --no-daemon --console=plain`，不要只找 GitHub Release asset。
 
@@ -103,3 +116,9 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 ### 想升級到 26.2
 
 Paper 與 Folia 26.2 尚未驗證。先在獨立測試 server 驗證，再決定是否升級正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
+
+## 相關頁面
+
+- [相容性](../consumer/compatibility.md)
+- [快速開始](../consumer/quickstart.md)
+- [如何取得 AceLib](../reference/release-artifacts.md)

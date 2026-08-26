@@ -1,5 +1,8 @@
 # GUI
 
+> 適合要為玩家開啟與更新受保護 inventory GUI 的插件開發者。
+
+
 從 ready 的 `AceLibApi` 取得 `GuiService`：
 
 ```java
@@ -43,3 +46,9 @@ GuiResult closed = gui.closeInventory(player.getUniqueId(), generation);
 Inventory 修改必須在玩家上下文執行。Production GUI service 會透過 `SafeScheduler` 派送；玩家離線或 scheduler 拒絕時，不會留下未完成 session。
 
 Renderer 在玩家 region 內執行，不要從 renderer 跨 region 修改其他實體或方塊。完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [世界操作](world.md)
+- [安全排程](scheduler.md)
+- [玩家資料與 session](player.md)

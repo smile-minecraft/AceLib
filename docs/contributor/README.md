@@ -1,6 +1,16 @@
 # 修改 AceLib
 
+> 適合要修改 AceLib 原始碼並跑通建置、測試與文件門禁的貢獻者。
+
+
 AceLib 使用 Java 25 與 Gradle wrapper 9.5.1。先安裝 Git；JDK 可由 Gradle toolchain 下載，也可自行準備 Java 25。
+
+## 目錄
+
+- [建立開發環境](#建立開發環境)
+- [常用檢查](#常用檢查)
+- [驗證下游 plugin 範例](#驗證下游-plugin-範例)
+- [修改公開 API 或文件](#修改公開-api-或文件)
 
 ## 建立開發環境
 
@@ -36,7 +46,7 @@ cd AceLib
 ./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
 ```
 
-本機座標是 `com.smile:acelib:1.0.0`。這只供 repository 開發與測試，不代表 Maven Central 已發布。一般 plugin 開發者使用的是 JitPack `com.github.smile-minecraft:AceLib:v1.0.0`。
+本機座標是 `com.smile:acelib:1.1.0`。這只供 repository 開發與測試，不代表 Maven Central 已發布。一般 plugin 開發者使用的是 JitPack `com.github.smile-minecraft:AceLib:v1.1.0`。
 
 只檢查 Markdown 連結、anchor、版本文字與 consumer 範例契約時，可執行：
 
@@ -51,3 +61,9 @@ cd AceLib
 - 公開型別分類列在 [API surface](../reference/api-surface.md)。該頁由 `api-surface.json` 產生，不要手動改 generated inventory。
 - Markdown 的分工與 release 更新位置請看[文件寫作說明](../documentation-style.md)。
 - 公開 JavaDoc 必須通過 doclint；錯誤訊息使用 `ACELIB-<AREA>-<CODE>` 格式。
+
+## 相關頁面
+
+- [文件怎麼分工](../documentation-style.md)
+- [模組指南](../modules/README.md)
+- [錯誤碼](../reference/error-codes.md)

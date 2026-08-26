@@ -1,5 +1,8 @@
 # 錯誤碼參考
 
+> 適合在日誌看到 ACELIB 錯誤碼、需要對照模組與觸發原因的開發者與管理員。
+
+
 在 server 日誌看到 `ACELIB-<AREA>-<CODE>` 時，可在這裡查代碼代表的模組與常見觸發原因。處理問題時請保留完整代碼，以及它前後的日誌內容。
 
 錯誤碼由各模組的常數與 `diagnostics.ErrorCodeRegistry` 定義；若要修改或新增代碼，請先以原始碼為準。
@@ -210,3 +213,9 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-LANG-001` | 訊息 key 缺失 | locale key 不存在（warning，不中斷） |
 | `ACELIB-LANG-002` | 語言檔格式錯誤 | YAML 解析失敗 |
 | `ACELIB-DBG-001` | 診斷模組自身錯誤 | reload 時 diagnostics 重綁失敗 |
+
+## 相關頁面
+
+- [診斷](../modules/diagnostics.md)
+- [伺服器管理員指南](../operator/README.md)
+- [安全排程](../modules/scheduler.md)

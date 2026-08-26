@@ -25,6 +25,17 @@ AceLib 的文件依讀者正在做的事拆分。新增內容前，先把資訊�
 - 保留 API、Paper、Folia、Gradle 等必要名稱，其餘盡量使用自然的台灣繁中。
 - 不在公開文件放工作追蹤編號、代理流程、驗收紀錄或一次性的測試數量。
 - 「必須」「不得」「預設」等說法要能從程式、設定、測試或官方文件核對。
+- 指涉 AceLib 自身版本時必須寫成「AceLib X.Y.Z」或座標形式（例如 `com.github.smile-minecraft:AceLib:vX.Y.Z`），不得裸寫版本號；否則門禁 4c 無法捕捉漂移。
+
+## 頁面模板
+
+深度文件採三段式模板：
+
+- **受眾宣告**：每頁 H1 下方加一句受眾宣告（blockquote 或斜體），說明本頁適合誰讀。
+- **目錄**：含 4 個以上 H2 的長頁在首個 H2 前加「## 目錄」，以 `- [標題]` 連至對應 `#anchor` 列出所有 H2 的 GitHub 相容 anchor。
+- **相關頁面**：每頁結尾加「## 相關頁面」，用相對路徑列 1–3 個直接相關連結。
+
+`docs/reference/api-surface.md` 為 generated 檔案，不套用此模板。
 
 ## JavaDoc
 
@@ -42,10 +53,13 @@ Public 型別與方法需說明用途，並補齊適用的 `@param`、`@return`�
 2. 在[如何取得 AceLib](reference/release-artifacts.md)更新 JitPack、Release asset 與 server JAR 取得方式。
 3. 在[快速開始](consumer/quickstart.md)更新唯一一份完整 consumer dependency。
 4. 更新根 README 的短摘要與 `CHANGELOG.md`。
-5. 執行文件檢查：
+5. 確認[快速開始](consumer/quickstart.md)、[相容性](consumer/compatibility.md)、[管理員指南](operator/README.md)、[如何取得 AceLib](reference/release-artifacts.md)與[貢獻者指南](contributor/README.md)五頁的 AceLib 版本語境都是新版號；`verifyConsumerDocs` 會檢查這五頁，殘留舊版號會讓建置失敗。
+6. 執行文件檢查：
 
 ```bash
 ./gradlew docsCheck --rerun-tasks --no-daemon --console=plain
 ```
+
+只有「Git tag」開頭且含 `<!-- 版本歷史 -->` 的行才豁免版本檢查。
 
 不要把相同發布狀態複製到每一個模組頁。模組頁只在 API 或限制真的改變時更新。

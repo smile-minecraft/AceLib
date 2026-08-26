@@ -1,5 +1,8 @@
 # 傳送基岩原生表單
 
+> 適合要向基岩版玩家發送原生表單並處理回應的插件開發者。
+
+
 AceLib 提供自有表單 DSL，讓你對基岩版玩家顯示 Geyser/Floodgate 的原生表單（simple / modal / custom）。先從 `BedrockService` 取得 `FormService`：
 
 ```java
@@ -9,6 +12,15 @@ import com.smile.acelib.form.FormService;
 // bedrock 為 api.getBedrockService() 取得的實例
 FormService forms = bedrock.forms();
 ```
+
+## 目錄
+
+- [建立表單](#建立表單)
+- [發送表單](#發送表單)
+- [讀取回應](#讀取回應)
+- [回應派送保證](#回應派送保證)
+- [生命週期](#生命週期)
+- [錯誤碼](#錯誤碼)
 
 ## 建立表單
 
@@ -128,3 +140,9 @@ AceLib reload 或停用後，舊的回應 callback 不會再執行。服務 shut
 ## 錯誤碼
 
 表單服務相關錯誤見[錯誤碼頁](../reference/error-codes.md#表單服務form)的 `ACELIB-FORM-*` 段落。
+
+## 相關頁面
+
+- [基岩版玩家](bedrock.md)
+- [外部整合](external.md)
+- [錯誤碼](../reference/error-codes.md)

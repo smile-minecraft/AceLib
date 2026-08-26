@@ -1,6 +1,9 @@
 # 相容性
 
-AceLib 1.0.0 採用 Java 25，目標伺服器版本是 Paper 與 Folia 26.1.2。
+> 適合在建置或升級前確認 Java、Paper／Folia 與 Gradle 基線的開發者與管理員。
+
+
+AceLib 1.1.0 採用 Java 25，目標伺服器版本是 Paper 與 Folia 26.1.2。
 
 | 項目 | 版本或設定 | 用途 |
 | --- | --- | --- |
@@ -28,9 +31,19 @@ AceLib 透過 Floodgate 偵測基岩版玩家並傳送原生表單；相關 API 
 
 ## 尚未驗證的範圍
 
-- Paper 與 Folia 26.2 尚未驗證，不應直接視為支援版本。
+- Paper 與 Folia 26.2 尚未全面驗證，不應直接視為支援版本。AceLib 的支援聲明以 Paper 與 Folia 26.1.2 為準。
 - MockBukkit 可測試 Paper API 與部分平台分支，但不能取代 Folia 真實 region scheduler runtime。涉及 region 的功能仍需在 Folia server 上驗證。
 - Bukkit `/reload` 不受支援。AceLib 文件提到的 reload 是函式庫自己的生命週期操作。
 - Geyser 位於 proxy 的架構已於[管理員指南](../operator/README.md)說明部署條件，但本地僅驗證單機後端路徑，未在實際 proxy 環境驗證。
 
+### 關於 Folia 26.2 的個案驗證紀錄
+
+AceLib 1.1.0 的基岩功能曾在 Folia 26.2-4 上做過單一功能的實機驗證（Floodgate 2.2.5-SNAPSHOT b140 + Geyser-Spigot 2.11.2-b1232，含真人基岩客戶端的表單操作；詳見 CHANGELOG 的 1.1.0 紀錄）。這是特定組合下針對基岩表單功能的驗證紀錄，不代表 AceLib 已完整支援 Folia 26.2 平台：排程、上下文與其他模組在 26.2 上仍未驗證。評估升級時，仍應以 26.1.2 為支援基準，並先在獨立測試 server 驗證。
+
 版本數字可在 `build.gradle.kts`、`gradle/wrapper/gradle-wrapper.properties` 與 `src/main/resources/plugin.yml` 核對。取得 JitPack API 或 server JAR 的方式請看[如何取得 AceLib](../reference/release-artifacts.md)。
+
+## 相關頁面
+
+- [快速開始](quickstart.md)
+- [伺服器管理員指南](../operator/README.md)
+- [如何取得 AceLib](../reference/release-artifacts.md)

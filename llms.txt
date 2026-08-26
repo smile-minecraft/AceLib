@@ -1,0 +1,54 @@
+# AceLib
+
+AceLib is a Folia-first shared foundation library for Paper and Folia plugins, providing safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, Bedrock support, forms, and diagnostics.
+
+## Library overview
+- [AceLib README](https://github.com/smile-minecraft/AceLib/blob/main/README.md): Project overview, JitPack installation, plugin.yml setup, and API acquisition via ServicesManager.
+- [AceLib README (zh-TW)](https://github.com/smile-minecraft/AceLib/blob/main/README.zh-TW.md): Traditional Chinese project overview with the same installation and lifecycle instructions.
+- [Documentation Index](https://github.com/smile-minecraft/AceLib/blob/main/docs/README.md): Task-oriented router that directs readers to consumer, operator, contributor, and reference docs.
+
+## Consumer
+- [Consumer Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/README.md): Entry point for downstream plugins explaining provider acquisition and where to read next.
+- [Quick Start](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/quickstart.md): Complete Gradle setup, plugin.yml declaration, and provider retrieval example for first-time integration.
+- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Verified baseline versions for Java, Paper, Folia, and Bedrock dependencies, plus unsupported scope.
+- [Provider Lifecycle](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/provider-lifecycle.md): How to handle AceLib ready, reload, and disable states by re-acquiring the provider API.
+
+## Operator
+- [Operator Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/operator/README.md): Build the runtime JAR from source, deploy to Paper or Folia, and verify startup with acelib status.
+
+## Contributor
+- [Contributor Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/contributor/README.md): Development environment, test commands, documentation gates, and local Maven publishing workflow.
+
+## Modules
+- [Modules Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/README.md): Index of all subsystem modules and their service entry points.
+- [Core API](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/core.md): Acquire version, platform, and services from a ready AceLibApi instance.
+- [Safe Scheduling](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/scheduler.md): Folia-safe scheduling for global, async, player, entity, and location tasks.
+- [Thread Context Safety](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/context.md): Check and dispatch work to the correct thread or region via SafeExecutor and ContextInspector.
+- [Platform Capability](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/platform.md): Detect Paper versus Folia and branch logic via Platform and PlatformCapability.
+- [Configuration](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/config.md): Manage YAML config schemas, defaults, reload, and versioned migrations with ConfigManager.
+- [Message Service](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/message.md): Localized chat, action bar, title, and broadcast messaging via LangManager and MessageService.
+- [Command Model](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/command.md): Describe commands and subcommands with CommandSpec, SubCommandSpec, and ReplySink abstractions.
+- [Event Registry](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/event.md): Region-aware Bukkit event registration with SafeEventRegistry and ListenerPolicy.
+- [Data Store](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/data.md): Persistent data interface with schema migrations, async submission, and lifecycle control via DataStore.
+- [Player Data and Session](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/player.md): Load, track, and persist player sessions and dirty records with PlayerDataService.
+- [World Operations](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/world.md): Safe block, entity, and teleport operations using immutable LocationSnapshot and EntityReference.
+- [GUI](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/gui.md): Open and manage protected inventory GUIs with generation-checked sessions and async updates.
+- [Custom Items](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/item.md): Create, identify, serialize, and migrate custom ItemStacks with AceItemFactory.
+- [Bedrock Players](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/bedrock.md): Detect Bedrock players via Floodgate and query device, input, language, and link state.
+- [Forms](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/form.md): Send Bedrock native forms via FormSpec DSL and receive responses with region-redispatched callbacks.
+- [External Integrations](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/external.md): Probe Vault, PlaceholderAPI, LuckPerms, and Floodgate availability via ExternalIntegrationService.
+- [Diagnostics](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/diagnostics.md): Collect module states, error throttling, and diagnostic reports via acelib status and DiagnosticsService.
+
+## Reference
+- [Error Codes](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/error-codes.md): Lookup table for ACELIB-<AREA>-<CODE> including trigger conditions and categories.
+- [Release Artifacts](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/release-artifacts.md): How to obtain the API from JitPack, build the server JAR, and use the local Maven coordinate.
+- [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification contract for all 143 public types into Supported, SPI, and Internal.
+
+## Changelog
+- [Changelog](https://github.com/smile-minecraft/AceLib/blob/main/CHANGELOG.md): Version history and upgrade notes for all releases.
+
+## AI agent integration notes
+- Obtain the API through Bukkit ServicesManager via `getRegistration(AceLibApi.AceLibProvider.class)`, call `provider.api()`, and check `api.isReady()` before using any service; after an internal reload re-acquire via `provider.api()` on the same provider, after disable the ServicesManager registration is removed (re-query returns null) and any retained provider yields a shutdown (not-ready) facade (see provider-lifecycle.md and the Getting the API section in README).
+- Only depend on types classified as Supported in api-surface.md; SPI types may be implemented by extension authors under their documented contract, and Internal types must not be depended on.
+- On Folia, player, entity, block, and inventory operations must be dispatched via SafeScheduler or SafeExecutor and validated with ContextInspector to honor region threading (see scheduler.md and context.md).
+- Resolve any `ACELIB-<AREA>-<CODE>` from logs by looking it up in error-codes.md, which maps each code to its module, meaning, and trigger condition.

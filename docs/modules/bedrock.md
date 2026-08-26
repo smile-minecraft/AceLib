@@ -1,5 +1,8 @@
 # 偵測基岩版玩家
 
+> 適合要識別基岩版玩家並處理裝置資訊的插件開發者。
+
+
 AceLib 透過 Floodgate 判斷連線玩家是否來自基岩版（Geyser），並提供裝置、輸入模式與語言等資訊。先從 ready 的 `AceLibApi` 取得 `BedrockService`：
 
 ```java
@@ -9,6 +12,14 @@ import com.smile.acelib.bedrock.BedrockService;
 // api 為 ready 的 AceLibApi（取得方式見根 README 的「取得 API」）
 BedrockService bedrock = api.getBedrockService();
 ```
+
+## 目錄
+
+- [判斷是否為基岩玩家](#判斷是否為基岩玩家)
+- [Floodgate 沒安裝時](#floodgate-沒安裝時)
+- [查詢 Floodgate 整合狀態（進階）](#查詢-floodgate-整合狀態進階)
+- [基岩玩家的平台限制](#基岩玩家的平台限制)
+- [錯誤碼](#錯誤碼)
 
 ## 判斷是否為基岩玩家
 
@@ -72,3 +83,9 @@ IntegrationProbeResult floodgate = external.getStatus("floodgate");
 ## 錯誤碼
 
 基岩服務相關錯誤見[錯誤碼頁](../reference/error-codes.md#基岩版玩家服務bed)的 `ACELIB-BED-*` 段落。
+
+## 相關頁面
+
+- [表單](form.md)
+- [外部整合](external.md)
+- [錯誤碼](../reference/error-codes.md)

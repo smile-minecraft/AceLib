@@ -1,5 +1,8 @@
 # 設定檔
 
+> 適合要在自己 plugin 中建立、讀寫與遷移設定檔的開發者。
+
+
 `ConfigManager` 管理 YAML 設定、預設值、版本與遷移。它由 consumer 自行建立，不是從 `AceLibApi` 取得。
 
 ## 建立並載入
@@ -47,3 +50,9 @@ config.load();
 遷移必須形成連續版本鏈。缺少必要遷移或遷移失敗時，AceLib 會保留原資料並回報 `ACELIB-CFG-*`。
 
 多語系檔案由 `LangManager` 處理，訊息輸出方式見[訊息服務](message.md)。錯誤碼見[完整查表](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [訊息服務](message.md)
+- [資料儲存](data.md)
+- [錯誤碼](../reference/error-codes.md)

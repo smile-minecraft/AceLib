@@ -1,5 +1,8 @@
 # 執行緒上下文安全
 
+> 適合需要判斷或保證在正確執行緒或 region 操作遊戲物件的插件開發者。
+
+
 Paper 通常要求在主執行緒修改遊戲物件；Folia 要求在目標所屬 region 執行。`SafeExecutor` 可把工作送到正確位置，`ContextInspector` 則用來檢查目前上下文。
 
 ## 修改玩家或世界物件
@@ -51,3 +54,9 @@ if (!result.safe()) {
 已知平台的 `READ_ONLY` 檢查會通過。Folia 在錯誤 region 修改會得到 `ACELIB-CTX-003`；Paper 在非主執行緒修改會得到 `ACELIB-CTX-001`；未知平台會以 `ACELIB-CTX-004` 拒絕受限操作。
 
 方法所需的 plugin、platform、capability、目標物件與 runnable 不可為 `null`。完整代碼說明見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [安全排程](scheduler.md)
+- [世界操作](world.md)
+- [平台能力](platform.md)

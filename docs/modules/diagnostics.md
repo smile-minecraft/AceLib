@@ -1,5 +1,8 @@
 # 診斷
 
+> 適合要透過狀態指令或程式收集 AceLib 運行診斷的開發者與管理員。
+
+
 伺服器管理員不需要寫程式。直接執行：
 
 ```text
@@ -22,7 +25,7 @@ Modules:
 
 ## 給 plugin 開發者
 
-AceLib 1.0.0 的 `AceLibApi` 不提供 `getDiagnosticsService()`。下游 plugin 不應 cast 到 `AceLibPlugin` 取得 AceLib 內部的 diagnostics instance；AceLib 自己的狀態請透過 `/acelib status` 查看。
+目前的 `AceLibApi` 不提供 `getDiagnosticsService()`。下游 plugin 不應 cast 到 `AceLibPlugin` 取得 AceLib 內部的 diagnostics instance；AceLib 自己的狀態請透過 `/acelib status` 查看。
 
 `DiagnosticsService` 仍是公開類別，可用來建立獨立的診斷資料：
 
@@ -42,3 +45,9 @@ String report = diagnostics.buildReport().format(false);
 `buildSnapshot()` 回傳不可變快照。`recordError(code, detail)` 會套用節流，避免相同錯誤在同一視窗大量重複；`buildReport().format(true)` 會額外輸出 capability 與 throttle 統計。
 
 未知或大小寫不符的錯誤碼會歸類為 `UNKNOWN`，不會拋出例外。
+
+## 相關頁面
+
+- [錯誤碼](../reference/error-codes.md)
+- [核心 API](core.md)
+- [平台能力](platform.md)

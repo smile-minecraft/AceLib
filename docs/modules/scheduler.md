@@ -1,5 +1,8 @@
 # Paper 與 Folia 的安全排程
 
+> 適合需要在 Paper 與 Folia 以正確 region 排程工作的插件開發者。
+
+
 `SafeScheduler` 用同一套 API 處理全域、非同步、玩家、實體與位置工作。Folia 會送到對應 region 或 entity scheduler；Paper 會走 Bukkit scheduler。
 
 ## 建立 scheduler
@@ -50,3 +53,9 @@ scheduler.cancelAll();
 Folia 上不要把全域 `BukkitScheduler` 當成玩家、實體或位置工作的預設路徑。若工作從 async callback 回來後要修改遊戲物件，請再次用 scheduler 送回正確位置。
 
 錯誤代碼與觸發原因見[錯誤碼](../reference/error-codes.md)。需要先判斷目前執行緒是否允許操作時，請看[上下文安全](context.md)。
+
+## 相關頁面
+
+- [上下文安全](context.md)
+- [世界操作](world.md)
+- [Provider 生命週期](../consumer/provider-lifecycle.md)

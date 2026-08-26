@@ -1,22 +1,24 @@
+English · [繁體中文](README.zh-TW.md)
+
 # AceLib
 
-AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
+AceLib is a shared foundation library for Paper and Folia plugins. It provides safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, and diagnostics.
 
-目前版本是 **1.1.0**（新增基岩版玩家支援）。repository 已公開，`v1.1.0` 已作為 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases/tag/v1.1.0) 發布；歷史版本詳情見 CHANGELOG。
+The current version is **1.1.0** (adds Bedrock player support). The GitHub repository is a **public repository** and `v1.1.0` has been published as a [GitHub Release](https://github.com/smile-minecraft/AceLib/releases/tag/v1.1.0); see CHANGELOG for history.
 
-## 支援版本
+## Supported Versions
 
-| 項目 | 版本 |
+| Item | Version |
 | --- | --- |
 | Java | 25 |
 | Paper | 26.1.2 |
 | Folia | 26.1.2 |
 
-Paper 與 Folia 26.2 尚未驗證。完整限制請看[相容性說明](docs/consumer/compatibility.md)。
+Paper and Folia 26.2 have not been verified. See [Compatibility](docs/consumer/compatibility.md) for the full constraints.
 
-## 在 plugin 中加入 AceLib
+## Adding AceLib to Your Plugin
 
-將 JitPack repository 與 AceLib API 加入 `build.gradle.kts`：
+Add the JitPack repository and the AceLib API to `build.gradle.kts`:
 
 ```kotlin
 repositories {
@@ -28,11 +30,11 @@ dependencies {
 }
 ```
 
-這個 JitPack 座標已可解析。完整且可編譯的 Gradle 設定請看[快速開始](docs/consumer/quickstart.md)。
+This JitPack coordinate is verified to resolve. See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
 
-## 設定 `plugin.yml`
+## Configuring `plugin.yml`
 
-你的 plugin 必須宣告 AceLib 為必要依賴：
+Your plugin must declare AceLib as a required dependency:
 
 ```yaml
 name: MyPlugin
@@ -43,11 +45,11 @@ folia-supported: true
 depend: [AceLib]
 ```
 
-`depend: [AceLib]` 讓伺服器先啟用 AceLib，再啟用你的 plugin。這是下游 plugin 的設定；AceLib 自己沒有其他必要 plugin 依賴。
+`depend: [AceLib]` ensures the server enables AceLib before your plugin. This is the downstream plugin's configuration; AceLib itself has no other required plugin dependencies.
 
-## 取得 API
+## Getting the API
 
-AceLib 透過 Bukkit `ServicesManager` 提供 `AceLibApi.AceLibProvider`：
+AceLib exposes `AceLibApi.AceLibProvider` through Bukkit `ServicesManager`:
 
 ```java
 package com.example.myplugin;
@@ -65,14 +67,14 @@ public final class MyPlugin extends JavaPlugin {
                 .getRegistration(AceLibApi.AceLibProvider.class);
 
         if (registration == null) {
-            getLogger().severe("AceLib provider 未註冊；停用本 plugin。");
+            getLogger().severe("AceLib provider not registered; disabling.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
         AceLibApi api = registration.getProvider().api();
         if (!api.isReady()) {
-            getLogger().severe("AceLib 尚未就緒；停用本 plugin。");
+            getLogger().severe("AceLib not ready; disabling.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -83,26 +85,30 @@ public final class MyPlugin extends JavaPlugin {
 }
 ```
 
-不要直接依賴 `AceLibPlugin`。若你的 plugin 會長時間執行，請再閱讀 [Provider 生命週期](docs/consumer/provider-lifecycle.md)，了解重載與停用時如何重新取得 API。
+Do not depend directly on `AceLibPlugin`. If your plugin is long-running, see [Provider Lifecycle](docs/consumer/provider-lifecycle.md) for how to re-acquire the API after reload or disable.
 
-## 文件
+## Documentation
 
-- [插件開發者快速開始](docs/consumer/quickstart.md)
-- [伺服器管理員指南](docs/operator/README.md)
-- [貢獻者指南](docs/contributor/README.md)
-- [模組指南](docs/modules/)
-- [如何取得 AceLib](docs/reference/release-artifacts.md)
-- [錯誤碼](docs/reference/error-codes.md)
-- [變更紀錄](CHANGELOG.md)
+| Task group | Document | When to use it |
+| --- | --- | --- |
+| Getting started | [Quick Start](docs/consumer/quickstart.md) | First time integrating AceLib — set up Gradle, declare dependencies, and obtain `AceLibProvider` |
+| Getting started | [How AceLib is released](docs/reference/release-artifacts.md) | Verify the public repository status and copy the JitPack coordinate `com.github.smile-minecraft:AceLib:v1.1.0` |
+| Daily integration | [Module Guide](docs/modules/) | Look up a specific subsystem — scheduler, context, config, messages, commands, events, data, player, world, GUI, items, externals |
+| Daily integration | [Provider Lifecycle](docs/consumer/provider-lifecycle.md) | Handle reload and disable correctly for long-running plugins |
+| Daily integration | [Error Codes](docs/reference/error-codes.md) | Look up `ACELIB-<AREA>-<CODE>` and the five required fields in each message |
+| Operations | [Operator Guide](docs/operator/README.md) | Build the server plugin jar from source and deploy it |
+| Operations | [Compatibility](docs/consumer/compatibility.md) | Check the verified baseline (Java 25 / Paper 26.1.2 / Folia 26.1.2) and why 26.2 is not yet supported |
+| Reference | [Contributor Guide](docs/contributor/README.md) | Contribution workflow, verification gates, and style rules |
+| Reference | [Changelog](CHANGELOG.md) | Version history, release notes, and upgrade guidance |
 
-## 重要限制
+## Important Limitations
 
-- GitHub Release 沒有可下載的 server plugin JAR。管理員需依[部署步驟](docs/operator/README.md)從原始碼建置。
-- AceLib 不支援 Bukkit `/reload`。文件中的 AceLib reload 是函式庫自己的生命週期操作，兩者不同。
-- MockBukkit 測試不能取代 Folia 真實 region scheduler 的執行驗證。
-- 日誌中的對外錯誤使用 `ACELIB-<AREA>-<CODE>` 格式，可在[錯誤碼頁](docs/reference/error-codes.md)查詢。
-- 基岩（Geyser/Floodgate）玩家有平台限制——聊天連結不可點擊、GUI 無法區分左右鍵，詳見[模組指南的 bedrock 頁](docs/modules/bedrock.md)。
+- The GitHub Release does not include a downloadable server plugin jar. Operators must [build from source](docs/operator/README.md) to obtain `AceLib-1.1.0.jar`.
+- AceLib does not support Bukkit `/reload`. The reload documented in AceLib is the library's own lifecycle operation — not the same as `/reload`.
+- MockBukkit tests cannot replace real region-scheduler verification on a Folia server.
+- External errors in logs use the `ACELIB-<AREA>-<CODE>` format — see the [error codes](docs/reference/error-codes.md).
+- Bedrock (Geyser/Floodgate) players have platform constraints — chat links are not clickable and GUI cannot distinguish left/right clicks; see the [Bedrock module page](docs/modules/bedrock.md).
 
 ## MIT License
 
-AceLib 以 [MIT License](LICENSE) 發布。
+AceLib is released under the [MIT License](LICENSE).

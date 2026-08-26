@@ -1,8 +1,11 @@
 # 資料儲存
 
+> 適合要描述資料儲存初始化、遷移與持久化的插件開發者。
+
+
 `DataStore` 是 AceLib 的公開儲存介面，支援初始化、schema 遷移、同步保存、非同步工作與關閉。
 
-AceLib 1.0.0 的 `AceLibApi` 不會直接提供 `DataStore`。內建的 JSON 與 JDBC 實作屬於內部組裝類別；一般 consumer 只有在自己的整合層提供 `DataStore` instance 時，才應使用本頁 API。不要直接依賴 `JsonFileDataStore` 或 `JdbcDataStore`。
+目前的 `AceLibApi` 不會直接提供 `DataStore`。內建的 JSON 與 JDBC 實作屬於內部組裝類別；一般 consumer 只有在自己的整合層提供 `DataStore` instance 時，才應使用本頁 API。不要直接依賴 `JsonFileDataStore` 或 `JdbcDataStore`。
 
 ## 使用已提供的 store
 
@@ -39,3 +42,9 @@ store.close();
 實作 `DataMigration`，提供來源版本、目標版本與轉換內容，再於 `init()` 前呼叫 `registerMigration(...)`。遷移鏈中任何一步失敗時，初始化會以 `ACELIB-DATA-004` 失敗，既有資料不應被部分覆寫。
 
 On-disk schema 比程式支援的版本新時，store 會拒絕降版寫入。完整錯誤查表見[錯誤碼](../reference/error-codes.md)。玩家資料服務建立在這個介面上，請看[玩家資料](player.md)。
+
+## 相關頁面
+
+- [玩家資料與 session](player.md)
+- [設定檔](config.md)
+- [錯誤碼](../reference/error-codes.md)

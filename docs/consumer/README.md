@@ -1,5 +1,8 @@
 # 用 AceLib 寫 plugin
 
+> 適合準備在下游 plugin 中接入 AceLib 的開發者，了解完整取得與就緒流程。
+
+
 第一次接入 AceLib，直接從[快速開始](quickstart.md)做起。那一頁包含唯一一份完整的 Gradle、`plugin.yml` 與 provider 範例。
 
 AceLib 不提供 static singleton。你的 plugin 要透過 Bukkit `ServicesManager` 取得 `AceLibApi.AceLibProvider`，呼叫 `api()`，並在使用服務前檢查 `isReady()`。
@@ -13,3 +16,9 @@ AceLib 不提供 static singleton。你的 plugin 要透過 Bukkit `ServicesMana
 - [錯誤碼](../reference/error-codes.md)：查詢日誌中的 `ACELIB-*` 代碼。
 
 如果你只想看一個可編譯專案，開啟 [`examples/consumer-plugin`](../../examples/consumer-plugin/README.md)。該範例在 repository 內使用本機 Maven 產物做驗證；一般 plugin 專案仍應依快速開始使用 JitPack。
+
+## 相關頁面
+
+- [快速開始](quickstart.md)
+- [Provider 生命週期](provider-lifecycle.md)
+- [模組指南](../modules/README.md)

@@ -1,5 +1,8 @@
 # 核心 API
 
+> 適合要從 AceLibApi 取得版本、平台與服務的插件開發者。
+
+
 先依[快速開始](../consumer/quickstart.md)取得 ready 的 `AceLibApi`。這個物件提供版本、平台能力，以及 AceLib 對外管理的服務。
 
 ```java
@@ -41,3 +44,9 @@ if (capability.regionScheduling()) {
 ```
 
 玩家、實體、方塊與 inventory 是否可操作，仍取決於目前執行緒。接著閱讀[平台能力](platform.md)、[安全排程](scheduler.md)與[上下文安全](context.md)。
+
+## 相關頁面
+
+- [平台能力](platform.md)
+- [安全排程](scheduler.md)
+- [上下文安全](context.md)

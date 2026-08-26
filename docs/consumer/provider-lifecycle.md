@@ -1,6 +1,16 @@
 # Provider 生命週期
 
+> 適合已拿到 provider、需正確處理就緒與停用狀態的插件開發者。
+
+
 先完成[快速開始](quickstart.md)。本頁只處理 AceLib 從啟用到停用期間，consumer 應如何保存與使用 provider。
+
+## 目錄
+
+- [啟用時](#啟用時)
+- [尚未就緒時](#尚未就緒時)
+- [AceLib 自己的 reload](#acelib-自己的-reload)
+- [停用時](#停用時)
 
 ## 啟用時
 
@@ -49,3 +59,9 @@ AceLib 停用時會從 `ServicesManager` 移除 registration：
 這也是每次使用服務前重新取得 API 並檢查 `isReady()` 的原因。
 
 Provider 本身可從任何執行緒讀取，但這不代表所有服務操作都可在任何執行緒執行。Folia 上的玩家、實體、方塊與 inventory 操作仍須遵守各自的 region 限制；請看[排程](../modules/scheduler.md)與[上下文安全](../modules/context.md)。
+
+## 相關頁面
+
+- [快速開始](quickstart.md)
+- [安全排程](../modules/scheduler.md)
+- [上下文安全](../modules/context.md)

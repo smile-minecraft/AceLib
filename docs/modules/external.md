@@ -1,5 +1,8 @@
 # 外部 plugin 狀態
 
+> 適合要查詢外部插件整合狀態並決定降級路徑的開發者。
+
+
 AceLib 可查詢 Vault、PlaceholderAPI、LuckPerms 與 Floodgate 是否存在、已啟用且版本可接受。從 ready 的 API 取得服務：
 
 Floodgate 整合同時餵養 BedrockService（基岩玩家偵測與表單發送）；詳見[基岩版玩家模組](bedrock.md)。
@@ -36,3 +39,9 @@ switch (result.status()) {
 AceLib 使用 reflection 探測，不要求這些外部 API 一定存在於 classpath。若你要直接呼叫 Vault、PlaceholderAPI 或 LuckPerms API，仍需在自己的 plugin 宣告相應 dependency，並遵守對方的文件。
 
 AceLib 尚未就緒或已停用時，查詢會回 `INIT_FAILED` 與不可用原因。完整 `ACELIB-EXT-*` 說明見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [基岩版玩家](bedrock.md)
+- [診斷](diagnostics.md)
+- [錯誤碼](../reference/error-codes.md)

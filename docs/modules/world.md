@@ -1,5 +1,8 @@
 # 世界操作
 
+> 適合要以安全方式讀寫方塊、實體與傳送的插件開發者。
+
+
 從 ready 的 `AceLibApi` 取得 `WorldService`：
 
 ```java
@@ -40,3 +43,9 @@ world.teleportPlayer(player.getUniqueId(), target, false)
 `WorldService` 不會替每一個同步讀寫自動切換執行緒。Folia 的方塊、實體與位置操作必須在目標 region；Paper 則需在主執行緒。先使用 `SafeScheduler.runAtLocation`、`runForEntity` 或 `runForPlayer` 派送，再呼叫 world API。
 
 世界不存在、chunk 未載入、實體失效與玩家離線都會回傳明確結果。`null` 或無效半徑等輸入會直接拋出帶 `ACELIB-WORLD-007` 的例外。完整代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [安全排程](scheduler.md)
+- [上下文安全](context.md)
+- [玩家資料與 session](player.md)

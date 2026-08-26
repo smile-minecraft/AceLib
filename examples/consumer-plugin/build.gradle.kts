@@ -2,10 +2,10 @@
 // 就能用正式 AceLibApi.AceLibProvider contract 編譯出乾淨的 plugin。
 //
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
-// AceLib 1.0.0 的 GitHub repository 已公開、GitHub Release 已建立，
-// JitPack `v1.0.0` artifact endpoint 已驗證可解析（HTTP 200，無 transitive dependencies）。
+// AceLib 的 GitHub repository 已公開、GitHub Release 已建立，
+// JitPack artifact endpoint 已驗證可解析（HTTP 200，無 transitive dependencies）。
 // 本 fixture 仍使用「本地 mavenLocal artifact」解析（com.smile:acelib:1.1.0），
-// 因為它是貢獻者本地開發用途；公開安裝請使用 JitPack 座標 com.github.smile-minecraft:AceLib:v1.0.0。
+// 因為它是貢獻者本地開發用途；公開安裝請使用 JitPack 座標 com.github.smile-minecraft:AceLib:v1.1.0。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
@@ -29,7 +29,7 @@ repositories {
 
 dependencies {
     // AceLib 1.1.0 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.1.0，僅供貢獻者本地開發，
-    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.0.0（已驗證可解析）。
+    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.1.0（已驗證可解析）。
     compileOnly("com.smile:acelib:1.1.0")
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
@@ -49,11 +49,14 @@ val verifyConsumerDocs by tasks.registering {
 
     doLast {
         val repoRoot = project.projectDir.parentFile.parentFile
-        val readme = File(repoRoot, "README.md")
-        require(readme.exists()) { "找不到根 README.md：$readme" }
+        val readmeEn = File(repoRoot, "README.md")
+        val readmeZhTw = File(repoRoot, "README.zh-TW.md")
+        require(readmeEn.exists()) { "找不到根 README.md：$readmeEn" }
+        require(readmeZhTw.exists()) { "找不到根 README.zh-TW.md：$readmeZhTw" }
+        val readmes = listOf(readmeEn, readmeZhTw)
 
-        // 掃描範圍：根 README + docs/**/*.md + examples/**/*.md（fixture 文件納入，避免 checker 漏掃）。
-        val mdFiles = (listOf(readme)
+        // 掃描範圍：根 README 雙語 + docs/**/*.md + examples/**/*.md（fixture 文件納入，避免 checker 漏掃）。
+        val mdFiles = (readmes
             + File(repoRoot, "docs").walkTopDown().filter { it.isFile && it.name.endsWith(".md") }
             + File(repoRoot, "examples").walkTopDown().filter { it.isFile && it.name.endsWith(".md") })
             .toList()
@@ -199,48 +202,62 @@ val verifyConsumerDocs by tasks.registering {
             "發現 task-history 文字：\n" + taskHistoryHits.joinToString("\n")
         }
 
-        // 4) 版本一致：README 必須以實際 build.gradle.kts 的 version 為準（1.0.0）
+        // 4) 版本一致：README 必須以實際 build.gradle.kts 的 version 為準
         val buildScript = File(repoRoot, "build.gradle.kts").readText()
         val versionMatch = Regex("""version\s*=\s*"([^"]+)"""").find(buildScript)
         val expectedVersion = versionMatch?.groupValues?.get(1)
             ?: throw IllegalStateException("build.gradle.kts 找不到 version 欄位")
-        val readmeText = readme.readText()
-        require(readmeText.contains(expectedVersion)) {
-            "README.md 必須提到目前版本 $expectedVersion"
-        }
-        // 發布狀態：GitHub repository 已公開且 GitHub v1.0.0 Release 已建立。
-        // 文件必須明確描述此 public/release 狀態；JitPack v1.0.0 endpoint 已驗證可解析，
-        // 本機 mavenLocal() 座標（com.smile:acelib:1.1.0）僅供貢獻者本地開發，不代表 Maven Central。
-        require(readmeText.contains("GitHub Release") && readmeText.contains("repository 已公開")) {
-            "README.md 必須明確描述 GitHub Release 與 repository 已公開狀態"
-        }
-        // 不得把 current-state 寫成未發布／Release Candidate（歷史段落如 0.5.0 封存、RC 同步說明不含「未發布」，不誤判）。
-        val unpublishedCurrentState = Regex("""v?1\.0\.0[^\n]*(未發布|Release Candidate[^\n]*尚未發布)""")
-        require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
-            "README.md 不得把 1.0.0 現況宣稱為未發布／Release Candidate"
-        }
-        // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + 當前版本座標）。
-        // 座標以根專案 version 為準（expectedVersion），避免版本前進時門禁本身寫死舊版號。
-        require(readmeText.contains("jitpack.io", ignoreCase = true)) {
-            "README.md 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
-        }
         val jitpackCoordinate = "com.github.smile-minecraft:AceLib:v$expectedVersion"
-        require(readmeText.contains(jitpackCoordinate)) {
-            "README.md 必須包含公開 JitPack 座標 $jitpackCoordinate"
-        }
-        // 負向 current-state：不得宣稱 com.smile:acelib:1.1.0 已發布至 Maven Central。
-        // 本機 mavenLocal() 座標僅供貢獻者本地開發，不代表 Maven Central 已發布。
-        // 以明確 forbidden marker 判定（同時出現 Maven Central 與「已發布/已成功/published」），
-        // 並排除否定語境（「不」「不代表」「不得」「未」「不宣稱」），避免脆弱的單一否定判斷。
-        val mavenCentralPublishedClaim = readme.readLines().any { line ->
-            val mentionsCentral = line.contains("Maven Central", ignoreCase = true)
-            val claimsPublished = line.contains("已發布") || line.contains("已成功")
-                || line.contains("published", ignoreCase = true)
-            val negation = listOf("不", "不代表", "不得", "未", "不宣稱").any { line.contains(it) }
-            mentionsCentral && claimsPublished && !negation
-        }
-        require(!mavenCentralPublishedClaim) {
-            "README.md 不得宣稱 com.smile:acelib:1.1.0 已發布至 Maven Central（本機 mavenLocal 僅供貢獻者）"
+        for (readmeFile in readmes) {
+            val readmeText = readmeFile.readText()
+            val readmeRel = readmeFile.relativeTo(repoRoot).invariantSeparatorsPath
+            require(readmeText.contains(expectedVersion)) {
+                "$readmeRel 必須提到目前版本 $expectedVersion"
+            }
+            // 發布狀態：GitHub repository 已公開且目前版本已作為 GitHub Release 建立。
+            // 雙語 README 各自檢查：兩檔皆須含 GitHub Release；語言特定標記分開驗證
+            //（zh-TW 要求「repository 已公開」，英文要求 "public repository" 或 "publicly available"）。
+            require(readmeText.contains("GitHub Release")) {
+                "$readmeRel 必須明確描述 GitHub Release 狀態"
+            }
+            val isZhTw = readmeFile.name == "README.zh-TW.md"
+            if (isZhTw) {
+                require(readmeText.contains("repository 已公開")) {
+                    "$readmeRel 必須包含「repository 已公開」"
+                }
+            } else {
+                val lower = readmeText.lowercase()
+                require(lower.contains("public repository") || lower.contains("publicly available")) {
+                    "$readmeRel must describe public repository status (\"public repository\" or \"publicly available\")"
+                }
+            }
+            // 不得把 current-state 寫成未發布／Release Candidate（歷史段落如 0.5.0 封存、RC 同步說明不含「未發布」，不誤判）。
+            val unpublishedCurrentState = Regex("""v?""" + Regex.escape(expectedVersion) + """[^\n]*(未發布|Release Candidate[^\n]*尚未發布)""")
+            require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
+                "$readmeRel 不得把 $expectedVersion 現況宣稱為未發布／Release Candidate"
+            }
+            // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + 當前版本座標）。
+            // 座標以根專案 version 為準（expectedVersion），避免版本前進時門禁本身寫死舊版號。
+            require(readmeText.contains("jitpack.io", ignoreCase = true)) {
+                "$readmeRel 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
+            }
+            require(readmeText.contains(jitpackCoordinate)) {
+                "$readmeRel 必須包含公開 JitPack 座標 $jitpackCoordinate"
+            }
+            // 負向 current-state：不得宣稱已發布至 Maven Central。
+            // 本機 mavenLocal() 座標僅供貢獻者本地開發，不代表 Maven Central 已發布。
+            // 以明確 forbidden marker 判定（同時出現 Maven Central 與「已發布/已成功/published」），
+            // 並排除否定語境（「不」「不代表」「不得」「未」「不宣稱」），避免脆弱的單一否定判斷。
+            val mavenCentralPublishedClaim = readmeFile.readLines().any { line ->
+                val mentionsCentral = line.contains("Maven Central", ignoreCase = true)
+                val claimsPublished = line.contains("已發布") || line.contains("已成功")
+                    || line.contains("published", ignoreCase = true)
+                val negation = listOf("不", "不代表", "不得", "未", "不宣稱").any { line.contains(it) }
+                mentionsCentral && claimsPublished && !negation
+            }
+            require(!mavenCentralPublishedClaim) {
+                "$readmeRel 不得宣稱 com.smile:acelib:$expectedVersion 已發布至 Maven Central（本機 mavenLocal 僅供貢獻者）"
+            }
         }
 
         // 4b) CHANGELOG 目前 release section 檢查：避免只檢查 README 而漏掉 CHANGELOG 的 stale RC 描述。
@@ -271,9 +288,109 @@ val verifyConsumerDocs by tasks.registering {
             "CHANGELOG.md 目前 $expectedVersion section 不得把現況宣稱為本 RC／Release Candidate"
         }
 
+        // 4c) 版本受檔頁面一致：quickstart / compatibility / operator / release-artifacts /
+        //     contributor README 中，
+        //     所有 AceLib 自身版本的座標、artifact 名稱、checkout 指令與 status 輸出範例
+        //     必須等於根 build.gradle.kts 的 version。其他版本號（Paper API、Floodgate、Gradle 等）
+        //     有各自語境，不在本檢查範圍。只有同時含 <!-- 版本歷史 --> 且以 "Git tag" 開頭的行才豁免，
+        //     限歷史事實（如舊 tag 的 commit hash）；其餘含標記但非 Git tag 開頭的行仍正常比對。
+        val versionedPages = listOf(
+            "docs/consumer/quickstart.md",
+            "docs/consumer/compatibility.md",
+            "docs/operator/README.md",
+            "docs/reference/release-artifacts.md",
+            "docs/contributor/README.md",
+            "examples/consumer-plugin/README.md"
+        ).map { File(repoRoot, it) }
+        versionedPages.forEach { page ->
+            require(page.exists()) { "版本受檔文件不存在：${page.relativeTo(repoRoot)}" }
+        }
+        val versionHistoryMarker = "<!-- 版本歷史 -->"
+        // 只比對「AceLib 自身版本」語境；泛用 X.Y.Z 比對會誤判 Paper/Floodgate/Gradle 版本。
+        val aceLibVersionPatterns = listOf(
+            Regex("""com\.github\.smile-minecraft:AceLib:v(\d+\.\d+\.\d+)"""),
+            Regex("""AceLib-v(\d+\.\d+\.\d+)(?:-sources|-javadoc)?\.jar"""),
+            Regex("""git checkout v(\d+\.\d+\.\d+)"""),
+            Regex("""com\.smile:acelib:v?(\d+\.\d+\.\d+)"""),
+            Regex("""AceLib-(\d+\.\d+\.\d+)\.jar"""),
+            Regex("""AceLib\s+v?(\d+\.\d+\.\d+)\b"""),
+            Regex("""`v(\d+\.\d+\.\d+)`"""),
+            Regex("""^\s*Version:\s*v?(\d+\.\d+\.\d+)\s*$""")
+        )
+        val docVersionDrift = mutableListOf<String>()
+        for (page in versionedPages) {
+            page.readLines().forEachIndexed { index, line ->
+                if (line.contains(versionHistoryMarker) && line.trimStart().startsWith("Git tag")) {
+                    return@forEachIndexed
+                }
+                for (pattern in aceLibVersionPatterns) {
+                    for (match in pattern.findAll(line)) {
+                        val found = match.groupValues[1]
+                        if (found != expectedVersion) {
+                            docVersionDrift.add(
+                                "${page.relativeTo(repoRoot)}:${index + 1}: " +
+                                    "'${match.value}' 的版本 $found 與目前版本 $expectedVersion 不一致"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        require(docVersionDrift.isEmpty()) {
+            "文件頁面存在與目前版本 $expectedVersion 不一致的 AceLib 版本語境：\n" +
+                docVersionDrift.joinToString("\n")
+        }
+
         // 5) docs 導航：consumer quickstart 必須存在（IA 預留給本任務的頁面）
         require(File(repoRoot, "docs/consumer/quickstart.md").exists()) {
             "docs/consumer/quickstart.md 不存在"
+        }
+
+        // 6) llms.txt AI 檢索入口：repo 內路徑必須存在且不得逃逸出 repoRoot（fail-closed，外部 URL 不誤判）
+        val llmsTxt = File(repoRoot, "llms.txt")
+        require(llmsTxt.exists()) { "找不到 llms.txt：$llmsTxt（AI 檢索入口必須存在）" }
+        val repoUrlPrefix = "https://github.com/smile-minecraft/AceLib/blob/main/"
+        val repoRootCanonical = repoRoot.canonicalFile
+        val repoRootCanonicalPath = repoRootCanonical.canonicalPath + File.separator
+        val llmsLines = llmsTxt.readLines()
+        val repoUrlRegex = Regex("""\(("?)(https?://[^)\s"]+)\1\)""")
+        val llmsPathFailures = mutableListOf<String>()
+        llmsLines.forEachIndexed { index, line ->
+            for (match in repoUrlRegex.findAll(line)) {
+                val url = match.groupValues[2].trim()
+                if (!url.startsWith(repoUrlPrefix)) {
+                    continue
+                }
+                val afterPrefix = url.substringAfter(repoUrlPrefix)
+                val pathPart = afterPrefix.substringBefore("#").substringBefore("?").trim()
+                if (pathPart.isEmpty()) {
+                    continue
+                }
+                val targetFile = File(repoRoot, pathPart).normalize()
+                val targetCanonical = try {
+                    targetFile.canonicalFile
+                } catch (_: Exception) {
+                    null
+                }
+                val insideRepo = targetCanonical?.let { tc ->
+                    tc.canonicalPath == repoRootCanonical.canonicalPath ||
+                        tc.canonicalPath.startsWith(repoRootCanonicalPath)
+                } ?: false
+                if (!insideRepo || targetCanonical?.isFile != true) {
+                    val reason = when {
+                        !insideRepo -> "路徑逃逸出 repoRoot"
+                        targetCanonical?.exists() != true -> "repo 路徑不存在"
+                        targetCanonical?.isFile != true -> "路徑不是檔案"
+                        else -> "repo 路徑無效"
+                    }
+                    llmsPathFailures.add(
+                        "llms.txt:${index + 1}: $reason '$pathPart'（來自 $url）"
+                    )
+                }
+            }
+        }
+        require(llmsPathFailures.isEmpty()) {
+            "llms.txt 內指向本 repo 的路徑必須存在且不得逃逸：\n" + llmsPathFailures.joinToString("\n")
         }
 
         logger.lifecycle("verifyConsumerDocs: stale-symbol / relative-link / anchor / version 檢查通過")

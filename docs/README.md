@@ -1,6 +1,16 @@
 # AceLib 文件
 
+> 適合不確定該先看哪份文件的讀者，依任務選路。
+
+
 依你現在要做的事選一條路，不必先讀完所有頁面。
+
+## 目錄
+
+- [寫 plugin](#寫-plugin)
+- [管理 server](#管理-server)
+- [修改 AceLib](#修改-acelib)
+- [查資料](#查資料)
 
 ## 寫 plugin
 
@@ -26,3 +36,9 @@
 - [錯誤碼](reference/error-codes.md)
 - [公開 API 分類](reference/api-surface.md)
 - [版本變更](../CHANGELOG.md)
+
+## 相關頁面
+
+- [插件開發者快速開始](consumer/quickstart.md)
+- [伺服器管理員指南](operator/README.md)
+- [貢獻者指南](contributor/README.md)

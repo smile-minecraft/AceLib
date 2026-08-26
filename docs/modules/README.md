@@ -1,5 +1,8 @@
 # 模組指南
 
+> 適合要依功能查找模組 API 入口與使用限制的插件開發者。
+
+
 AceLib 各模組的 API 與使用限制。先從 ready 的 `AceLibApi` 取得對應服務，再呼叫模組方法。
 
 - [核心 API](core.md) — 取得 API、就緒狀態與版本資訊。
@@ -19,3 +22,9 @@ AceLib 各模組的 API 與使用限制。先從 ready 的 `AceLibApi` 取得對
 - [診斷](diagnostics.md) — 模組狀態與錯誤碼查詢。
 - [基岩版玩家](bedrock.md) — 偵測基岩版玩家與其裝置／輸入／語言資訊。
 - [表單](form.md) — 傳送基岩原生表單並接收回應。
+
+## 相關頁面
+
+- [核心 API](core.md)
+- [安全排程](scheduler.md)
+- [表單](form.md)

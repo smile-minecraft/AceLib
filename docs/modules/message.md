@@ -1,5 +1,8 @@
 # 訊息服務
 
+> 適合要發送本地化聊天、動作欄與標題訊息的插件開發者。
+
+
 `MessageService` 使用 `LangManager` 載入的語系內容，提供格式化、聊天、action bar、title、廣播與 console 輸出。Consumer 自行建立這兩個物件。
 
 ## 建立服務
@@ -32,3 +35,9 @@ messages.sendConsole("console.started", Map.of());
 對玩家送訊息仍受 server 的執行緒規則約束。Folia 在不屬於玩家的 region 操作時，AceLib 會以 `ACELIB-MSG-002` 記錄並略過；其他格式或輸出問題使用 `ACELIB-MSG-003`。
 
 如果訊息來自背景工作，先用[安全排程](scheduler.md)或[上下文安全](context.md)回到玩家所在 region。完整代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [設定檔](config.md)
+- [平台能力](platform.md)
+- [錯誤碼](../reference/error-codes.md)

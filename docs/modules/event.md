@@ -1,5 +1,8 @@
 # 事件註冊
 
+> 適合要以 region 安全方式註冊與移除 Bukkit 事件的插件開發者。
+
+
 `SafeEventRegistry` 提供可追蹤、可移除的 Bukkit listener，並可標示 listener 是否要求 Folia region context。
 
 ## 建立 registry
@@ -50,3 +53,9 @@ events.unregister(registration);
 Plugin 停用時呼叫 `events.onPluginDisable()`，解除所有 Bukkit registration。Listener 內部拋出的例外會記為 `ACELIB-EVT-001`，不會阻止其他 listener 執行。
 
 完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 相關頁面
+
+- [指令模型](command.md)
+- [上下文安全](context.md)
+- [錯誤碼](../reference/error-codes.md)
