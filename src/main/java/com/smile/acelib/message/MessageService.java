@@ -142,21 +142,32 @@ public final class MessageService {
     }
 
     /**
-     * 含 Bedrock 偵測 seam 的建構子（同 package 測試 / 注入 seam；非 public Supported API）。
+     * 含 Bedrock 偵測 seam 的建構子（Supported API，自 1.1.2 起由 package-private
+     * 提升為公開）。
      *
      * <p>下游插件若已持有 {@link BedrockService} facade，可透過此建構子讓
-     * {@code *WithFallback} 方法具備基岩玩家 click 降級能力；未提供時（2 參數
-     * 建構子）會自動解析 canonical bedrock facade（已 ready 的 {@link AceLibPlugin}
-     * 取 {@code AceLibApi#getBedrockService()}，否則 {@code forUnavailable}），
-     * 此時 {@code isBedrockPlayer} 一律安全回 false，所有訊息沿用原始 Component
-     * 發送，不受基岩 seam 影響。</p>
+     * {@code *WithFallback} 方法具備基岩玩家 click 降級能力。典型用法：從
+     * {@code AceLibApi#getBedrockService()} 取得 facade 後注入；若取得的是
+     * {@code forUnavailable} facade，{@link MessageService} 會安全捕捉其拋出的
+     * {@link IllegalStateException} 並退回原始 {@link net.kyori.adventure.text.Component}，
+     * 不降級、不中斷。</p>
+     *
+     * <p>未提供 bedrock 時（2 參數建構子）會自動解析 canonical bedrock facade
+     * （已 ready 的 {@link AceLibPlugin} 取 {@code AceLibApi#getBedrockService()}，
+     * 否則 {@code forUnavailable}），此時 {@code isBedrockPlayer} 一律安全回 false，
+     * 所有訊息沿用原始 Component 發送，不受基岩 seam 影響。</p>
+     *
+     * <p>此建構子自 1.0.0 即存在，但直到 1.1.2 才由 package-private 注入 seam
+     * 提升為公開 Supported API；在此之前下游無法直接注入 {@link BedrockService}，
+     * 導致四個 {@code *WithFallback} 方法對下游永遠不降級。</p>
      *
      * @param plugin     對外 owner plugin；不可為 null
      * @param lang       語言檔管理器；不可為 null
      * @param bedrock    基岩玩家查詢 facade；不可為 null
      * @throws NullPointerException 任一參數為 null
+     * @since 1.1.2
      */
-    MessageService(JavaPlugin plugin, LangManager lang, BedrockService bedrock) {
+    public MessageService(JavaPlugin plugin, LangManager lang, BedrockService bedrock) {
         this(plugin, lang, resolvePlatformContext(plugin, lang), bedrock);
     }
 

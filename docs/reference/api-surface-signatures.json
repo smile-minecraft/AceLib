@@ -973,6 +973,7 @@
     ],
     "com.smile.acelib.message.MessageService": [
       "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager)",
+      "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager,com.smile.acelib.bedrock.BedrockService)",
       "field PREFIX_KEY : java.lang.String",
       "method broadcast(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method broadcast(net.kyori.adventure.text.Component) : void",
