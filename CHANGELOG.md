@@ -2,6 +2,20 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.1.2] - 2026-08-27
+
+v1.1.2 以與 1.1.1 相同的 GitHub Release 方式發布（Release 沒有 binary asset）；請從公開 repository 建置取得。
+
+### 主要功能
+
+- 公開 `MessageService` 的 Bedrock 注入建構子：`MessageService(JavaPlugin, LangManager, BedrockService)` 由 package-private 提升為 `public` Supported API。下游插件可從 `AceLibApi#getBedrockService()` 取得 facade 後注入，使四個 `*WithFallback` 方法對基岩玩家啟用 click 降級；此前該建構子不可見，導致下游永遠不降級。
+
+### 版本與限制
+
+- 本版為 1.1.1 之上的加法性更新：僅加寬 API 可見性（package-private → public），未變更任何既有公開 API 語意或簽章，亦未新增 `AceLibApi.getMessageService(...)` 工廠。
+- 注入 `BedrockService.forUnavailable(...)` 時，`MessageService` 會安全捕捉其拋出的 `IllegalStateException` 並退回原始 Component，不降級、不中斷（與既有 2 參數建構子行為一致）。
+- API surface baseline（`docs/reference/api-surface-signatures.json`）已同步新增該公開建構子條目；`ApiSurfaceSignatureContractTest` 通過。
+
 ## [1.1.1] - 2026-08-27
 
 v1.1.1 以與 1.1.0 相同的 GitHub Release 方式發布（Release 沒有 binary asset）；請從公開 repository 建置取得。

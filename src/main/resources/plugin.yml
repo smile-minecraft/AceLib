@@ -3,7 +3,7 @@ name: AceLib
 # 注意：version 與 build.gradle.kts 的 version 欄位需手動同步。
 # Phase 0 為了避免 Gradle 8+ configuration cache 與 token filter 衝突，
 # 採硬編碼方式；Phase 1+ 若需動態注入可改用 expand() 或自訂 task。
-version: 1.1.1
+version: 1.1.2
 main: com.smile.acelib.AceLibPlugin
 api-version: '26.1.2'
 folia-supported: true
