@@ -3,7 +3,7 @@
 > 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
 
 
-AceLib 1.1.0 需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 目前沒有 JAR asset，請從公開 repository 建置。
+AceLib 1.1.1（此 checkout 的原始碼版本為 1.1.1）需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 沒有 JAR asset，請從公開 repository 建置；`git checkout v1.1.1` 對應 `v1.1.1` tag，JitPack `com.github.smile-minecraft:AceLib:v1.1.1` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
 
 ## 目錄
 
@@ -20,29 +20,29 @@ AceLib 1.1.0 需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2�
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.1.0
+git checkout v1.1.1  # v1.1.1 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 
 建置成功後會產生：
 
 ```text
-build/libs/AceLib-1.1.0.jar
+build/libs/AceLib-1.1.1.jar
 ```
 
-`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.1.0.jar`。
+`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.1.1.jar`。
 
 ## 放進 server
 
 1. 停止 server。
-2. 把 `AceLib-1.1.0.jar` 複製到 server 的 `plugins/`。
+2. 把 `AceLib-1.1.1.jar` 複製到 server 的 `plugins/`。
 3. 把需要 AceLib 的下游 plugin JAR 也放進 `plugins/`。下游 plugin 的 `plugin.yml` 應含 `depend: [AceLib]`。
 4. 以 Java 25 啟動 Paper 或 Folia。
 
 例如：
 
 ```bash
-cp build/libs/AceLib-1.1.0.jar /path/to/server/plugins/
+cp build/libs/AceLib-1.1.1.jar /path/to/server/plugins/
 cd /path/to/server
 java -jar paper-26.1.2.jar --nogui
 ```
@@ -61,7 +61,7 @@ acelib status
 
 ```text
 === AceLib Diagnostics Report ===
-Version: 1.1.0
+Version: 1.1.1
 Platform: Paper
 Ready: true
 ```
@@ -105,7 +105,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 確認 `plugins/` 同時有 AceLib JAR，並檢查 AceLib 是否在啟用時先發生錯誤。
 
-### 找不到 `build/libs/AceLib-1.1.0.jar`
+### 找不到 `build/libs/AceLib-1.1.1.jar`
 
 確認你在 AceLib repository 根目錄執行建置，並使用 Java 25。重新執行完整的 `./gradlew clean build --no-daemon --console=plain`，不要只找 GitHub Release asset。
 

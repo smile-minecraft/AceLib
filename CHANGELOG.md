@@ -2,6 +2,21 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.1.1] - 2026-08-27
+
+v1.1.1 以與 1.1.0 相同的 GitHub Release 方式發布（Release 沒有 binary asset）；請從公開 repository 建置取得。
+
+### 主要功能
+
+- 訊息 API 擴充：新增 Adventure Component 支援，訊息可攜帶格式化元件；提供 per-locale 查詢，依玩家語言回傳對應訊息。
+- 基岩版安全降級：基岩玩家不支援可點擊元件時，自動退回純文字 fallback，不拋例外、不遺失訊息內容。
+- 新增相容性矩陣與探測（probe），協助下游 plugin 在啟用期間確認 Adventure / Bedrock 路徑可用性。
+
+### 版本與限制
+
+- 本版為 1.1.0 之上的加法性更新，未變更既有公開 API 語意或簽章。
+- 基岩 click fallback 的限制與 1.1.0 相同：聊天連結不可點擊、GUI 無法區分左右鍵。
+
 ## [1.1.0] - 2026-08-26
 
 `v1.1.0` 以 GitHub Release 發布，repository 已公開；Release 本身沒有 binary asset。

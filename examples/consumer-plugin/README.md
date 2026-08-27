@@ -7,11 +7,11 @@
 - 檢查 `api().isReady()`，再使用 API。
 - 依 Paper 或 Folia 的平台能力選擇操作路徑。
 
-一般 plugin 專案請先看[快速開始](../../docs/consumer/quickstart.md)，並使用 JitPack `com.github.smile-minecraft:AceLib:v1.1.0`。
+一般 plugin 專案請先看[快速開始](../../docs/consumer/quickstart.md)，並使用 JitPack `com.github.smile-minecraft:AceLib:v1.1.1`。
 
 ## 在 AceLib repository 內編譯
 
-本範例刻意使用 `mavenLocal()` 與 `com.smile:acelib:1.1.0`，以便驗證你目前修改中的 AceLib。先從 repository 根目錄發布本機產物，再建置範例：
+本範例刻意使用 `mavenLocal()` 與 `com.smile:acelib:1.1.1`，以便驗證你目前修改中的 AceLib。先從 repository 根目錄發布本機產物，再建置範例：
 
 ```bash
 ./gradlew publishToMavenLocal
