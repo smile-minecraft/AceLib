@@ -3,10 +3,10 @@
 //
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
 // AceLib 的 GitHub repository 已公開。本 fixture 使用「本地 mavenLocal artifact」解析
-// （com.smile:acelib:1.1.1），因為它是貢獻者本地開發用途；公開安裝座標為
-// JitPack com.github.smile-minecraft:AceLib:v1.1.1（對應 v1.1.1 tag）。
+// （com.smile:acelib:1.1.2），因為它是貢獻者本地開發用途；公開安裝座標為
+// JitPack com.github.smile-minecraft:AceLib:v1.1.2（對應 v1.1.2 tag）。
 // 說明：本 fixture 是編譯驗證用途，不發布、不宣稱外部可用；JitPack 是否提供編譯用 API
-// 取決於 v1.1.1 tag 是否已在 GitHub 建立並由 JitPack 建置完成。
+// 取決於 v1.1.2 tag 是否已在 GitHub 建立並由 JitPack 建置完成。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
@@ -29,9 +29,9 @@ repositories {
 }
 
 dependencies {
-    // AceLib 1.1.1 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.1.1，僅供貢獻者本地開發，
-    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.1.1。
-    compileOnly("com.smile:acelib:1.1.1")
+    // AceLib 1.1.2 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.1.2，僅供貢獻者本地開發，
+    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.1.2。
+    compileOnly("com.smile:acelib:1.1.2")
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
@@ -301,7 +301,8 @@ val verifyConsumerDocs by tasks.registering {
             "docs/operator/README.md",
             "docs/reference/release-artifacts.md",
             "docs/contributor/README.md",
-            "examples/consumer-plugin/README.md"
+            "examples/consumer-plugin/README.md",
+            "CONTRIBUTING.md"
         ).map { File(repoRoot, it) }
         versionedPages.forEach { page ->
             require(page.exists()) { "版本受檔文件不存在：${page.relativeTo(repoRoot)}" }

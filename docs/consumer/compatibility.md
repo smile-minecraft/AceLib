@@ -3,7 +3,7 @@
 > 適合在建置或升級前確認 Java、Paper／Folia 與 Gradle 基線的開發者與管理員。
 
 
-AceLib 1.1.1 採用 Java 25，目標伺服器版本是 Paper 與 Folia 26.1.2。
+AceLib 1.1.2 採用 Java 25，目標伺服器版本是 Paper 與 Folia 26.1.2。
 
 | 項目 | 版本或設定 | 用途 |
 | --- | --- | --- |
