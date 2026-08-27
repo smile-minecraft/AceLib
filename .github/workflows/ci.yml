@@ -14,9 +14,9 @@ jobs:
     name: Build & Test (Java 25)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '25'
           distribution: 'temurin'
@@ -30,7 +30,7 @@ jobs:
         run: ./gradlew docsCheck --no-daemon
       # 保留 HTML Javadoc artifact 供下載檢視；上傳不需寫入權限，維持 contents: read。
       - name: Upload HTML Javadoc
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: javadoc-html
           path: build/docs/javadoc
@@ -40,9 +40,9 @@ jobs:
     name: Publish artifacts check (Java 25, no secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '25'
           distribution: 'temurin'
