@@ -23,7 +23,9 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.title.Title;
 import org.bukkit.entity.Player;
+import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -204,6 +206,101 @@ class MessageServiceFoliaTest {
             String delivered = String.join("\n", captor.getAllValues());
             assertTrue(delivered.contains("Hello tester!"),
                 "Folia 安全情境下訊息必須送到玩家。實際: " + delivered);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Folia + IllegalStateException：新增 Component overload 分流
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Folia + IllegalStateException (Component overload)")
+    class FoliaUnsafeComponentContext {
+
+        @Test
+        @DisplayName("sendChat(Player, Component) 在 Folia + sendMessage(Component) 拋 IllegalStateException → 記 MSG-002 且不中斷")
+        void sendChatComponent_foliaUnsafe_warnsAndSwallows() {
+            PlayerMock real = server.addPlayer("FoliaMockPlayer");
+            Player spy = Mockito.spy(real);
+            Mockito.when(spy.isOnline()).thenReturn(true);
+            Mockito.when(spy.getName()).thenReturn("FoliaMockPlayer");
+            Mockito.doThrow(new IllegalStateException("Player is not in their own region"))
+                .when(spy).sendMessage(Mockito.<Component>any());
+
+            assertDoesNotThrow(() -> foliaService.sendChat(spy, Component.text("hello")));
+
+            assertTrue(hasLogContaining("ACELIB-MSG-002"),
+                "Folia + IllegalStateException 必須輸出 MSG-002 warning。實際: " + logMessages());
+        }
+
+        @Test
+        @DisplayName("sendActionBar(Player, Component) 在 Folia + sendActionBar(Component) 拋 IllegalStateException → 記 MSG-002 且不中斷")
+        void sendActionBarComponent_foliaUnsafe_warnsAndSwallows() {
+            PlayerMock real = server.addPlayer("FoliaMockPlayer");
+            Player spy = Mockito.spy(real);
+            Mockito.when(spy.isOnline()).thenReturn(true);
+            Mockito.when(spy.getName()).thenReturn("FoliaMockPlayer");
+            Mockito.doThrow(new IllegalStateException("non-region"))
+                .when(spy).sendActionBar(Mockito.<Component>any());
+
+            assertDoesNotThrow(() -> foliaService.sendActionBar(spy, Component.text("hello")));
+
+            assertTrue(hasLogContaining("ACELIB-MSG-002"),
+                "Folia sendActionBar unsafe context 必須輸出 MSG-002。實際: " + logMessages());
+        }
+
+        @Test
+        @DisplayName("sendTitle(Player, Component, Component) 在 Folia + showTitle(Title) 拋 IllegalStateException → 記 MSG-002 且不中斷")
+        void sendTitleComponent_foliaUnsafe_warnsAndSwallows() {
+            PlayerMock real = server.addPlayer("FoliaMockPlayer");
+            Player spy = Mockito.spy(real);
+            Mockito.when(spy.isOnline()).thenReturn(true);
+            Mockito.when(spy.getName()).thenReturn("FoliaMockPlayer");
+            Mockito.doThrow(new IllegalStateException("non-region"))
+                .when(spy).showTitle(Mockito.<Title>any());
+
+            assertDoesNotThrow(() ->
+                foliaService.sendTitle(spy, Component.text("t"), Component.text("s")));
+
+            assertTrue(hasLogContaining("ACELIB-MSG-002"),
+                "Folia sendTitle unsafe context 必須輸出 MSG-002。實際: " + logMessages());
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // broadcast(Component) 逐收件者錯誤隔離
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("broadcast(Component) 逐收件者錯誤隔離")
+    class BroadcastComponentIsolation {
+
+        @Test
+        @DisplayName("broadcast(Component) 單一收件者 sendMessage(Component) 拋例外時，仍送達其他線上玩家並記可追蹤 warning")
+        void broadcast_oneRecipientFails_othersStillReceive() {
+            // 收件者 A：sendMessage(Component) 拋 IllegalStateException（Folia unsafe）
+            PlayerMock baseA = new PlayerMock(server, "ThrowingPlayer");
+            PlayerMock spyA = Mockito.spy(baseA);
+            Mockito.doThrow(new IllegalStateException("Player is not in their own region"))
+                .when(spyA).sendMessage(Mockito.<Component>any());
+            server.addPlayer(spyA);
+
+            // 收件者 B：正常玩家，應仍收到廣播
+            PlayerMock baseB = new PlayerMock(server, "ReceivingPlayer");
+            PlayerMock spyB = Mockito.spy(baseB);
+            server.addPlayer(spyB);
+
+            assertDoesNotThrow(() -> foliaService.broadcast(Component.text("broadcast!")));
+
+            // A 被嘗試送出（雖然拋例外）
+            Mockito.verify(spyA, Mockito.atLeastOnce())
+                .sendMessage(Mockito.<Component>any());
+            // B 仍收到廣播
+            Mockito.verify(spyB, Mockito.atLeastOnce())
+                .sendMessage(Mockito.<Component>any());
+            // 失敗有可追蹤 warning（Folia → MSG-002）
+            assertTrue(hasLogContaining("ACELIB-MSG-002"),
+                "單一收件者失敗必須記錄可追蹤 warning。實際: " + logMessages());
         }
     }
 

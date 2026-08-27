@@ -2,12 +2,17 @@ package com.smile.acelib.message;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 import com.smile.acelib.AceLibPlugin;
 import com.smile.acelib.config.LangManager;
@@ -22,10 +27,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.title.Title;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
@@ -35,6 +48,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
@@ -101,6 +115,8 @@ class MessageServiceTest {
             w.write("greeting: 'Hello {player}!'\n");
             w.write("welcome: 'Welcome to {server}'\n");
             w.write("farewell: 'Goodbye {player}'\n");
+            w.write("rich.greeting: '<green>Hello {player}!</green>'\n");
+            w.write("rich.broken: 'Hello {player} <green'\n");
             w.write("message:\n");
             w.write("  prefix: '[AceLib] '\n");
             w.write("broadcast.announce: 'Server restarting in {seconds} seconds'\n");
@@ -478,6 +494,446 @@ class MessageServiceTest {
     }
 
     // -----------------------------------------------------------------
+    // Adventure Component 管線（additive；不影響既有 String API）
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Adventure Component 管線")
+    class ComponentPipeline {
+
+        @Test
+        @DisplayName("formatComponent：rich template 轉為 Component 並套用 prefix")
+        void formatComponent_richTemplate_rendersWithPrefix() {
+            Component c = service.formatComponent("rich.greeting", Map.of("player", "smile"));
+            assertNotNull(c, "formatComponent 必須回傳非 null Component");
+            String s = c.toString();
+            assertTrue(s.contains("Hello smile!"),
+                "template 的 {player} 必須被替換，實際: " + s);
+            assertTrue(s.contains("[AceLib]"),
+                "formatComponent 必須套用 message.prefix，實際: " + s);
+            assertFalse(s.contains("{player}"),
+                "變數必須被替換，不應殘留 {player}");
+        }
+
+        @Test
+        @DisplayName("formatComponent：使用者變數值中的 <tag> 不被解析為 MiniMessage 標籤（防注入）")
+        void formatComponent_userVar_notInjected() {
+            Component c = service.formatComponent("rich.greeting",
+                Map.of("player", "<red>EVIL</red>"));
+            String s = c.toString();
+            assertTrue(s.contains("EVIL"),
+                "使用者值必須原樣出現，實際: " + s);
+            assertFalse(s.contains("RED"),
+                "使用者值中的 <red> 不得被解析為紅色標籤（防注入），實際: " + s);
+        }
+
+        @Test
+        @DisplayName("formatComponent：缺失 key 回傳 Component.empty() + 記錄 ACELIB-MSG-001")
+        void formatComponent_missingKey_returnsEmptyAndWarns() {
+            capturedLogs.clear();
+            Component c = service.formatComponent("does.not.exist", Map.of("player", "x"));
+            assertEquals(Component.empty(), c,
+                "缺失 key 必須回傳 Component.empty()");
+            assertTrue(hasLogContaining("ACELIB-MSG-001"),
+                "缺失 key 必須輸出 ACELIB-MSG-001");
+        }
+
+        @Test
+        @DisplayName("formatComponent：MiniMessage 解析失敗仍回傳可見正文並套用 prefix（不空白、不中斷）")
+        void formatComponent_parseFailure_returnsVisibleTextWithPrefix() {
+            // rich.broken 含未閉合標籤，MiniMessage 可能拋出或寬容修復；
+            // 無論走正常路徑或降級 fallback，結果都必須含變數替換後的可見正文與 prefix。
+            Component c = service.formatComponent("rich.broken", Map.of("player", "smile"));
+            assertNotNull(c, "解析失敗不得回傳 null");
+            String s = c.toString();
+            assertTrue(s.contains("Hello smile"),
+                "解析失敗仍須保留可見正文（變數已替換），實際: " + s);
+            assertTrue(s.contains("<green"),
+                "解析失敗仍須保留可見正文（未閉合標籤作為文字），實際: " + s);
+            assertTrue(s.contains("[AceLib]"),
+                "解析失敗仍須套用 message.prefix，實際: " + s);
+            assertFalse(s.contains("{player}"),
+                "變數必須被替換，不應殘留 {player}");
+        }
+
+        @Test
+        @DisplayName("formatComponent：null key 必須拋 NPE（契約）")
+        void formatComponent_nullKey_throws() {
+            assertThrows(NullPointerException.class,
+                () -> service.formatComponent(null, Map.of()));
+        }
+
+        @Test
+        @DisplayName("parseMiniMessage：合法 MiniMessage（click）解析為 Component")
+        void parseMiniMessage_legalTags_parsed() {
+            Component c = service.parseMiniMessage(
+                "<click:open_url:https://example.com>Visit</click>", Map.of());
+            assertNotNull(c);
+            String s = c.toString();
+            assertTrue(s.contains("Visit"), "文字必須保留，實際: " + s);
+            assertTrue(s.contains("OPEN_URL") || s.toLowerCase().contains("open_url"),
+                "click 事件必須被解析，實際: " + s);
+        }
+
+        @Test
+        @DisplayName("parseMiniMessage：<key> placeholder 以 unparsed 注入，使用者值不解析為標籤")
+        void parseMiniMessage_userVar_notInjected() {
+            Component c = service.parseMiniMessage("Hello <name>",
+                Map.of("name", "<red>EVIL</red>"));
+            String s = c.toString();
+            assertTrue(s.contains("EVIL"), "使用者值必須原樣出現，實際: " + s);
+            assertFalse(s.contains("RED"),
+                "placeholder 值不得被解析為紅色標籤（防注入），實際: " + s);
+            assertFalse(s.contains("<name>"),
+                "placeholder <name> 必須被替換，不應殘留，實際: " + s);
+        }
+
+        @Test
+        @DisplayName("parseMiniMessage：null input 回傳 Component.empty() + 記錄 ACELIB-MSG-003")
+        void parseMiniMessage_nullInput_returnsEmptyAndWarns() {
+            capturedLogs.clear();
+            Component c = service.parseMiniMessage(null, Map.of());
+            assertEquals(Component.empty(), c);
+            assertTrue(hasLogContaining("ACELIB-MSG-003"),
+                "null input 必須輸出 ACELIB-MSG-003");
+        }
+
+        @Test
+        @DisplayName("sendChat(Player, Component)：在線玩家收到原始 Component")
+        void sendChat_component_delivers() {
+            PlayerMock p = server.addPlayer();
+            Component c = Component.text("hi there");
+            service.sendChat(p, c);
+            Component received = firstComponentMessage(p);
+            assertEquals(c, received, "玩家必須收到原始 Component");
+        }
+
+        @Test
+        @DisplayName("sendChat(Player, Component)：null player / null message 為 silent no-op")
+        void sendChat_component_nullSafe() {
+            assertDoesNotThrow(() -> service.sendChat(null, Component.text("x")));
+            PlayerMock p = server.addPlayer();
+            assertDoesNotThrow(() -> service.sendChat(p, null));
+            assertNull(firstComponentMessageOrNull(p),
+                "null message 不應傳送任何 Component");
+        }
+
+        @Test
+        @DisplayName("sendChat(Player, Component)：離線玩家 noop")
+        void sendChat_component_offline_noop() {
+            PlayerMock p = server.addPlayer();
+            p.disconnect();
+            assertDoesNotThrow(() -> service.sendChat(p, Component.text("x")));
+            assertNull(firstComponentMessageOrNull(p),
+                "離線玩家不應收到 Component");
+        }
+
+        @Test
+        @DisplayName("sendActionBar(Player, Component)：在線玩家收到原始 Component")
+        void sendActionBar_component_delivers() {
+            PlayerMock p = server.addPlayer();
+            Component c = Component.text("bar text");
+            service.sendActionBar(p, c);
+            Component received = p.nextActionBar();
+            assertNotNull(received, "玩家必須收到 action bar Component");
+            assertEquals(c, received, "action bar 必須為原始 Component");
+        }
+
+        @Test
+        @DisplayName("sendActionBar(Player, Component)：離線玩家 noop")
+        void sendActionBar_component_offline_noop() {
+            PlayerMock p = server.addPlayer();
+            p.disconnect();
+            assertDoesNotThrow(() -> service.sendActionBar(p, Component.text("x")));
+            assertNull(firstComponentMessageOrNull(p),
+                "離線玩家不應收到 action bar");
+        }
+
+        @Test
+        @DisplayName("sendTitle(Player, Component, Component)：透過程 showTitle 送出 title/subtitle")
+        void sendTitle_component_delivers() {
+            PlayerMock p = spy(server.addPlayer());
+            Component title = Component.text("TITLE");
+            Component subtitle = Component.text("SUB");
+            service.sendTitle(p, title, subtitle);
+            ArgumentCaptor<Title> captor = ArgumentCaptor.forClass(Title.class);
+            verify(p).showTitle((Title) captor.capture());
+            Title sent = captor.getValue();
+            assertEquals(title, sent.title(), "title Component 必須原樣送出");
+            assertEquals(subtitle, sent.subtitle(), "subtitle Component 必須原樣送出");
+        }
+
+        @Test
+        @DisplayName("sendTitle(Player, Component, Component)：null player / null title 為 silent no-op")
+        void sendTitle_component_nullSafe() {
+            assertDoesNotThrow(() ->
+                service.sendTitle(null, Component.text("t"), Component.text("s")));
+            PlayerMock p = spy(server.addPlayer());
+            assertDoesNotThrow(() -> service.sendTitle(p, null, Component.text("s")));
+            verify(p, never()).showTitle(any(Title.class));
+        }
+
+        @Test
+        @DisplayName("sendTitle(Player, Component, Component)：離線玩家 noop")
+        void sendTitle_component_offline_noop() {
+            PlayerMock p = spy(server.addPlayer());
+            // 直接 stub isOnline() 為 false：MockBukkit 的 disconnect() 依賴 server 內部
+            // player 列表移除，對 spy 包裝物件不生效，故以 stub 模擬離線語意。
+            Mockito.doReturn(false).when(p).isOnline();
+            assertDoesNotThrow(() ->
+                service.sendTitle(p, Component.text("t"), Component.text("s")));
+            verify(p, never()).showTitle(any(Title.class));
+        }
+
+        @Test
+        @DisplayName("broadcast(Component)：所有線上玩家都收到原始 Component")
+        void broadcast_component_allPlayers() {
+            PlayerMock p1 = server.addPlayer();
+            PlayerMock p2 = server.addPlayer();
+            Component c = Component.text("broadcast!");
+            service.broadcast(c);
+            assertEquals(c, firstComponentMessage(p1), "p1 必須收到廣播 Component");
+            assertEquals(c, firstComponentMessage(p2), "p2 必須收到廣播 Component");
+        }
+
+        @Test
+        @DisplayName("broadcast(Component)：null message 為 silent no-op")
+        void broadcast_component_nullSafe() {
+            assertDoesNotThrow(() -> service.broadcast(null));
+        }
+
+        @Test
+        @DisplayName("formatComponent：LangManager reload 後即時取得新 rich 模板")
+        void formatComponent_reload_picksUpNewTemplate() throws IOException {
+            File enFile = new File(langDir, "en_US.yml");
+            try (FileWriter w = new FileWriter(enFile)) {
+                w.write("rich.greeting: '<blue>old</blue>'\n");
+                w.write("message:\n");
+                w.write("  prefix: '[AceLib] '\n");
+            }
+            lang.reload();
+            Component first = service.formatComponent("rich.greeting", Map.of());
+            assertTrue(first.toString().contains("old"),
+                "reload 後必須取得舊模板，實際: " + first);
+            try (FileWriter w = new FileWriter(enFile)) {
+                w.write("rich.greeting: '<blue>new</blue>'\n");
+                w.write("message:\n");
+                w.write("  prefix: '[AceLib] '\n");
+            }
+            lang.reload();
+            Component second = service.formatComponent("rich.greeting", Map.of());
+            assertTrue(second.toString().contains("new"),
+                "reload 後必須取得新模板，實際: " + second);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // lifecycle：onDisable 後送出 API 必須為 no-op（Momus blocker）
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("lifecycle：onDisable 後送出 API 為 no-op")
+    class LifecycleDisable {
+
+        /**
+         * 製造「owner plugin 已 onDisable」狀態：先確認 enabled，再停用。
+         * service 仍持有同一 plugin reference，因此 {@code isServiceActive()}
+         * 必須轉為 false，使所有送出／broadcast API 變成 no-op。
+         */
+        private MessageService disabledService() {
+            assertTrue(plugin.isReady(), "前置：plugin 必須已 onEnable");
+            plugin.onDisable();
+            assertFalse(plugin.isReady(), "前置：onDisable 後 isReady 必須 false");
+            return service;
+        }
+
+        @Test
+        @DisplayName("sendChat(Player, Component)：onDisable 後不送出且不拋例外")
+        void sendChat_component_afterDisable_neverSends() {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+            MessageService svc = disabledService();
+            Component c = Component.text("should not arrive");
+            assertDoesNotThrow(() -> svc.sendChat(spy, c));
+            verify(spy, never()).sendMessage(any(Component.class));
+        }
+
+        @Test
+        @DisplayName("sendActionBar(Player, Component)：onDisable 後不送出且不拋例外")
+        void sendActionBar_component_afterDisable_neverSends() {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+            MessageService svc = disabledService();
+            Component c = Component.text("should not arrive");
+            assertDoesNotThrow(() -> svc.sendActionBar(spy, c));
+            verify(spy, never()).sendActionBar(any(Component.class));
+        }
+
+        @Test
+        @DisplayName("sendTitle(Player, Component, Component)：onDisable 後不送出且不拋例外")
+        void sendTitle_component_afterDisable_neverSends() {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+            MessageService svc = disabledService();
+            Component t = Component.text("T");
+            Component s = Component.text("S");
+            assertDoesNotThrow(() -> svc.sendTitle(spy, t, s));
+            verify(spy, never()).showTitle(any(Title.class));
+        }
+
+        @Test
+        @DisplayName("broadcast(Component)：onDisable 後任何玩家都不收到")
+        void broadcast_component_afterDisable_noPlayerReceives() {
+            PlayerMock p1 = server.addPlayer();
+            PlayerMock p2 = server.addPlayer();
+            MessageService svc = disabledService();
+            Component c = Component.text("should not broadcast");
+            assertDoesNotThrow(() -> svc.broadcast(c));
+            // broadcast 走 server.getOnlinePlayers() 送給真實玩家，必須直接檢查真實物件
+            assertNull(firstComponentMessageOrNull(p1), "onDisable 後 p1 不應收到廣播");
+            assertNull(firstComponentMessageOrNull(p2), "onDisable 後 p2 不應收到廣播");
+        }
+
+        @Test
+        @DisplayName("sendChat(Player, String, Map)：onDisable 後不送出（與 Component 路徑一致）")
+        void sendChat_string_afterDisable_neverSends() {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+            MessageService svc = disabledService();
+            assertDoesNotThrow(() -> svc.sendChat(spy, "greeting", Map.of("player", "x")));
+            verify(spy, never()).sendMessage(any(String.class));
+        }
+
+        @Test
+        @DisplayName("broadcast(String, Map)：onDisable 後不送出（與 Component 路徑一致）")
+        void broadcast_string_afterDisable_noPlayerReceives() {
+            PlayerMock p1 = server.addPlayer();
+            PlayerMock p2 = server.addPlayer();
+            MessageService svc = disabledService();
+            assertDoesNotThrow(() ->
+                svc.broadcast("broadcast.announce", Map.of("seconds", "5")));
+            assertNull(firstMessageOrNull(p1), "onDisable 後 p1 不應收到廣播");
+            assertNull(firstMessageOrNull(p2), "onDisable 後 p2 不應收到廣播");
+        }
+
+        @Test
+        @DisplayName("onDisable 後再 onEnable（reload）：服務恢復送出能力，不被誤判停用")
+        void afterDisable_reload_sendsAgain() {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+            plugin.onDisable();
+            assertFalse(plugin.isReady(), "前置：onDisable 後 not ready");
+            plugin.onEnable(server, new PlatformDetector(getClass().getClassLoader()));
+            assertTrue(plugin.isReady(), "reload 後必須 ready");
+            Component c = Component.text("back online");
+            assertDoesNotThrow(() -> service.sendChat(spy, c));
+            verify(spy).sendMessage(any(Component.class));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // lifecycle 並行：send 與 onDisable 的 critical-section 排序
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("lifecycle 並行：send 與 onDisable 的 critical-section 排序")
+    class LifecycleConcurrency {
+
+        /**
+         * 證明 {@code sendChat(Player, Component)} 在 {@code synchronized (plugin)}
+         * 內完成時，並行的 {@code plugin.onDisable()}（同為 plugin monitor 的
+         * synchronized 方法）不會在該 player callback 完成前線性化。
+         *
+         * <p>設計：以可控 blocking player callback 讓 sendChat 持續持有 plugin
+         * monitor；另一執行緒提交 onDisable，並以 latch 確認它在 send 釋放 monitor
+         * 前「無法」完成。這是 intrinsic lock 的硬阻塞，不是 timing 競態；移除
+         * production 的 {@code synchronized (plugin)} 會讓 onDisable 立即完成，
+         * 使本測試失敗，從而暴露 guard 缺失。</p>
+         */
+        @Test
+        @DisplayName("sendChat(Player, Component) 在 plugin monitor 內完成時，並行 onDisable 不會先線性化")
+        void sendChat_component_concurrentDisable_serializedByPluginMonitor()
+                throws Exception {
+            PlayerMock real = server.addPlayer();
+            Player spy = spy(real);
+
+            ExecutorService sendExecutor = Executors.newSingleThreadExecutor();
+            ExecutorService disableExecutor = Executors.newSingleThreadExecutor();
+            CountDownLatch enteredCritical = new CountDownLatch(1);
+            CountDownLatch releaseCritical = new CountDownLatch(1);
+            CountDownLatch disableRequested = new CountDownLatch(1);
+            CountDownLatch disableCompleted = new CountDownLatch(1);
+            AtomicBoolean callbackSawReady = new AtomicBoolean(false);
+
+            // 在 player.sendMessage(Component) 內攔截：記錄 callback 當下觀察到的
+            // plugin 生命週期狀態，並以 latch 通知已進入 critical section，
+            // 隨後等待測試釋放——這讓 sendChat 持續持有 plugin monitor。
+            doAnswer(invocation -> {
+                callbackSawReady.set(plugin.isReady());
+                enteredCritical.countDown();
+                releaseCritical.await(15, TimeUnit.SECONDS);
+                return null;
+            }).when(spy).sendMessage(any(Component.class));
+
+            Future<?> sendFuture = null;
+            Future<?> disableFuture = null;
+            try {
+                // 在獨立執行緒送出 Component，使其進入 synchronized (plugin) 並卡在 callback。
+                sendFuture = sendExecutor.submit(
+                    () -> service.sendChat(spy, Component.text("hi")));
+
+                // 等待 callback 確實進入 critical section（bounded）。
+                assertTrue(enteredCritical.await(15, TimeUnit.SECONDS),
+                    "sendChat 必須進入 critical section 並觸發 player callback");
+
+                // 並行提交 onDisable：它與 sendChat 競爭同一 plugin monitor。
+                disableFuture = disableExecutor.submit(() -> {
+                    disableRequested.countDown();
+                    plugin.onDisable();
+                    disableCompleted.countDown();
+                });
+                assertTrue(disableRequested.await(15, TimeUnit.SECONDS),
+                    "onDisable 工作必須已提交並開始執行");
+
+                // 關鍵不變式：sendChat 仍持有 plugin monitor，因此 onDisable
+                // （synchronized）必須被擋在 monitor 之外，直到 send 釋放。
+                // 這不是 timing 競態，而是 intrinsic lock 的硬阻塞；移除
+                // production 的 synchronized (plugin) 會讓 onDisable 立即完成，
+                // 使 disableCompleted 在 bounded window 內 count down，斷言失敗。
+                boolean completedWithinWindow =
+                    disableCompleted.await(2, TimeUnit.SECONDS);
+                assertFalse(completedWithinWindow,
+                    "onDisable 不得在 sendChat 釋放 plugin monitor 前完成"
+                        + "（guard 缺失或 critical section 未對接 plugin monitor）");
+
+                // 釋放 critical section：sendChat 完成並釋放 monitor，onDisable 隨後線性化。
+                releaseCritical.countDown();
+
+                sendFuture.get(15, TimeUnit.SECONDS);
+                disableFuture.get(15, TimeUnit.SECONDS);
+
+                assertTrue(callbackSawReady.get(),
+                    "callback 在 critical section 內必須觀察到 plugin 仍 ready");
+                assertFalse(plugin.isReady(),
+                    "onDisable 完成後 plugin 必須為 not ready");
+            } finally {
+                // 無論斷言結果如何，都必須釋放 latch 並清理執行緒，避免測試掛住或遺留 thread。
+                releaseCritical.countDown();
+                if (sendFuture != null) {
+                    sendFuture.cancel(true);
+                }
+                if (disableFuture != null) {
+                    disableFuture.cancel(true);
+                }
+                sendExecutor.shutdownNow();
+                disableExecutor.shutdownNow();
+                sendExecutor.awaitTermination(5, TimeUnit.SECONDS);
+                disableExecutor.awaitTermination(5, TimeUnit.SECONDS);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
     // 工具方法
     // -----------------------------------------------------------------
 
@@ -500,6 +956,20 @@ class MessageServiceTest {
             return component == null ? null : component.toString();
         } catch (Throwable t) {
             // 若 MockBukkit 版本差異，fallback 用 reflection
+            return null;
+        }
+    }
+
+    private Component firstComponentMessage(PlayerMock p) {
+        Component c = firstComponentMessageOrNull(p);
+        assertNotNull(c, "玩家必須收到至少一條 Component 訊息");
+        return c;
+    }
+
+    private Component firstComponentMessageOrNull(PlayerMock p) {
+        try {
+            return p.nextComponentMessage();
+        } catch (Throwable t) {
             return null;
         }
     }

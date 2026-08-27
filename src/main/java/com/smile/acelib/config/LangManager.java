@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,6 +46,11 @@ public final class LangManager {
     private volatile YamlConfiguration current;
     private volatile Locale currentLocale;
     private volatile boolean ready = false;
+    /**
+     * per-locale 檔案快取（與全域 current state 隔離）。
+     * 供 {@link #get(Locale, String)} 依特定 locale 讀取，不切換全域 current。
+     */
+    private final Map<Locale, YamlConfiguration> localeCache = new ConcurrentHashMap<>();
 
     /**
      * 主要建構子。
@@ -106,6 +112,8 @@ public final class LangManager {
      */
     public void load(Locale locale) {
         Objects.requireNonNull(locale, "locale");
+        // 重新載入會改變磁碟內容，先清空 per-locale 快取，避免讀到舊檔。
+        localeCache.clear();
         Locale target = locale;
         File file = resolveFile(target);
 
@@ -185,6 +193,67 @@ public final class LangManager {
             return Optional.of(template);
         }
         return Optional.of(substitute(template, vars));
+    }
+
+    /**
+     * 讀取指定 locale 的訊息（無變數替換），不變更全域 current / currentLocale 狀態。
+     *
+     * <p>此方法供 Bedrock fallback prompt 等「依特定 locale 讀取」場景使用；
+     * 它從獨立的 per-locale 快取載入該 locale 檔案，不會切換全域 current state，
+     * 因此不存在 race。若該 locale 檔案不存在或 key 缺失，回傳 {@link Optional#empty()}。</p>
+     *
+     * @param locale 欲讀取的 locale；不可為 null
+     * @param key    訊息 key；不可為 null
+     * @return 訊息內容；若 locale 檔案缺失或 key 缺失則回傳 {@link Optional#empty()}
+     */
+    public Optional<String> get(Locale locale, String key) {
+        Objects.requireNonNull(locale, "locale");
+        Objects.requireNonNull(key, "key");
+        Optional<String> requested = readFromLocale(locale, key);
+        if (requested.isPresent()) {
+            return requested;
+        }
+        // 請求 locale 檔缺失或 key 缺失：退回 default locale 檔（不寫入全域 current state）。
+        Locale def = getDefaultLocale();
+        if (def != null && !def.equals(locale)) {
+            return readFromLocale(def, key);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> readFromLocale(Locale locale, String key) {
+        YamlConfiguration cfg = localeCache.get(locale);
+        if (cfg == null) {
+            cfg = loadLocaleFile(locale);
+            if (cfg != null) {
+                localeCache.put(locale, cfg);
+            }
+        }
+        if (cfg == null) {
+            return Optional.empty();
+        }
+        Object raw = cfg.get(key);
+        if (raw == null) {
+            return Optional.empty();
+        }
+        return Optional.of(raw.toString());
+    }
+
+    /**
+     * 從磁碟載入指定 locale 的語言檔（不寫入全域 current state）。
+     *
+     * @return 載入成功的 {@link YamlConfiguration}；若檔案不存在或格式錯誤則回傳 null
+     */
+    private YamlConfiguration loadLocaleFile(Locale locale) {
+        File file = resolveFile(locale);
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+            return loadFromDisk(file);
+        } catch (ConfigException e) {
+            return null;
+        }
     }
 
     // -----------------------------------------------------------------

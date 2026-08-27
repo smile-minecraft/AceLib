@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibMessageCompatibilityProbe
+main: com.example.acelibmsgprobe.MessageCompatibilityProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 訊息相容性探針：發送固定 Adventure Component 案例供 Java/Bedrock 客戶端觀察
+authors:
+  - Smile
+load: POSTWORLD
+commands:
+  mprobe:
+    description: 訊息相容性探針指令（list / send）
+    usage: /mprobe <list | send [player]>
+    permission: acelibmsgprobe.use
+permissions:
+  acelibmsgprobe.use:
+    description: 使用 /mprobe 探針指令
+    default: op
