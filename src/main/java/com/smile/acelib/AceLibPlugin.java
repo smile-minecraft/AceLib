@@ -15,6 +15,7 @@ import com.smile.acelib.data.SchemaVersion;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.diagnostics.ModuleState;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.external.ExternalIntegrationServiceImpl;
 import com.smile.acelib.external.FloodgateIntegrationAdapter;
@@ -244,6 +245,19 @@ public class AceLibPlugin extends JavaPlugin {
     volatile Runnable reloadOldTeardownFailureHook = null;
 
     /**
+     * Package-private 測試 seam：跳過真實 capability probe，強制回傳指定相容性狀態。
+     *
+     * <p>Production 預設為 null；正常啟用 / reload 不會觸發。設定後，
+     * {@code onEnable} / {@code reload} 不會執行真實 classpath 探測，直接採用
+     * 此函式回傳的 {@link CompatibilityStatus}（用於驗證 INCOMPATIBLE / UNVERIFIED
+     * 的 fail-closed 路徑，而不依賴真實缺失的 classpath）。</p>
+     *
+     * <p>僅供 {@code com.smile.acelib} 套件內測試使用；非測試 caller 應維持 null。
+     * 此欄位為 volatile — 保證測試可在 {@code synchronized} 區塊外安全寫入。</p>
+     */
+    volatile java.util.function.Function<Platform, CompatibilityStatus> compatibilityOverride = null;
+
+    /**
      * Package-private 測試 seam：reload 流程中可在「diagnostics rebind 完成、
      * commit 前」注入受控失敗，模擬 {@code DiagnosticsService.bindScheduler(...)}
      * 內部不一致或外部 listener 拋錯的罕見路徑。Production 預設為 null；正常
@@ -353,13 +367,47 @@ public class AceLibPlugin extends JavaPlugin {
         // 2. 推導 capability profile
         PlatformCapability capability = detector.detectCapability(detected);
 
-        // 3. 建立 scheduler（由 plugin 統一管理 lifecycle）
-        SafeSchedulerImpl newScheduler = new SafeSchedulerImpl(this, detected, capability);
+        // 3. 相容性 gate（fail-closed）：探測關鍵 capability shape，對照內建已驗證
+        //    矩陣分類 SUPPORTED / UNVERIFIED / INCOMPATIBLE。INCOMPATIBLE 時不建立
+        //    scheduler / 服務，標記 not ready 並回傳，避免「看起來 ready 但其實
+        //    不支援」的假象。
+        CompatibilityStatus compatibility;
+        RuntimeFingerprint compatibilityFingerprint;
+        if (compatibilityOverride != null) {
+            compatibility = compatibilityOverride.apply(detected);
+            compatibilityFingerprint = null;
+        } else {
+            ClassLoader probeLoader = getClass().getClassLoader();
+            java.util.EnumMap<CapabilityProbe.CapabilityKey, CapabilityProbe.ProbeOutcome> outcomes =
+                CapabilityProbe.probe(probeLoader, detected);
+            compatibilityFingerprint = RuntimeFingerprint.capture(
+                detected, detector.detectMinecraftVersion(s), detector.detectJavaVersion(), outcomes);
+            compatibility = CompatibilityGate.decide(compatibilityFingerprint, outcomes);
+        }
 
         // 4. 建立 diagnostics service（統一入口），並 bind 版本/平台/capability
         DiagnosticsService newDiagnostics = new DiagnosticsService(clock);
         newDiagnostics.bindPlugin(AceLibVersion.VERSION, detected, capability);
         newDiagnostics.setReady(true);
+        publishCompatibility(newDiagnostics, compatibility, compatibilityFingerprint);
+
+        // 5. INCOMPATIBLE：fail-closed，不建立 scheduler / 服務，標記 not ready 並回傳。
+        if (!compatibility.isReady()) {
+            this.diagnostics = newDiagnostics;
+            newDiagnostics.setReady(false);
+            this.ready = false;
+            logSevereWithCode("ACELIB-PLAT-009",
+                "AceLib runtime is INCOMPATIBLE; plugin not enabled. " + compatibility.reason);
+            return;
+        }
+        if (compatibility.state == CompatibilityStatus.State.UNVERIFIED) {
+            logWarningWithCode("ACELIB-PLAT-009",
+                "AceLib runtime is UNVERIFIED (not in built-in verified matrix); "
+                    + "proceeding best-effort. " + compatibility.reason);
+        }
+
+        // 6. 建立 scheduler（由 plugin 統一管理 lifecycle）
+        SafeSchedulerImpl newScheduler = new SafeSchedulerImpl(this, detected, capability);
         newDiagnostics.bindScheduler(newScheduler);
 
         this.scheduler = newScheduler;
@@ -408,6 +456,21 @@ public class AceLibPlugin extends JavaPlugin {
     @Override
     public synchronized void onDisable() {
         if (!ready) {
+            // INCOMPATIBLE enable 留下的半初始化狀態：onEnable 已建立 diagnostics 並
+            // 註冊 compatibility 模組（FAILED），但 ready=false 早退。此處仍要清掉
+            // compatibility module state，避免 diagnostics 殘留 READY/FAILED 假象；
+            // 同時清空 server / platformDetector 欄位（與正常 disable 路徑一致）。
+            // 注意：this.diagnostics 保留非 null，以維持 getDiagnosticsService() 的
+            // 「永遠不為 null」契約（見其 javadoc）。
+            if (diagnostics != null) {
+                try {
+                    diagnostics.unregisterModuleState("compatibility");
+                } catch (Throwable t) {
+                    logFine("onDisable: compatibility cleanup failed (ignored): " + t.getMessage());
+                }
+                this.server = null;
+                this.platformDetector = null;
+            }
             logFine("AceLib.onDisable() called before onEnable; safe no-op.");
             return;
         }
@@ -510,6 +573,8 @@ public class AceLibPlugin extends JavaPlugin {
                 oldDiagnostics.markSchedulerDisabled();
                 oldDiagnostics.setReady(false);
                 oldDiagnostics.resetThrottler();
+                // 解除相容性模組註冊，避免 disable 後殘留過期 profile。
+                oldDiagnostics.unregisterModuleState("compatibility");
             } catch (Throwable t) {
                 logFine("diagnostics teardown failed (ignored): " + t.getMessage());
             }
@@ -734,9 +799,39 @@ public class AceLibPlugin extends JavaPlugin {
         }
         Platform reDetected = platformDetector.detect();
         PlatformCapability reCapability = platformDetector.detectCapability(reDetected);
+        DiagnosticsService ds = this.diagnostics;
+
+        // 相容性 gate（reload 路徑）：若 runtime 變為 INCOMPATIBLE，fail-closed 降級。
+        CompatibilityStatus reloadCompatibility;
+        RuntimeFingerprint reloadFingerprint;
+        if (compatibilityOverride != null) {
+            reloadCompatibility = compatibilityOverride.apply(reDetected);
+            reloadFingerprint = null;
+        } else {
+            ClassLoader probeLoader = getClass().getClassLoader();
+            java.util.EnumMap<CapabilityProbe.CapabilityKey, CapabilityProbe.ProbeOutcome> outcomes =
+                CapabilityProbe.probe(probeLoader, reDetected);
+            reloadFingerprint = RuntimeFingerprint.capture(
+                reDetected, platformDetector.detectMinecraftVersion(server),
+                platformDetector.detectJavaVersion(), outcomes);
+            reloadCompatibility = CompatibilityGate.decide(reloadFingerprint, outcomes);
+        }
+        if (!reloadCompatibility.isReady()) {
+            publishCompatibility(ds, reloadCompatibility, reloadFingerprint);
+            logSevereWithCode("ACELIB-PLAT-009",
+                "reload: runtime became INCOMPATIBLE; downgrading plugin. " + reloadCompatibility.reason);
+            // 完整停用 runtime 資源（scheduler / listener / 服務），避免「plugin FAILED 但
+            // runtime 資源仍活著」的不一致；teardown 內部失敗只記錄並繼續降級，不拋例外。
+            teardownRuntimeOnIncompatibleReload(ds);
+            return false;
+        }
+        if (reloadCompatibility.state == CompatibilityStatus.State.UNVERIFIED) {
+            publishCompatibility(ds, reloadCompatibility, reloadFingerprint);
+            logWarningWithCode("ACELIB-PLAT-009",
+                "reload: runtime UNVERIFIED; proceeding best-effort. " + reloadCompatibility.reason);
+        }
 
         SafeSchedulerImpl oldScheduler = this.scheduler;
-        DiagnosticsService ds = this.diagnostics;
         PlayerDataService oldPlayerService = this.playerDataService;
         PlayerLifecycleListener oldListener = this.playerLifecycleListener;
 
@@ -1124,6 +1219,95 @@ public class AceLibPlugin extends JavaPlugin {
         // this.scheduler / this.api 保留 reference（狀態已 disabled，callback 回 false）
     }
 
+    /**
+     * INCOMPATIBLE reload 路徑的 runtime 資源 teardown。
+     *
+     * <p>與 {@link #onDisable()} / Phase A 相同的「停用即釋放」語意：舊 scheduler 標記
+     * disabled、player lifecycle listener 解除、各服務 shutdown 並替換為 SHUTDOWN facade。
+     * 每個步驟獨立 try/catch，失敗只記錄並繼續，最終由
+     * {@link #downgradeAfterReloadPhaseAFailure} 統一降級為 FAILED；不拋出未捕捉例外，
+     * 也不重複進 Phase A（此路徑在 gate 失敗後直接 return）。</p>
+     *
+     * @param ds 既有 diagnostics reference（可為 null；內部以 null-guard 保護）
+     */
+    private void teardownRuntimeOnIncompatibleReload(DiagnosticsService ds) {
+        // 0. 先解除對外 provider registration（與 onDisable 同序）：避免 teardown 期間
+        //    仍有呼叫端新取得 provider；已持有 provider 的呼叫端稍後切換為 shutdown facade。
+        //    unregisterApiProvider 內部已 try/catch，此處不再包一層。
+        unregisterApiProvider();
+
+        // 1. 解除 SafeEventRegistry bridge listener（與 onDisable 同序）：放在 scheduler /
+        //    diagnostics teardown 之前，避免 listener 在 scheduler 模組標記 FAILED 之後才
+        //    dispatch（此時 recorder sink 已清除，會丟 NPE）。內部真的解除 Bukkit HandlerList
+        //    上的 bridge listener。
+        try {
+            com.smile.acelib.event.AceLibEvents.unbind(this);
+        } catch (Throwable t) {
+            logFine("reload(INCOMPATIBLE): AceLibEvents.unbind failed (ignored): " + t.getMessage());
+        }
+
+        SafeSchedulerImpl oldScheduler = this.scheduler;
+        PlayerLifecycleListener oldListener = this.playerLifecycleListener;
+        PlayerDataService oldPlayerService = this.playerDataService;
+
+        // 2. 舊 scheduler：recorder listener 清除 + onPluginDisable（取消 in-flight 任務）
+        if (oldScheduler != null) {
+            try {
+                oldScheduler.getRecorder().clearRecordSink();
+                oldScheduler.onPluginDisable();
+            } catch (Throwable t) {
+                logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
+                    "reload(INCOMPATIBLE): old scheduler teardown failed (ignored): " + t);
+            }
+            // 測試 seam：允許注入受控失敗（與 Phase A 共用同一 hook 語意）
+            if (reloadOldTeardownFailureHook != null) {
+                try {
+                    reloadOldTeardownFailureHook.run();
+                } catch (Throwable t) {
+                    logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
+                        "reload(INCOMPATIBLE): old scheduler teardown hook failed (ignored): " + t);
+                }
+            }
+        }
+        // 3. player lifecycle listener 解除
+        if (oldListener != null) {
+            try {
+                HandlerList.unregisterAll(oldListener);
+            } catch (Throwable t) {
+                logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
+                    "reload(INCOMPATIBLE): player lifecycle listener unbind failed (ignored): " + t);
+            }
+            this.playerLifecycleListener = null;
+            this.playerLifecycleRegistered = false;
+        }
+        // 4. 管理指令框架解除（與 onDisable 同序：listener 解除後、player 服務 shutdown 前）。
+        //    unbindCommandFramework 內部已 try/catch。
+        unbindCommandFramework();
+        // 5. player 服務 shutdown
+        if (oldPlayerService != null) {
+            try {
+                oldPlayerService.shutdown();
+            } catch (Throwable t) {
+                logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
+                    "reload(INCOMPATIBLE): player data shutdown failed (ignored): " + t);
+            }
+            this.playerDataService = null;
+        }
+        // 6. 其餘服務 shutdown + SHUTDOWN facade 替換（內部已 try/catch）
+        try { unbindWorldService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): world unbind failed (ignored): " + t); }
+        try { unbindGuiService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): gui unbind failed (ignored): " + t); }
+        try { unbindExternalService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): external unbind failed (ignored): " + t); }
+        try { unbindBedrockService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): bedrock unbind failed (ignored): " + t); }
+
+        // 7. 切換 cached facade 為 shutdown，並讓已持有 provider 的呼叫端讀到 shutdown 語意
+        //    （與 onDisable 末尾一致：updateApiProvider 更新 provider 內部快照，再清 reference）。
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService);
+        updateApiProvider(this.api);
+        this.apiProvider = null;
+
+        downgradeAfterReloadPhaseAFailure(ds);
+    }
+
     // ---------------------------------------------------------------------
     // 平台狀態輸出
     // ---------------------------------------------------------------------
@@ -1150,6 +1334,37 @@ public class AceLibPlugin extends JavaPlugin {
             safeLogger().log(Level.FINE,
                 "(non-Folia environment detected; RegionizedServer API unavailable)");
         }
+    }
+
+    /**
+     * 將相容性狀態發佈到 diagnostics 的 {@code "compatibility"} 模組。
+     *
+     * <p>SUPPORTED / UNVERIFIED 註冊為 READY（UNVERIFIED 附理由提示）；
+     * INCOMPATIBLE 註冊為 FAILED + {@code ACELIB-PLAT-009}。</p>
+     *
+     * @param ds          diagnostics service；不可為 null
+     * @param status      相容性狀態；不可為 null
+     * @param fingerprint runtime fingerprint；可為 null（override seam 路徑下不探測，
+     *                    此時摘要改取 {@code status.reason()}）
+     */
+    private void publishCompatibility(DiagnosticsService ds,
+                                       CompatibilityStatus status,
+                                       RuntimeFingerprint fingerprint) {
+        String summary = fingerprint != null ? fingerprint.summary() : status.reason;
+        switch (status.state) {
+            case SUPPORTED -> ds.registerModuleState("compatibility",
+                ModuleState.ready("compatibility", "SUPPORTED | " + summary));
+            case UNVERIFIED -> ds.registerModuleState("compatibility",
+                ModuleState.ready("compatibility",
+                    "UNVERIFIED | " + status.reason + " | " + summary));
+            case INCOMPATIBLE -> ds.registerModuleState("compatibility",
+                ModuleState.failed("compatibility",
+                    "INCOMPATIBLE | " + status.reason + " | " + summary, "ACELIB-PLAT-009"));
+        }
+    }
+
+    private void logWarningWithCode(String code, String message) {
+        safeLogger().log(Level.WARNING, "[" + code + "] " + message);
     }
 
     // ---------------------------------------------------------------------
@@ -1620,6 +1835,54 @@ public class AceLibPlugin extends JavaPlugin {
         }
         if (!guiListenerRegistered && guiListener != null) {
             server.getPluginManager().registerEvents(guiListener, this);
+            guiListenerRegistered = true;
+        }
+    }
+
+    /**
+     * Package-private 測試 seam：經由 plugin loader 的 {@code createRegisteredListeners}
+     * 取得各事件對應的 {@link org.bukkit.plugin.RegisteredListener}，再逐一註冊到該事件的
+     * {@link HandlerList}（繞過 Bukkit 的 {@code isEnabled()} 守門），使
+     * {@link HandlerList#getRegisteredListeners} 真正反映已註冊的 player / gui listener。
+     *
+     * <p>本 repo 的測試環境（MockBukkit 4.x + plugin classloader）無法透過
+     * {@code PluginManager.enablePlugin} 標記 plugin enabled（會觸發 classloader NPE），
+     * 而 {@code isEnabled()} 為 final，故 {@code onPluginReady()} 的 {@code registerEvents}
+     * 路徑在測試中永遠早退。此 seam 讓 lifecycle 測試能真正建立 listener 註冊（與
+     * {@code onPluginReady} 等價的效果，且 RegisteredListener 關聯本 plugin），再斷言
+     * teardown 確實解除，避免「listener 已解除」變成 vacuous assertion。僅供測試使用。</p>
+     */
+    void registerListenersForTest() {
+        if (server == null) {
+            return;
+        }
+        registerOneForTest(playerLifecycleListener);
+        registerOneForTest(guiListener);
+    }
+
+    private void registerOneForTest(org.bukkit.event.Listener listener) {
+        if (listener == null) {
+            return;
+        }
+        java.util.Map<Class<? extends org.bukkit.event.Event>,
+            java.util.Set<org.bukkit.plugin.RegisteredListener>> map =
+            getPluginLoader().createRegisteredListeners(listener, this);
+        for (java.util.Map.Entry<Class<? extends org.bukkit.event.Event>,
+                java.util.Set<org.bukkit.plugin.RegisteredListener>> e : map.entrySet()) {
+            try {
+                java.lang.reflect.Method m = e.getKey().getMethod("getHandlerList");
+                org.bukkit.event.HandlerList hl = (org.bukkit.event.HandlerList) m.invoke(null);
+                for (org.bukkit.plugin.RegisteredListener rl : e.getValue()) {
+                    hl.register(rl);
+                }
+            } catch (Exception ex) {
+                logFine("registerListenersForTest: skip event " + e.getKey() + ": " + ex.getMessage());
+            }
+        }
+        if (listener == playerLifecycleListener) {
+            playerLifecycleRegistered = true;
+        }
+        if (listener == guiListener) {
             guiListenerRegistered = true;
         }
     }

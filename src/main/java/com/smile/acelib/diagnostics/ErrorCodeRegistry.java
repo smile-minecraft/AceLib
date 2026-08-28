@@ -82,6 +82,16 @@ public final class ErrorCodeRegistry {
             "無法識別的伺服器實作"));
         m.put("ACELIB-PLAT-004", new ErrorCodeInfo(ErrorCategory.PLATFORM,
             "伺服器實作判定失敗"));
+        m.put("ACELIB-PLAT-005", new ErrorCodeInfo(ErrorCategory.PLATFORM,
+            "相容性探測：關鍵 class 不存在於 classpath"));
+        m.put("ACELIB-PLAT-006", new ErrorCodeInfo(ErrorCategory.PLATFORM,
+            "相容性探測：關鍵 method shape 不存在"));
+        m.put("ACELIB-PLAT-007", new ErrorCodeInfo(ErrorCategory.PLATFORM,
+            "相容性探測：class linkage 失敗"));
+        m.put("ACELIB-PLAT-008", new ErrorCodeInfo(ErrorCategory.PLATFORM,
+            "相容性探測：classloader 拒絕探測（SecurityException）"));
+        m.put("ACELIB-PLAT-009", new ErrorCodeInfo(ErrorCategory.PLATFORM,
+            "runtime 與內建已驗證矩陣不相容，plugin 拒絕啟用"));
         // CTX
         m.put("ACELIB-CTX-001", new ErrorCodeInfo(ErrorCategory.CONTEXT,
             "執行緒上下文不安全"));
