@@ -31,6 +31,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.title.Title;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,6 +106,47 @@ class MessageServiceWithFallbackTest {
 
     private PlayerMock javaPlayer() {
         PlayerMock p = server.addPlayer();
+        when(bedrock.isBedrockPlayer(p.getUniqueId())).thenReturn(false);
+        return p;
+    }
+
+    /**
+     * MockBukkit 的 {@link PlayerMock} 未實作 {@code showTitle(Title)}（僅有舊式
+     * BaseComponent 多載），因此這裡用測試專屬子類覆寫 adventure {@link Title} 通道，
+     * 把實際送出的 {@link Title} 攔截下來供斷言使用。
+     */
+    private static final class TitleCapturingPlayer extends PlayerMock {
+        private Title lastTitle;
+
+        TitleCapturingPlayer(ServerMock server, String name) {
+            super(server, name);
+        }
+
+        @Override
+        public void showTitle(Title title) {
+            this.lastTitle = title;
+        }
+
+        Title lastTitle() {
+            return lastTitle;
+        }
+    }
+
+    private TitleCapturingPlayer bedrockTitlePlayer(String languageCode) {
+        TitleCapturingPlayer p = new TitleCapturingPlayer(server, "title-" + languageCode);
+        server.addPlayer(p);
+        UUID id = p.getUniqueId();
+        when(bedrock.isBedrockPlayer(id)).thenReturn(true);
+        BedrockPlayerInfo info = new BedrockPlayerInfo(id, p.getName(),
+            BedrockPlayerInfo.DeviceOs.UNKNOWN, BedrockPlayerInfo.InputMode.UNKNOWN,
+            languageCode, BedrockPlayerInfo.LinkState.UNLINKED, null);
+        when(bedrock.getPlayerInfo(id)).thenReturn(Optional.of(info));
+        return p;
+    }
+
+    private TitleCapturingPlayer javaTitlePlayer() {
+        TitleCapturingPlayer p = new TitleCapturingPlayer(server, "java-title");
+        server.addPlayer(p);
         when(bedrock.isBedrockPlayer(p.getUniqueId())).thenReturn(false);
         return p;
     }
@@ -238,49 +280,47 @@ class MessageServiceWithFallbackTest {
     }
 
     @Test
-    @DisplayName("sendActionBarWithFallback：SUGGEST_COMMAND 降級，基岩無 click，Java 保留")
+    @DisplayName("sendActionBarWithFallback：SUGGEST_COMMAND 降級，基岩無 click 且含 hint，Java 保留")
     void sendActionBar_suggestCommand_actualEntry() {
         PlayerMock bedrockP = bedrockPlayer("en_US");
         bedrockP.setLocale(Locale.US);
         Component msg = Component.text("s").clickEvent(ClickEvent.suggestCommand("/warp home"));
         service.sendActionBarWithFallback(bedrockP, msg, null);
-        // action bar 在 MockBukkit 可能走不同通道，至少驗證不中斷且基岩邏輯一致：用 sendChat 作為等價驗證
-        // 為了可驗證，額外以 sendChatWithFallback 驗證同一 payload 的 fallback 行為
-        PlayerMock verify = bedrockPlayer("en_US");
-        verify.setLocale(Locale.US);
-        service.sendChatWithFallback(verify, msg, null);
-        Component sent = verify.nextComponentMessage();
-        assertFalse(hasClick(sent));
-        assertTrue(text(sent).contains("Suggest command: /warp home"));
+        Component sent = bedrockP.nextActionBar();
+        assertNotNull(sent, "基岩玩家必須收到 action bar");
+        assertFalse(hasClick(sent), "基岩 action bar 不得含 ClickEvent");
+        assertTrue(text(sent).contains("Suggest command: /warp home"), "hint 應為英文：" + text(sent));
 
-        assertDoesNotThrow(() -> service.sendActionBarWithFallback(bedrockP, msg, null));
         PlayerMock javaP = javaPlayer();
-        assertDoesNotThrow(() -> service.sendActionBarWithFallback(javaP, msg, null));
+        service.sendActionBarWithFallback(javaP, msg, null);
+        Component javaSent = javaP.nextActionBar();
+        assertNotNull(javaSent, "Java 玩家必須收到 action bar");
+        assertTrue(hasClick(javaSent), "Java action bar 應保留 ClickEvent");
     }
 
     @Test
-    @DisplayName("sendTitleWithFallback：OPEN_URL 降級，title 與 subtitle 分別處理")
+    @DisplayName("sendTitleWithFallback：OPEN_URL 降級，基岩 title/subtitle 無 click 且含 hint，Java 保留")
     void sendTitle_openUrl_actualEntry() {
-        PlayerMock bedrockP = bedrockPlayer("en_US");
+        TitleCapturingPlayer bedrockP = bedrockTitlePlayer("en_US");
         bedrockP.setLocale(Locale.US);
         Component title = Component.text("t").clickEvent(ClickEvent.openUrl("https://example.com"));
         Component subtitle = Component.text("s").clickEvent(ClickEvent.openUrl("https://sub.example.com"));
-        // titles 在 MockBukkit 不提供可讀取的 nextTitle 檢查，以 fallback 核心邏輯驗證：
-        PlayerMock verifyTitle = bedrockPlayer("en_US");
-        verifyTitle.setLocale(Locale.US);
-        service.sendChatWithFallback(verifyTitle, title, null);
-        assertTrue(text(verifyTitle.nextComponentMessage()).contains("Open URL: https://example.com"));
-        PlayerMock verifySub = bedrockPlayer("en_US");
-        verifySub.setLocale(Locale.US);
-        service.sendChatWithFallback(verifySub, subtitle, null);
-        assertTrue(text(verifySub.nextComponentMessage()).contains("Open URL: https://sub.example.com"));
+        service.sendTitleWithFallback(bedrockP, title, subtitle, null);
+        Title sent = bedrockP.lastTitle();
+        assertNotNull(sent, "基岩玩家必須收到 Title");
+        Component sentTitle = sent.title();
+        Component sentSub = sent.subtitle();
+        assertFalse(hasClick(sentTitle), "基岩 title 不得含 ClickEvent");
+        assertFalse(hasClick(sentSub), "基岩 subtitle 不得含 ClickEvent");
+        assertTrue(text(sentTitle).contains("Open URL: https://example.com"), "title hint 應為英文：" + text(sentTitle));
+        assertTrue(text(sentSub).contains("Open URL: https://sub.example.com"), "subtitle hint 應為英文：" + text(sentSub));
 
-        assertDoesNotThrow(() -> service.sendTitleWithFallback(bedrockP, title, subtitle, null));
-        // Java 保留
-        PlayerMock javaP = javaPlayer();
+        TitleCapturingPlayer javaP = javaTitlePlayer();
         Component javaTitle = Component.text("t").clickEvent(ClickEvent.openUrl("https://example.com"));
-        service.sendChatWithFallback(javaP, javaTitle, null);
-        assertTrue(hasClick(javaP.nextComponentMessage()));
+        service.sendTitleWithFallback(javaP, javaTitle, null, null);
+        Title javaSent = javaP.lastTitle();
+        assertNotNull(javaSent, "Java 玩家必須收到 Title");
+        assertTrue(hasClick(javaSent.title()), "Java title 應保留 ClickEvent");
     }
 
     @Test
@@ -305,22 +345,34 @@ class MessageServiceWithFallbackTest {
     // -----------------------------------------------------------------
 
     @Test
-    @DisplayName("sendActionBarWithFallback：基岩玩家不中斷，Java 玩家保留 click")
+    @DisplayName("sendActionBarWithFallback：基岩玩家降級無 click，Java 玩家保留 click")
     void sendActionBar_routing() {
         PlayerMock bedrockP = bedrockPlayer("en_US");
         PlayerMock javaP = javaPlayer();
         Component msg = Component.text("x").clickEvent(ClickEvent.openUrl("https://a.com"));
-        assertDoesNotThrow(() -> service.sendActionBarWithFallback(bedrockP, msg, null));
-        assertDoesNotThrow(() -> service.sendActionBarWithFallback(javaP, msg, null));
+        service.sendActionBarWithFallback(bedrockP, msg, null);
+        Component bedrockSent = bedrockP.nextActionBar();
+        assertNotNull(bedrockSent, "基岩玩家必須收到 action bar");
+        assertFalse(hasClick(bedrockSent), "基岩 action bar 不得含 ClickEvent");
+        assertTrue(text(bedrockSent).contains("Open URL: https://a.com"), "hint 應為英文：" + text(bedrockSent));
+
+        service.sendActionBarWithFallback(javaP, msg, null);
+        Component javaSent = javaP.nextActionBar();
+        assertNotNull(javaSent, "Java 玩家必須收到 action bar");
+        assertTrue(hasClick(javaSent), "Java action bar 應保留 ClickEvent");
     }
 
     @Test
-    @DisplayName("sendTitleWithFallback：基岩玩家不中斷")
+    @DisplayName("sendTitleWithFallback：基岩玩家降級無 click")
     void sendTitle_routing() {
-        PlayerMock bedrockP = bedrockPlayer("en_US");
+        TitleCapturingPlayer bedrockP = bedrockTitlePlayer("en_US");
         Component title = Component.text("t").clickEvent(ClickEvent.runCommand("/t"));
         Component subtitle = Component.text("s");
-        assertDoesNotThrow(() -> service.sendTitleWithFallback(bedrockP, title, subtitle, null));
+        service.sendTitleWithFallback(bedrockP, title, subtitle, null);
+        Title sent = bedrockP.lastTitle();
+        assertNotNull(sent, "基岩玩家必須收到 Title");
+        assertFalse(hasClick(sent.title()), "基岩 title 不得含 ClickEvent");
+        assertTrue(text(sent.title()).contains("Run command: /t"), "hint 應為英文：" + text(sent.title()));
     }
 
     // -----------------------------------------------------------------

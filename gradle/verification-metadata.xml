@@ -620,11 +620,22 @@
       <artifact name="adventure-api-4.26.1.module">
          <sha256 value="f9758c168027086c99d9a26673764ea8b80d536f20c26c598dc17052b13acafa"/>
       </artifact>
-      <artifact name="adventure-api-4.26.1.pom">
-         <sha256 value="9c7682ecb494d5bec25690f6564278261f477d351d1ab44f2f9001ea4008a818"/>
-      </artifact>
-   </component>
-   <component group="net.kyori" name="adventure-bom" version="4.20.0">
+       <artifact name="adventure-api-4.26.1.pom">
+          <sha256 value="9c7682ecb494d5bec25690f6564278261f477d351d1ab44f2f9001ea4008a818"/>
+       </artifact>
+    </component>
+    <component group="net.kyori" name="adventure-api" version="5.2.0">
+       <artifact name="adventure-api-5.2.0.jar">
+          <sha256 value="7e52fe7190be3e87b3b3f71712cfa12315fcd27109f302a7b440c12f01fae827"/>
+       </artifact>
+       <artifact name="adventure-api-5.2.0.module">
+          <sha256 value="aedb09655a22ff56f6a919f64455abb4056f366b849fd78872e6f7839151b769"/>
+       </artifact>
+       <artifact name="adventure-api-5.2.0.pom">
+          <sha256 value="d00ddfa10725db663c8f6963494d49a3365a2163f968edb71947aa7ce240efb3"/>
+       </artifact>
+    </component>
+    <component group="net.kyori" name="adventure-bom" version="4.20.0">
       <artifact name="adventure-bom-4.20.0.pom">
          <sha256 value="487f15ca6a461b1b70151a763afb3dceb4ed68da07a948f817cf8152402fabb0"/>
       </artifact>

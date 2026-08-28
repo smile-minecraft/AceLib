@@ -1086,9 +1086,11 @@ public final class MessageService {
     }
 
     private Component buildBedrockHint(ClickEvent click, Locale locale) {
-        String key;
-        String defaultPrefix;
-        switch (click.action()) {
+        ClickEventCompat.Descriptor d = ClickEventCompat.describe(click);
+        // 預設為 UNKNOWN fail-safe；已知 action 會在下方 switch 覆寫。
+        String key = "message.bedrock.fallback.unknown";
+        String defaultPrefix = "[Action: ";
+        switch (d.kind) {
             case RUN_COMMAND -> {
                 key = "message.bedrock.fallback.run_command";
                 defaultPrefix = "[Run command: ";
@@ -1105,12 +1107,10 @@ public final class MessageService {
                 key = "message.bedrock.fallback.copy_to_clipboard";
                 defaultPrefix = "[Copy to clipboard: ";
             }
-            default -> {
-                key = "message.bedrock.fallback.unknown";
-                defaultPrefix = "[Action: ";
-            }
+            // UNKNOWN 與未來新增種類：沿用預設（fail-safe，不拋 linkage error）。
+            default -> { }
         }
-        String payload = click.value() == null ? "" : click.value();
+        String payload = d.payload == null ? "" : d.payload;
         String template;
         try {
             Optional<String> opt = lang.get(locale, key);

@@ -37,7 +37,24 @@ repositories {
     mavenCentral()
 }
 
+// ---------------------------------------------------------------------------
+// Adventure 5.2 isolated runtime 驗證（Adventure 相容邊界 task）
+// ---------------------------------------------------------------------------
+// 獨立 configuration，不進入 compile / test classpath，避免與 paper-api 攜帶的
+// Adventure 4.26.1 衝突（同一座標兩版本會造成 classpath 歧義，導致 v4 測試
+// 行為漂移）。僅解析 adventure-api jar 本身（isTransitive=false）；其
+// key / nbt / examination 傳遞依賴由 testRuntimeClasspath 的 v4 版本提供
+// （API 相容，見 Adventure5ClickCompatTest 前提驗證）。此 jar 僅供 isolated
+// URLClassLoader 在測試中載入 v5 runtime，驗證同一份 production JAR 的
+// click descriptor helper 在 Adventure 5.2.0 下不發生 linkage error。
+val adventure5ApiConfig by configurations.creating {
+    isTransitive = false
+}
+
 dependencies {
+    // Adventure 5.2.0 isolated runtime 驗證用（見上方 configuration 說明）。
+    adventure5ApiConfig("net.kyori:adventure-api:5.2.0")
+
     // 編譯期需要 paper-api；運行期由伺服器提供（provided scope）
     // 版本固定為 26.1.2.build.72-stable 以對齊 MockBukkit 4.113.1 的 paper-api 版本，
     // 避免 binary incompatible 問題。如需升級 paper-api 須同步升級 MockBukkit。
@@ -120,6 +137,12 @@ tasks.test {
     systemProperty(
         "acelib.genSignatureBaseline",
         providers.systemProperty("acelib.genSignatureBaseline").getOrElse("")
+    )
+    // 將 Adventure 5.2.0 isolated runtime jar 路徑傳給測試，供 isolated
+    // URLClassLoader 載入 v5（不進入 test classpath，避免與 v4 衝突）。
+    systemProperty(
+        "acelib.adventure5ApiJar",
+        adventure5ApiConfig.files.first().absolutePath
     )
     testLogging {
         events("passed", "failed", "skipped")
