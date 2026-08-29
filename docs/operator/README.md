@@ -3,7 +3,7 @@
 > 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
 
 
-AceLib 1.1.2（此 checkout 的原始碼版本為 1.1.2）需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 沒有 JAR asset，請從公開 repository 建置；`git checkout v1.1.2` 對應 `v1.1.2` tag，JitPack `com.github.smile-minecraft:AceLib:v1.1.2` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
+AceLib 1.2.0（此 checkout 的原始碼版本為 1.2.0）需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。GitHub Release 沒有 JAR asset，請從公開 repository 建置；`git checkout v1.2.0` 對應 `v1.2.0` tag，JitPack `com.github.smile-minecraft:AceLib:v1.2.0` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
 
 ## 目錄
 
@@ -20,29 +20,29 @@ AceLib 1.1.2（此 checkout 的原始碼版本為 1.1.2）需要 Java 25，採�
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.1.2  # v1.1.2 tag
+git checkout v1.2.0  # v1.2.0 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 
 建置成功後會產生：
 
 ```text
-build/libs/AceLib-1.1.2.jar
+build/libs/AceLib-1.2.0.jar
 ```
 
-`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.1.2.jar`。
+`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.2.0.jar`。
 
 ## 放進 server
 
 1. 停止 server。
-2. 把 `AceLib-1.1.2.jar` 複製到 server 的 `plugins/`。
+2. 把 `AceLib-1.2.0.jar` 複製到 server 的 `plugins/`。
 3. 把需要 AceLib 的下游 plugin JAR 也放進 `plugins/`。下游 plugin 的 `plugin.yml` 應含 `depend: [AceLib]`。
 4. 以 Java 25 啟動 Paper 或 Folia。
 
 例如：
 
 ```bash
-cp build/libs/AceLib-1.1.2.jar /path/to/server/plugins/
+cp build/libs/AceLib-1.2.0.jar /path/to/server/plugins/
 cd /path/to/server
 java -jar paper-26.1.2.jar --nogui
 ```
@@ -61,7 +61,7 @@ acelib status
 
 ```text
 === AceLib Diagnostics Report ===
-Version: 1.1.2
+Version: 1.2.0
 Platform: Paper
 Ready: true
 ```
@@ -105,7 +105,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 確認 `plugins/` 同時有 AceLib JAR，並檢查 AceLib 是否在啟用時先發生錯誤。
 
-### 找不到 `build/libs/AceLib-1.1.2.jar`
+### 找不到 `build/libs/AceLib-1.2.0.jar`
 
 確認你在 AceLib repository 根目錄執行建置，並使用 Java 25。重新執行完整的 `./gradlew clean build --no-daemon --console=plain`，不要只找 GitHub Release asset。
 
@@ -115,7 +115,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 ### 想升級到 26.2
 
-Paper 與 Folia 26.2 尚未驗證。先在獨立測試 server 驗證，再決定是否升級正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
+Paper 與 Folia 26.2 已標記為 VERIFIED-BETA：矩陣列出的 build 已完成 lifecycle smoke 與 capability gate，Folia 26.2-4 另完成部分功能與真人基岩驗證；上游仍為 beta，不擴大 SUPPORTED 基線，未來 build 需重新驗證。升級前仍應先在獨立測試 server 驗證，再決定是否升級正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
 
 ## 相關頁面
 

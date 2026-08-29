@@ -1,0 +1,51 @@
+{
+  "libraryVersion": "1.2.0",
+  "generatedAt": "2026-08-28",
+  "minBaseline": "26.1.2",
+  "java": {
+    "min": "25"
+  },
+  "adventure": {
+    "supported": ["4.26.1", "5.2.0"],
+    "note": "Adventure 4.26.1（Paper 26.1.2 攜帶）與 5.2.0 經 bytecode gate 與 isolated classloader 驗證 binary compatible"
+  },
+  "runtimes": [
+    {
+      "platform": "Paper",
+      "version": "26.1.2-72",
+      "status": "SUPPORTED",
+      "evidence": "lifecycle smoke + capability gate PLAT-005~009"
+    },
+    {
+      "platform": "Folia",
+      "version": "26.1.2-8",
+      "status": "SUPPORTED",
+      "evidence": "lifecycle smoke + capability gate PLAT-005~009"
+    },
+    {
+      "platform": "Paper",
+      "version": "26.2-120",
+      "status": "VERIFIED-BETA",
+      "evidence": "lifecycle smoke + capability gate（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）；非全功能實機驗證"
+    },
+    {
+      "platform": "Folia",
+      "version": "26.2-7",
+      "status": "VERIFIED-BETA",
+      "evidence": "lifecycle smoke + capability gate（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）；非全功能實機驗證"
+    },
+    {
+      "platform": "Folia",
+      "version": "26.2-4",
+      "status": "VERIFIED-BETA",
+      "evidence": "lifecycle smoke + capability gate + status/scheduler/context/message fallback + real Bedrock four-entry verified（Geyser 2.11.2-SNAPSHOT + Floodgate 2.2.5-SNAPSHOT）；非全功能實機驗證"
+    }
+  ],
+  "bedrock": {
+    "verified": true,
+    "foliaVersion": "26.2-4",
+    "geyser": "2.11.2-SNAPSHOT",
+    "floodgate": "2.2.5-SNAPSHOT"
+  },
+  "unknownFuture": "UNVERIFIED"
+}
