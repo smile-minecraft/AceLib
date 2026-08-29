@@ -891,4 +891,139 @@ class SmokeScriptTest {
                 PosixFilePermission.OWNER_WRITE,
                 PosixFilePermission.OWNER_EXECUTE));
     }
+
+    /**
+     * 雙版本矩陣：腳本必須接受 {@code --version} / {@code --build} /
+     * {@code --sha256} 覆寫，並以這三個值拼出 immutable artifact URL
+     * （{@code fill-data.papermc.io/v1/objects/<sha256>/<kind>-<version>-<build>.jar}）。
+     * 靜態契約檢查：確保參數解析與 URL 拼裝邏輯存在，且預設版本為 26.1.2。
+     */
+    @Test
+    @DisplayName("版本矩陣參數 --version / --build / --sha256 必須被解析並拼出 artifact URL")
+    void versionMatrixFlagsAreParsed() throws IOException {
+        assertTrue(Files.isRegularFile(SCRIPT_PATH),
+            "scripts/smoke-server.sh 不存在，無法檢查版本矩陣參數");
+        String body = Files.readString(SCRIPT_PATH, StandardCharsets.UTF_8);
+        assertTrue(body.contains("--version"),
+            "smoke-server.sh 必須解析 --version 參數");
+        assertTrue(body.contains("--build"),
+            "smoke-server.sh 必須解析 --build 參數");
+        assertTrue(body.contains("--sha256"),
+            "smoke-server.sh 必須解析 --sha256 參數");
+        // 動態 URL 拼裝：以 sha256 物件鍵 + kind-version-build 定位 artifact
+        assertTrue(body.contains("${kind}-${eff_version}-${eff_build}.jar"),
+            "smoke-server.sh 必須以 --version / --build / --sha256 拼出 "
+                + "fill-data.papermc.io/v1/objects/<sha256>/<kind>-<version>-<build>.jar");
+        // 預設版本必須是 26.1.2（最低支援基線）
+        assertTrue(body.contains("DEFAULT_VERSION=\"26.1.2\""),
+            "smoke-server.sh 預設版本必須為 26.1.2（最低支援基線）");
+    }
+
+    /**
+     * 部分版本矩陣覆寫（給了 {@code --version} / {@code --build} 但缺
+     * {@code --sha256}）必須 fail-closed：腳本不得以預設 URL 靜默執行錯誤
+     * 版本，而應以非零 exit + 明確錯誤訊息拒絕。三個覆寫參數必須同時提供。
+     */
+    @Test
+    @DisplayName("部分版本矩陣覆寫（缺 --sha256）必須被拒絕（exit 非零 + 明確錯誤訊息）")
+    void partialVersionOverrideWithoutSha256IsRejected()
+        throws IOException, InterruptedException {
+        assertTrue(Files.isRegularFile(SCRIPT_PATH),
+            "scripts/smoke-server.sh 不存在，無法驗證部分覆寫拒絕");
+        // 清掉 SERVER_JAR，讓腳本在覆寫檢查階段就決定拒絕（不依賴後續 jar 檢查）
+        ScriptResult r = runWithClearedServerJar(
+            SCRIPT_PATH.toString(), "paper", "--version", "26.2", "--build", "99");
+        assertTrue(r.exitCode != 0,
+            "只給 --version / --build 而缺 --sha256 應被拒絕；實際 exit "
+                + r.exitCode + "\nstdout: " + r.stdout + "\nstderr: " + r.stderr);
+        String combined = r.stdout + r.stderr;
+        assertTrue(combined.contains("三個參數") && combined.contains("同時提供"),
+            "部分覆寫錯誤訊息須說明 --version / --build / --sha256 三個參數必須同時提供；"
+                + "實際: " + combined);
+    }
+
+    /**
+     * {@code --log-dir} 必須在 runtime 清理前把
+     * {@code acelib-plugin.log} 與 {@code server-stdout.log} 複製到指定目錄，
+     * 供 後續分析 version / build / command / log。
+     *
+     * <p>動態驗證：用 fake java（hung）取代真實 server，{@code --timeout 5}
+     * 觸發 watchdog 終止；script 結束後，{@code --log-dir} 指定的目錄必須
+     * 含有兩份 log 副本（runtime 已被移除，故副本是唯一的留存證據）。</p>
+     */
+    @Test
+    @DisplayName("--log-dir 必須在 runtime 清理前保留 acelib-plugin.log 與 server-stdout.log")
+    void logDirFlagPreservesLogs(@TempDir Path tempDir) throws IOException, InterruptedException {
+        assertTrue(Files.isRegularFile(SCRIPT_PATH),
+            "scripts/smoke-server.sh 不存在，無法驗證 --log-dir 保留");
+        assertTrue(Files.isDirectory(Path.of("build", "libs")),
+            "build/libs 不存在；請先 ./gradlew jar 才能跑此 --log-dir regression");
+
+        // fake java：模擬 hung server（不會印 log，TERM 會殺掉）
+        Path fakeJava = tempDir.resolve("java");
+        Files.writeString(fakeJava,
+            "#!/usr/bin/env bash\n" +
+                "# Fake java for SmokeScriptTest: 模擬 hung server。\n" +
+                "exec sleep 999\n",
+            StandardCharsets.UTF_8);
+        Files.setPosixFilePermissions(fakeJava,
+            EnumSet.of(PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE));
+
+        Path dummyServerJar = tempDir.resolve("dummy-server.jar");
+        Files.writeString(dummyServerJar, "dummy");
+        Path dummyAceLibJar = tempDir.resolve("dummy-acelib.jar");
+        Files.writeString(dummyAceLibJar, "dummy");
+
+        Path logDir = tempDir.resolve("smoke-logs");
+        Files.createDirectories(logDir);
+
+        ProcessBuilder pb = new ProcessBuilder("bash")
+            .redirectErrorStream(false)
+            .directory(new File("."));
+        pb.command().add(SCRIPT_PATH.toString());
+        pb.command().add("paper");
+        pb.command().add("--timeout");
+        pb.command().add("5");
+        pb.command().add("--acelib-jar");
+        pb.command().add(dummyAceLibJar.toAbsolutePath().toString());
+        pb.command().add("--log-dir");
+        pb.command().add(logDir.toAbsolutePath().toString());
+
+        String origPath = pb.environment().getOrDefault("PATH", "");
+        pb.environment().put("PATH",
+            tempDir.toAbsolutePath() + File.pathSeparator + origPath);
+        pb.environment().put("SERVER_JAR",
+            dummyServerJar.toAbsolutePath().toString());
+
+        long startNanos = System.nanoTime();
+        Process p = pb.start();
+        boolean finished = p.waitFor(150, TimeUnit.SECONDS);
+        long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
+
+        String stdout = drain(p.getInputStream());
+        String stderr = drain(p.getErrorStream());
+
+        if (!finished) {
+            p.destroyForcibly();
+            fail("bash 子行程未在 150s 內結束；--log-dir 路徑異常。"
+                + "實際耗時 " + elapsedMs + "ms\nstdout: " + stdout + "\nstderr: " + stderr);
+        }
+        assertTrue(elapsedMs < 30_000L,
+            "--timeout 5 必須在 < 30s 內 bounded exit；實際耗時 " + elapsedMs + "ms");
+        assertTrue(p.exitValue() != 0,
+            "--timeout 5 期間 fake java 不會印 ready log，預期 exit 非零；"
+                + "實際 exit " + p.exitValue() + "\nstdout: " + stdout + "\nstderr: " + stderr);
+
+        // 核心契約：--log-dir 指定的目錄必須含有兩份 log 副本
+        Path pluginLog = logDir.resolve("acelib-plugin.log");
+        Path serverLog = logDir.resolve("server-stdout.log");
+        assertTrue(Files.isRegularFile(pluginLog),
+            "--log-dir 必須保留 acelib-plugin.log；實際未找到: " + pluginLog
+                + "\nstdout: " + stdout + "\nstderr: " + stderr);
+        assertTrue(Files.isRegularFile(serverLog),
+            "--log-dir 必須保留 server-stdout.log；實際未找到: " + serverLog
+                + "\nstdout: " + stdout + "\nstderr: " + stderr);
+    }
 }

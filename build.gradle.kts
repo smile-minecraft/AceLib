@@ -286,3 +286,110 @@ val docsCheck by tasks.registering {
     description = "文件品質門禁：Javadoc/doclint、publication、consumer docs、API surface/signature/docs coverage"
     dependsOn("javadoc", "test", "verifyPublication", consumerFixtureCheck)
 }
+
+// ---------------------------------------------------------------------------
+// 雙版本相容矩陣聚合（Adventure 4/5 isolated tests + API gates + publication + build + 版本矩陣）
+// ---------------------------------------------------------------------------
+// 把 Adventure 4/5 isolated tests、API gates、publication 與 build 聚合成單一
+// 文件化入口 compatibilityCheck；並由 compatibilityMatrix 輸出各 lane 的
+// exact resolved versions。PR CI 以此作為 binary / unit / artifact gate；
+// server runtime matrix（Paper/Folia 26.1.2/26.2）由 compatibility-nightly.yml
+// 承擔，本 task 僅建立該 workflow，未實際執行（見該檔案頂端註解）。
+//
+// fail-closed：compatibilityMatrix 在關鍵 lane 解析不到具體版本時拋出，
+// 確保「零測試 / 錯誤 classpath / 未解析」都會讓 gate 失敗。
+// 解析某 configuration 中指定 group/module 的 exact resolved version。
+// 純函式，不 capture script 物件；於 configuration 階段呼叫（見 compatibilityMatrix）。
+fun resolveVersion(conf: Configuration, group: String, module: String): String {
+    return conf.resolvedConfiguration.resolvedArtifacts
+        .firstOrNull { art ->
+            val cid = art.id.componentIdentifier
+            cid is org.gradle.api.artifacts.component.ModuleComponentIdentifier
+                && cid.group == group && cid.module == module
+        }
+        ?.id?.componentIdentifier
+        ?.let { (it as org.gradle.api.artifacts.component.ModuleComponentIdentifier).version }
+        ?: "n/a"
+}
+
+val compatibilityMatrix by tasks.registering {
+    group = "verification"
+    description = "輸出各相容 lane 的 exact resolved versions（Adventure 4/5、paper-api、MockBukkit、Java toolchain）"
+    // configuration cache 禁止在 execution 存取 project；故於 configuration 階段把版本解析成
+    // plain String 存入 val，doLast 只讀這些字串。僅在 compatibilityCheck / compatibilityMatrix
+    // 被請求時才強制解析 dependency graph，避免每次 build 都解析（影響 ./gradlew build 等）。
+    val shouldResolve = project.gradle.startParameter.taskNames.any {
+        it == "compatibilityCheck" || it == "compatibilityMatrix"
+            || it.endsWith(":compatibilityCheck") || it.endsWith(":compatibilityMatrix")
+    }
+    val adventure4: String
+    val adventure5: String
+    val paperApi: String
+    val mockbukkit: String
+    if (shouldResolve) {
+        adventure4 = resolveVersion(configurations.testRuntimeClasspath.get(), "net.kyori", "adventure-api")
+        adventure5 = resolveVersion(configurations.getByName("adventure5ApiConfig"), "net.kyori", "adventure-api")
+        paperApi = resolveVersion(configurations.compileClasspath.get(), "io.papermc.paper", "paper-api")
+        mockbukkit = resolveVersion(configurations.testRuntimeClasspath.get(), "org.mockbukkit.mockbukkit", "mockbukkit-v26.1.2")
+    } else {
+        adventure4 = "n/a"; adventure5 = "n/a"; paperApi = "n/a"; mockbukkit = "n/a"
+    }
+    doLast {
+        logger.lifecycle("[compatibility-matrix] Adventure 4 (testRuntimeClasspath) : $adventure4")
+        logger.lifecycle("[compatibility-matrix] Adventure 5 (adventure5ApiConfig)  : $adventure5")
+        logger.lifecycle("[compatibility-matrix] paper-api   (compileClasspath)     : $paperApi")
+        logger.lifecycle("[compatibility-matrix] MockBukkit  (testRuntimeClasspath) : $mockbukkit")
+        logger.lifecycle("[compatibility-matrix] Java toolchain                  : ${JavaLanguageVersion.of(25)}")
+
+        require(adventure4 != "n/a") {
+            "無法解析 Adventure 4 (net.kyori:adventure-api) 版本；testRuntimeClasspath 可能損壞"
+        }
+        require(adventure5 != "n/a") {
+            "無法解析 Adventure 5 (net.kyori:adventure-api) 版本；adventure5ApiConfig 未正確解析（v5 lane 缺失）"
+        }
+        require(paperApi != "n/a") {
+            "無法解析 paper-api (io.papermc.paper:paper-api) 版本；compileClasspath 可能損壞"
+        }
+        require(mockbukkit != "n/a") {
+            "無法解析 MockBukkit (org.mockbukkit.mockbukkit:mockbukkit-v26.1.2) 版本；testRuntimeClasspath 可能損壞"
+        }
+    }
+}
+
+// artifact gate 需要實際 jar（build/libs/AceLib-*.jar）；確保 test 在 jar 之後執行，
+// 避免 gate 因 jar 尚未產出而誤判。此為 build wiring，不影響 production code。
+tasks.test { dependsOn(tasks.jar) }
+
+val compatibilityCheck by tasks.registering {
+    group = "verification"
+    description = "雙版本相容矩陣聚合 gate：Adventure 4/5 tests + API gates + publication + build + 版本矩陣"
+    dependsOn("test", "verifyPublication", "jar", compatibilityMatrix)
+    // 配置期解析 test 結果目錄路徑（與 verifyPublication 同模式，避免 doLast 直接 capture project）
+    val testResultsDir = layout.buildDirectory.dir("test-results/test").get().asFile
+    doLast {
+        // 零測試 fail-closed：compatibilityCheck 依賴 test，但若 test 實際執行 0 個
+        // 測試（例如 filter 排除全部、或沒有編譯任何測試），gate 仍會成功，造成
+        // 「靜默通過」假象。此處讀取 test 結果 XML，統計實際執行的測試數量，
+        // 低於門檻即 fail，確保 compatibility 相關測試確實被執行（test task 含
+        // com.smile.acelib.compatibility.* 與 Adventure gate/v5 tests）。
+        require(testResultsDir.isDirectory) {
+            "找不到 test 結果目錄：$testResultsDir（test task 應已產出 XML）"
+        }
+        val xmls = testResultsDir.listFiles { f ->
+            f.name.startsWith("TEST-") && f.name.endsWith(".xml")
+        } ?: emptyArray()
+        val testsAttr = Regex("""<testsuite[^>]*\btests="(\d+)"""")
+        var totalTests = 0
+        for (xml in xmls) {
+            val text = xml.readText()
+            for (m in testsAttr.findAll(text)) {
+                totalTests += m.groupValues[1].toIntOrNull() ?: 0
+            }
+        }
+        require(totalTests > 0) {
+            "compatibilityCheck 零測試門禁：test 實際執行 $totalTests 個測試，低於門檻（要求 > 0，" +
+                "XML 數=${xmls.size}）；compatibility 相關測試未執行；gate 不允許靜默通過。"
+        }
+        logger.lifecycle("[compatibility-check] 實際執行測試數量 = $totalTests（零測試門禁通過）")
+    }
+}

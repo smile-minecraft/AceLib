@@ -39,10 +39,19 @@ set -euo pipefail
 #   - Folia 26.1.2 build 8
 # 透過 fill-data.papermc.io 內容分發端點下載；URL 內含 SHA-256 物件鍵以
 # 鎖定 immutable artifact（舊版 projects API 端點已回 410 Gone）。
+#
+# 雙版本矩陣：預設鎖定 26.1.2；Paper / Folia 26.2 由 --version /
+# --build / --sha256 覆寫（26.2 的 exact SHA-256 由後續任務提供，本腳本
+# 不內嵌任何未經驗證的 26.2 校驗值，避免靜默通過）。
 PAPER_SHA256="0555a0b0468a5198d8fb1a16e1f9e95c81a917a2dc8f2e09867b4044742f6401"
 FOLIA_SHA256="607afd1c3320008e1ffd2eaee6780ace4419d5f8c527b75e79f259be79ebf57b"
 PAPER_URL="https://fill-data.papermc.io/v1/objects/${PAPER_SHA256}/paper-26.1.2-72.jar"
 FOLIA_URL="https://fill-data.papermc.io/v1/objects/${FOLIA_SHA256}/folia-26.1.2-8.jar"
+
+# 版本矩陣預設值（26.1.2）；26.2 由呼叫端以 --version / --build / --sha256 覆寫。
+DEFAULT_VERSION="26.1.2"
+PAPER_DEFAULT_BUILD=72
+FOLIA_DEFAULT_BUILD=8
 
 DEFAULT_TIMEOUT_SECONDS=180
 SERVER_READY_TIMEOUT_SECONDS=120
@@ -64,12 +73,20 @@ Usage: scripts/smoke-server.sh <paper|folia> [options]
 Options:
   --help                 印此說明並 exit 0
   --download             若 SERVER_JAR 未設定，下載並 SHA-256 校驗官方固定
-                         artifact（需網路；預設不啟用）
+                          artifact（需網路；預設不啟用）
   --timeout SECONDS      啟動 + 等待 ready + 等待 disable 的總 timeout
-                         （預設 180）。watchdog 在超時時強制終止 server
+                          （預設 180）。watchdog 在超時時強制終止 server
   --acelib-jar PATH      要複製進 runtime 的 AceLib jar；
-                         預設 build/libs/AceLib-*.jar（排除 -sources /
-                         -javadoc auxiliary jar）
+                          預設 build/libs/AceLib-*.jar（排除 -sources /
+                          -javadoc auxiliary jar）
+  --version VER          版本矩陣覆寫（預設 26.1.2；例如 26.2）。須搭配
+                          --build / --sha256 才能拼出正確 artifact URL
+  --build N              指定 server build 編號（預設 paper=72 / folia=8）
+  --sha256 HEX           指定 server artifact 的 SHA-256（immutable 物件鍵）；
+                          與 --version / --build 共同決定下載 URL
+  --log-dir DIR          指定 log 保留目錄；runtime 清理前會把
+                          acelib-plugin.log 與 server-stdout.log 複製到該目錄
+                          （供 Task 005 後續分析；預設不保留）
 
 Environment:
   SERVER_JAR             服務端 jar 的絕對路徑。若與 --download 同時指定，
@@ -163,6 +180,10 @@ download_artifact() {
 # cleanup 內 rm -f 失效，暫存檔殘留）。
 downloaded_jar=""
 
+# --log-dir 指定的 log 保留目錄（runtime 矩陣需保留 version/build/
+# command/log 供後續分析）。空字串表示不保留（預設行為，runtime 退出即清掉）。
+log_dir_override=""
+
 # cleanup 函式對所有外部變數用 `${var:-}` 守門：trap 可能早於 runtime / PID /
 # FIFO 初始化而觸發（例如 --download 失敗 → die 3 → exit），`set -u` 下若
 # 直接讀取 unset 變數會終止 trap，後續步驟就會被略過。
@@ -215,6 +236,17 @@ cleanup() {
             tail -n "$LOG_TAIL_LINES" "$runtime_dir/server-stdout.log" || true
         fi
     fi
+    # 4.5 若指定 --log-dir，保留 log 到該目錄（不刪除，供 後續分析
+    # version / build / command / log）。runtime 即將在 step 5 被移除，故先複製。
+    if [[ -n "${log_dir_override:-}" ]]; then
+        mkdir -p "$log_dir_override" 2>/dev/null || true
+        if [[ -n "$log_file" && -f "$log_file" ]]; then
+            cp -f "$log_file" "$log_dir_override/acelib-plugin.log" 2>/dev/null || true
+        fi
+        if [[ -n "$runtime_dir" && -f "$runtime_dir/server-stdout.log" ]]; then
+            cp -f "$runtime_dir/server-stdout.log" "$log_dir_override/server-stdout.log" 2>/dev/null || true
+        fi
+    fi
     # 5. 清 runtime 目錄（idempotent：trap 重入也安全；runtime 未建立時跳過）
     if [[ -n "$runtime_dir" && -d "$runtime_dir" ]]; then
         rm -rf "$runtime_dir"
@@ -240,6 +272,10 @@ platform=""
 do_download=0
 timeout_seconds=$DEFAULT_TIMEOUT_SECONDS
 acelib_jar_override=""
+version_override=""
+build_override=""
+sha256_override=""
+log_dir_override=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -268,6 +304,26 @@ while [[ $# -gt 0 ]]; do
             acelib_jar_override=$2
             shift 2
             ;;
+        --version)
+            [[ $# -ge 2 ]] || die 2 "--version 需要一個版本參數（例如 26.2）"
+            version_override=$2
+            shift 2
+            ;;
+        --build)
+            [[ $# -ge 2 ]] || die 2 "--build 需要一個 build 編號（例如 5）"
+            build_override=$2
+            shift 2
+            ;;
+        --sha256)
+            [[ $# -ge 2 ]] || die 2 "--sha256 需要一個 hex 參數"
+            sha256_override=$2
+            shift 2
+            ;;
+        --log-dir)
+            [[ $# -ge 2 ]] || die 2 "--log-dir 需要一個目錄路徑"
+            log_dir_override=$2
+            shift 2
+            ;;
         *)
             die 2 "無效的參數 '$1'；第一個位置參數必須是 paper 或 folia 之一（用 --help 看用法）"
             ;;
@@ -283,13 +339,35 @@ if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 if [[ "$platform" == "paper" ]]; then
-    server_url=$PAPER_URL
-    server_sha256=$PAPER_SHA256
+    base_url=$PAPER_URL
+    base_sha256=$PAPER_SHA256
+    base_build=$PAPER_DEFAULT_BUILD
+    kind=paper
     expected_platform_label=$EXPECTED_PLATFORM_PAPER
 else
-    server_url=$FOLIA_URL
-    server_sha256=$FOLIA_SHA256
+    base_url=$FOLIA_URL
+    base_sha256=$FOLIA_SHA256
+    base_build=$FOLIA_DEFAULT_BUILD
+    kind=folia
     expected_platform_label=$EXPECTED_PLATFORM_FOLIA
+fi
+
+# 版本矩陣覆寫：預設 26.1.2；26.2 由 --version / --build / --sha256 指定。
+# 三個覆寫參數必須同時提供（fail-closed）：任一存在但 --sha256 缺失，
+# 或三者未齊全，都直接拒絕，避免腳本靜默用預設 URL 執行錯誤版本。
+if [[ -n "$version_override" || -n "$build_override" || -n "$sha256_override" ]]; then
+    if [[ -z "$version_override" || -z "$build_override" || -z "$sha256_override" ]]; then
+        die 2 "版本矩陣覆寫必須同時提供 --version / --build / --sha256 三個參數；任一缺失都會導致 artifact URL 拼裝錯誤，已拒絕執行。"
+    fi
+    eff_version=$version_override
+    eff_build=$build_override
+    server_sha256=$sha256_override
+    server_url="https://fill-data.papermc.io/v1/objects/${sha256_override}/${kind}-${eff_version}-${eff_build}.jar"
+else
+    eff_version=$DEFAULT_VERSION
+    eff_build=$base_build
+    server_sha256=$base_sha256
+    server_url=$base_url
 fi
 
 # ---------------------------------------------------------------------------
