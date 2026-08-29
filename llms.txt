@@ -4,20 +4,20 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 
 ## Library overview
 - [AceLib README](https://github.com/smile-minecraft/AceLib/blob/main/README.md): Project overview, JitPack installation, plugin.yml setup, and API acquisition via ServicesManager.
-- [AceLib README (zh-TW)](https://github.com/smile-minecraft/AceLib/blob/main/README.zh-TW.md): Traditional Chinese project overview with the same installation and lifecycle instructions.
-- [Documentation Index](https://github.com/smile-minecraft/AceLib/blob/main/docs/README.md): Task-oriented router that directs readers to consumer, operator, contributor, and reference docs.
+- [AceLib README (zh-TW)](https://github.com/smile-minecraft/AceLib/blob/main/README.zh-TW.md): Same overview in Traditional Chinese, with installation and lifecycle instructions.
+- [Documentation Index](https://github.com/smile-minecraft/AceLib/blob/main/docs/README.md): Start here to find the right guide for your task — consumer, operator, contributor, or reference.
 
 ## Consumer
-- [Consumer Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/README.md): Entry point for downstream plugins explaining provider acquisition and where to read next.
-- [Quick Start](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/quickstart.md): Complete Gradle setup, plugin.yml declaration, and provider retrieval example for first-time integration.
-- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Verified baseline versions for Java, Paper, Folia, and Bedrock dependencies, plus unsupported scope.
+- [Consumer Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/README.md): Where downstream plugins start — how to get the provider API and where to read next.
+- [Quick Start](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/quickstart.md): Complete Gradle setup, plugin.yml declaration, and provider retrieval for first-time integration.
+- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Supported baseline for AceLib 1.2.0 (Java 25 / Paper 26.1.2 / Folia 26.1.2), per-build VERIFIED-BETA for 26.2, UNVERIFIED for unknown future versions, plus Bedrock dependencies and limitations.
 - [Provider Lifecycle](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/provider-lifecycle.md): How to handle AceLib ready, reload, and disable states by re-acquiring the provider API.
 
 ## Operator
-- [Operator Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/operator/README.md): Build the runtime JAR from source, deploy to Paper or Folia, and verify startup with acelib status.
+- [Operator Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/operator/README.md): Build the server JAR from source, deploy it to Paper or Folia, and verify startup with `acelib status`.
 
 ## Contributor
-- [Contributor Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/contributor/README.md): Development environment, test commands, documentation gates, and local Maven publishing workflow.
+- [Contributor Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/contributor/README.md): Development setup, test commands, documentation checks, and local Maven publishing.
 
 ## Modules
 - [Modules Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/README.md): Index of all subsystem modules and their service entry points.
@@ -42,13 +42,14 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 ## Reference
 - [Error Codes](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/error-codes.md): Lookup table for ACELIB-<AREA>-<CODE> including trigger conditions and categories.
 - [Release Artifacts](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/release-artifacts.md): How to obtain the API from JitPack, build the server JAR, and use the local Maven coordinate.
-- [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification contract for all 143 public types into Supported, SPI, and Internal.
+- [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification for all 143 public types into Supported, SPI, and Internal.
+- [Runtime Compatibility Matrix](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/runtime-compatibility-matrix.json): Machine-readable version matrix (JSON) with platform, status (SUPPORTED / VERIFIED-BETA / UNVERIFIED), and evidence for each verified runtime.
 
 ## Changelog
 - [Changelog](https://github.com/smile-minecraft/AceLib/blob/main/CHANGELOG.md): Version history and upgrade notes for all releases.
 
 ## AI agent integration notes
-- Obtain the API through Bukkit ServicesManager via `getRegistration(AceLibApi.AceLibProvider.class)`, call `provider.api()`, and check `api.isReady()` before using any service; after an internal reload re-acquire via `provider.api()` on the same provider, after disable the ServicesManager registration is removed (re-query returns null) and any retained provider yields a shutdown (not-ready) facade (see provider-lifecycle.md and the Getting the API section in README).
-- Only depend on types classified as Supported in api-surface.md; SPI types may be implemented by extension authors under their documented contract, and Internal types must not be depended on.
-- On Folia, player, entity, block, and inventory operations must be dispatched via SafeScheduler or SafeExecutor and validated with ContextInspector to honor region threading (see scheduler.md and context.md).
-- Resolve any `ACELIB-<AREA>-<CODE>` from logs by looking it up in error-codes.md, which maps each code to its module, meaning, and trigger condition.
+- Get the API through Bukkit ServicesManager via `getRegistration(AceLibApi.AceLibProvider.class)`, call `provider.api()`, and check `api.isReady()` before using any service. After an internal reload, re-acquire via `provider.api()` on the same provider; after disable, the ServicesManager registration is removed (re-query returns null) and any retained provider becomes a shutdown (not-ready) facade (see provider-lifecycle.md and the Getting the API section in README).
+- Only depend on types marked Supported in api-surface.md. SPI types may be implemented by extension authors under their documented contract; do not depend on Internal types.
+- On Folia, dispatch player, entity, block, and inventory work through SafeScheduler or SafeExecutor and validate with ContextInspector to respect region threading (see scheduler.md and context.md).
+- When you see `ACELIB-<AREA>-<CODE>` in logs, look it up in error-codes.md for its module, meaning, and trigger condition.

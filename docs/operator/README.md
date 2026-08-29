@@ -115,7 +115,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 ### 想升級到 26.2
 
-Paper 與 Folia 26.2 已標記為 VERIFIED-BETA：矩陣列出的 build 已完成 lifecycle smoke 與 capability gate，Folia 26.2-4 另完成部分功能與真人基岩驗證；上游仍為 beta，不擴大 SUPPORTED 基線，未來 build 需重新驗證。升級前仍應先在獨立測試 server 驗證，再決定是否升級正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
+Paper 與 Folia 26.2 標為 VERIFIED-BETA（已驗證的測試版）：我們已在矩陣列出的每個版本上實際啟動伺服器並確認外掛可正常啟用與停用，Folia 26.2-4 另外完成了部分功能與真人基岩玩家的實測；不過上游 26.2 仍為 beta，尚未列入正式支援，每個新 build 都需要重新驗證才會納入支援。升級前請先在獨立的測試伺服器上驗證，再決定是否更新正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
 
 ## 相關頁面
 

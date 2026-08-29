@@ -14,7 +14,7 @@ AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全�
 | Paper | 26.1.2 |
 | Folia | 26.1.2 |
 
-Paper 與 Folia 26.2 已標記為 VERIFIED-BETA：列出的 build 已完成 lifecycle 與 capability gate 驗證，Folia 26.2-4 另有部分功能驗證；上游仍為 beta，因此不擴大 SUPPORTED 基線，未來 build 需重新驗證。完整限制請看[相容性說明](docs/consumer/compatibility.md)。
+Paper 與 Folia 26.2 列為 VERIFIED-BETA（已驗證的測試版）：我們已在矩陣列出的版本上實際啟動伺服器並確認外掛可正常載入與運作，Folia 26.2-4 另外通過了訊息與基岩玩家的實測；不過上游 26.2 仍為 beta，每個新 build 都需要重新驗證後才會列入支援。完整限制請看[相容性說明](docs/consumer/compatibility.md)。
 
 ## 在 plugin 中加入 AceLib
 
@@ -97,7 +97,7 @@ public final class MyPlugin extends JavaPlugin {
 | 日常整合 | [Provider 生命週期](docs/consumer/provider-lifecycle.md) | 正確處理重載與停用，適合長時間執行的插件 |
 | 日常整合 | [錯誤碼](docs/reference/error-codes.md) | 查詢 `ACELIB-<AREA>-<CODE>` 涵義與訊息五要件 |
 | 部署維運 | [伺服器管理員指南](docs/operator/README.md) | 從原始碼建置伺服器 jar 並完成部署 |
-| 部署維運 | [相容性說明](docs/consumer/compatibility.md) | 確認已驗證基線（Java 25／Paper 26.1.2／Folia 26.1.2）與 26.2 VERIFIED-BETA 的 lifecycle/gate 及部分功能驗證範圍 |
+| 部署維運 | [相容性說明](docs/consumer/compatibility.md) | 確認支援的版本基線（Java 25／Paper 26.1.2／Folia 26.1.2）以及 26.2 VERIFIED-BETA（已驗證的測試版）的驗證範圍與限制 |
 | 參考 | [貢獻者指南](docs/contributor/README.md) | 貢獻流程、驗證門禁與文件風格 |
 | 參考 | [變更紀錄](CHANGELOG.md) | 版本歷史與更新指引 |
 | 參考 | [AI 檢索索引 (llms.txt)](llms.txt) | 給 AI Agent 的完整文件索引 |

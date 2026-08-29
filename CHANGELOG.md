@@ -12,12 +12,12 @@ v1.2.0 以與 1.1.2 相同的 GitHub Release 方式發布（Release 沒有 binar
 - 執行期能力閘（capability gate）：新增 `CompatibilityGate` / `CapabilityProbe` / `RuntimeFingerprint` / `CompatibilityStatus`，在啟用期間確認 Adventure / Bedrock 路徑可用性，並以錯誤代碼 `ACELIB-PLAT-004` 等回報未識別實作。
 - 排程器後端分流（`SchedulerBackend` seam）：抽取 `PaperSchedulerBackend` / `FoliaSchedulerBackend`，由 `SafeSchedulerImpl` 依平台選擇，避免 Folia 環境誤用全域 `BukkitScheduler`。
 - CI 雙版本相容矩陣：新增 `compatibility-nightly.yml` 與 `ci.yml` 矩陣，覆蓋 Paper / Folia 26.1.2 與 26.2 系列。
-- 26.2 系列標記為 VERIFIED-BETA：Paper 26.2-120、Folia 26.2-7 完成 isolated lane 的 lifecycle smoke 與 capability gate；Folia 26.2-4 另完成 status/scheduler/context/message fallback 與真實基岩四項驗證，但上游仍為 beta，不擴大 SUPPORTED 基線。
+- 26.2 系列標為 VERIFIED-BETA（已驗證的測試版）：Paper 26.2-120 與 Folia 26.2-7 已在獨立測試環境完成啟動驗證；Folia 26.2-4 另外通過了狀態、排程、上下文、訊息 fallback 與真人基岩玩家的四項實測，但由於上游仍為 beta，尚未列入正式支援。
 
 ### 版本與限制
 
 - 本版為 1.1.2 之上的加法性更新：未變更任何既有公開 API 語意或簽章。
-- 已驗證 SUPPORTED 基準仍為 26.1.2（Paper 26.1.2-72、Folia 26.1.2-8）；26.2 系列為 VERIFIED-BETA，未來未知版本列為 UNVERIFIED。
+- 正式支援（SUPPORTED）仍以 26.1.2 為準（Paper 26.1.2-72、Folia 26.1.2-8）；26.2 系列為 VERIFIED-BETA（已驗證的測試版），其他未列出的未來版本皆為 UNVERIFIED（尚未驗證）。
 - 機器可讀的執行期相容矩陣見 `docs/reference/runtime-compatibility-matrix.json`。
 
 ## [1.1.2] - 2026-08-27

@@ -14,7 +14,7 @@ The source version in this checkout is **1.2.0** (adds Adventure Component messa
 | Paper | 26.1.2 |
 | Folia | 26.1.2 |
 
-Paper and Folia 26.2 are VERIFIED-BETA: lifecycle and capability-gate verification is complete for the listed builds, with partial feature verification on Folia 26.2-4. Upstream is still beta, so these builds do not expand the SUPPORTED baseline; future builds must be re-verified. See [Compatibility](docs/consumer/compatibility.md) for the full constraints.
+Paper and Folia 26.2 are marked VERIFIED-BETA: we have started a server on each listed build and confirmed that the plugin loads and runs, with additional message and Bedrock testing on Folia 26.2-4. Since upstream 26.2 is still in beta, each new build needs to be re-verified before it is considered supported. See [Compatibility](docs/consumer/compatibility.md) for details.
 
 ## Adding AceLib to Your Plugin
 
@@ -97,7 +97,7 @@ Do not depend directly on `AceLibPlugin`. If your plugin is long-running, see [P
 | Daily integration | [Provider Lifecycle](docs/consumer/provider-lifecycle.md) | Handle reload and disable correctly for long-running plugins |
 | Daily integration | [Error Codes](docs/reference/error-codes.md) | Look up `ACELIB-<AREA>-<CODE>` and the five required fields in each message |
 | Operations | [Operator Guide](docs/operator/README.md) | Build the server plugin jar from source and deploy it |
-| Operations | [Compatibility](docs/consumer/compatibility.md) | Check the verified baseline (Java 25 / Paper 26.1.2 / Folia 26.1.2) and the VERIFIED-BETA lifecycle/gate and partial feature verification for 26.2 |
+| Operations | [Compatibility](docs/consumer/compatibility.md) | Check the supported baseline (Java 25 / Paper 26.1.2 / Folia 26.1.2) and the verification scope and limitations for 26.2 VERIFIED-BETA |
 | Reference | [Contributor Guide](docs/contributor/README.md) | Contribution workflow, verification gates, and style rules |
 | Reference | [Changelog](CHANGELOG.md) | Version history, release notes, and upgrade guidance |
 
