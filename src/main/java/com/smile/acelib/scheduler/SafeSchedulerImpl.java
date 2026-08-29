@@ -2,8 +2,6 @@ package com.smile.acelib.scheduler;
 
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -18,7 +16,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
@@ -28,7 +25,8 @@ import org.bukkit.scheduler.BukkitTask;
  * <ul>
  *   <li>6 種基本任務（global / async / later / timer）+ 3 種上下文任務
  *       （player / player-later / entity / location）共 8 種 dispatch</li>
- *   <li>Paper / Folia 自動 dispatch（依 {@link PlatformCapability} 判斷）</li>
+ *   <li>Paper / Folia 自動 dispatch（依 {@link PlatformCapability} 選擇 internal
+ *       {@link SchedulerBackend}，不依版本字串 switch）</li>
  *   <li>玩家離線 / 實體失效 / chunk 未載入前置檢查，
  *       並以 {@link TaskErrorRecord} 留下分類代碼紀錄</li>
  *   <li>插件停用後所有後續任務直接 no-op，並留下 {@code ACELIB-SCHED-006} 紀錄</li>
@@ -47,12 +45,17 @@ import org.bukkit.scheduler.BukkitTask;
  *   <li>{@code ACELIB-SCHED-006} — 插件停用</li>
  * </ul>
  *
- * <h2>Folia dispatch 策略</h2>
- * <p>當 {@link PlatformCapability#regionScheduling()} 為 true 時，本實作優先採用
- * Folia 專屬 API（{@code io.papermc.paper.threadedregions.scheduler.*}），
- * 透過 reflection 呼叫 — 若 classpath 不含 Folia API（典型於 MockBukkit 環境），
- * dispatch 會進入 fallback 路徑：以 {@code ACELIB-SCHED-005} 記錄並回傳 no-op task，
- * 不丟例外。</p>
+ * <h2>backend 選擇策略</h2>
+ * <p>runtime-specific 派送已抽離至 package-private {@link SchedulerBackend}：
+ * {@link FoliaSchedulerBackend}（regionized，reflection 呼叫
+ * {@code io.papermc.paper.threadedregions.scheduler.*}）與
+ * {@link PaperSchedulerBackend}（全域 {@code BukkitScheduler}）。backend 選擇
+ * 只依 {@link PlatformCapability} profile（{@code regionScheduling()} → Folia、
+ * {@code globalScheduler()} → Paper、兩者皆無 → 無 backend），<strong>不</strong>
+ * 做版本字串 switch。當 classpath 不含 Folia API（典型 MockBukkit 環境）時，
+ * {@link FoliaSchedulerBackend} 拋 {@link IllegalStateException}，由本類別統一以
+ * {@code ACELIB-SCHED-005} 記錄並回傳 no-op task（fail-closed，絕不退回 unsafe
+ * 的 global scheduler）。</p>
  *
  * <h2>執行緒安全</h2>
  * <p>所有 {@code public} 方法皆可在多 region 並行環境下使用。
@@ -77,6 +80,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private final JavaPlugin plugin;
     private final Platform platform;
     private final PlatformCapability capability;
+    private final SchedulerBackend backend;
     private final TaskErrorRecorder recorder;
     private final Set<ScheduledTask> tracked = ConcurrentHashMap.newKeySet();
     private final AtomicLong fallbackTick = new AtomicLong(0L);
@@ -94,7 +98,13 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private volatile BiConsumer<String, String> recordSink;
 
     /**
-     * 建構子。
+     * 建構子（標準路徑）。
+     *
+     * <p>backend 選擇只依 {@link PlatformCapability} profile：
+     * {@code regionScheduling()} → {@link FoliaSchedulerBackend}、
+     * {@code globalScheduler()} → {@link PaperSchedulerBackend}、
+     * 兩者皆無 → {@code null}（無 backend，後續任務回 cancelled + SCHED-005）。
+     * 全程無版本字串 switch。</p>
      *
      * @param plugin     派送任務的 plugin owner；不可為 null
      * @param platform   偵測到的平台；不可為 null（用於診斷與日誌）
@@ -103,10 +113,43 @@ public final class SafeSchedulerImpl implements SafeScheduler {
      * @throws NullPointerException 當任一參數為 null
      */
     public SafeSchedulerImpl(JavaPlugin plugin, Platform platform, PlatformCapability capability) {
+        this(plugin, platform, capability, selectBackend(plugin, capability));
+    }
+
+    /**
+     * 建構子（測試 / 受控注入 seam）。
+     *
+     * <p>允許直接注入一個 {@link SchedulerBackend}（含必定拋錯的 backend），
+     * 以決定性驗證 fail-closed 行為。package-private，僅供同套件測試使用。</p>
+     *
+     * @param plugin     派送任務的 plugin owner；不可為 null
+     * @param platform   偵測到的平台；不可為 null
+     * @param capability 對應的 capability profile；不可為 null
+     * @param backend    要使用的 backend；可為 null（表示無 backend）
+     * @throws NullPointerException 當 plugin / platform / capability 為 null
+     */
+    SafeSchedulerImpl(JavaPlugin plugin, Platform platform, PlatformCapability capability,
+                      SchedulerBackend backend) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.capability = Objects.requireNonNull(capability, "capability");
+        this.backend = backend;
         this.recorder = new TaskErrorRecorder();
+    }
+
+    /**
+     * 依 capability profile 選擇 backend（無版本字串 switch）。
+     *
+     * @return 對應的 {@link SchedulerBackend}；兩者皆不支援時回 null
+     */
+    private static SchedulerBackend selectBackend(JavaPlugin plugin, PlatformCapability capability) {
+        if (capability.regionScheduling()) {
+            return new FoliaSchedulerBackend(plugin);
+        }
+        if (capability.globalScheduler()) {
+            return new PaperSchedulerBackend(plugin);
+        }
+        return null;
     }
 
     // -----------------------------------------------------------------
@@ -248,6 +291,18 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     }
 
     /**
+     * 取得目前選用的 internal backend（測試與診斷用）。
+     *
+     * <p>回傳值反映建構時依 capability profile 選擇的 backend；
+     * UNKNOWN（regionScheduling 與 globalScheduler 皆 false）下為 {@code null}。</p>
+     *
+     * @return 目前的 {@link SchedulerBackend}；無 backend 時為 null
+     */
+    SchedulerBackend getBackend() {
+        return backend;
+    }
+
+    /**
      * scheduler 是否已被標記為 disabled（{@link #onPluginDisable()} 已呼叫）。
      *
      * @return true 表示已停用，後續任何任務皆為 no-op
@@ -331,180 +386,29 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         long creationTick = currentTick();
         Runnable wrapped = () -> wrap(type, runnable);
 
+        // backend 選擇在建構時依 capability profile 完成；null 表示
+        // regionScheduling 與 globalScheduler 皆不支援（UNKNOWN）。
+        if (backend == null) {
+            recordAndNotify(TaskErrorRecord.cancelled(
+                type, ERR_PLATFORM_UNSUPPORTED,
+                "platform capability does not include regionScheduling nor globalScheduler"));
+            return new NoOpScheduledTask(plugin, type);
+        }
+
         try {
-            BukkitTask task;
-            if (capability.regionScheduling()) {
-                task = dispatchFolia(type, wrapped, player, entityOrLoc, delayTicks, periodTicks, async);
-            } else if (capability.globalScheduler()) {
-                task = dispatchPaper(wrapped, delayTicks, periodTicks, async);
-            } else {
-                recordAndNotify(TaskErrorRecord.cancelled(
-                    type, ERR_PLATFORM_UNSUPPORTED,
-                    "platform capability does not include regionScheduling nor globalScheduler"));
-                return new NoOpScheduledTask(plugin, type);
-            }
+            BukkitTask task = backend.dispatch(
+                type, wrapped, player, entityOrLoc, delayTicks, periodTicks, async);
             ScheduledTask scheduled = new BukkitScheduledTask(plugin, type, task, creationTick);
             tracked.add(scheduled);
             return scheduled;
         } catch (Throwable t) {
-            // dispatch 階段失敗（Folia API 不存在、IllegalStateException、Refl 錯誤等）
+            // backend 派發失敗（Folia API 不存在、IllegalStateException、Refl 錯誤等）
+            // fail-closed：記錄 SCHED-005 並回 no-op task，絕不退回 unsafe scheduler。
             recordAndNotify(TaskErrorRecord.threw(
                 type, ERR_PLATFORM_UNSUPPORTED,
                 "dispatch failed: " + safeMessage(t), t));
             return new NoOpScheduledTask(plugin, type);
         }
-    }
-
-    /**
-     * Paper 路徑：透過 {@link BukkitScheduler} 派送。
-     *
-     * <p>MockBukkit 環境下此方法可正常運作；真實 Paper / Bukkit 環境亦適用。</p>
-     */
-    private BukkitTask dispatchPaper(Runnable wrapped, long delay, long period, boolean async) {
-        BukkitScheduler scheduler = Bukkit.getScheduler();
-        if (async) {
-            return scheduler.runTaskAsynchronously(plugin, wrapped);
-        }
-        if (period > 0L) {
-            return scheduler.runTaskTimer(plugin, wrapped, delay, period);
-        }
-        if (delay > 0L) {
-            return scheduler.runTaskLater(plugin, wrapped, delay);
-        }
-        return scheduler.runTask(plugin, wrapped);
-    }
-
-    /**
-     * Folia 路徑：透過 reflection 呼叫 {@code io.papermc.paper.threadedregions.scheduler.*}。
-     *
-     * <p>由於 paper-api 26.1.2 已內含 Folia API 的型別宣告，但 MockBukkit 並不實作
-     * 其執行期行為；本方法以 reflection 嘗試呼叫，讓 MockBukkit 環境下也能走完整
-     * dispatch 流程並正確落在 catch 區塊（記錄為 {@code ACELIB-SCHED-005}）。</p>
-     *
-     * @throws NoSuchMethodException     當 Folia API class 不存在於 classpath
-     * @throws IllegalAccessException    當反射方法無法訪問
-     * @throws InvocationTargetException 當反射呼叫的底層方法拋例外
-     */
-    private BukkitTask dispatchFolia(TaskType type,
-                                      Runnable wrapped,
-                                      Player player,
-                                      Object entityOrLoc,
-                                      long delay,
-                                      long period,
-                                      boolean async) throws Exception {
-        try {
-            if (async) {
-                // AsyncScheduler.runNow(plugin, consumer)
-                Object asyncSched = Bukkit.class.getMethod("getAsyncScheduler").invoke(null);
-                Class<?> asyncCls = asyncSched.getClass();
-                invokeAsyncNow(asyncCls, asyncSched, plugin, wrapped);
-                return new DetachedBukkitTask(plugin, type);
-            }
-            if (player == null && !(entityOrLoc instanceof Entity)) {
-                // GlobalRegionScheduler
-                Object grs = Bukkit.class.getMethod("getGlobalRegionScheduler").invoke(null);
-                if (period > 0L) {
-                    invokeGlobalAtFixedRate(grs, plugin, wrapped, delay, period);
-                } else if (delay > 0L) {
-                    invokeGlobalDelayed(grs, plugin, wrapped, delay);
-                } else {
-                    invokeGlobalRun(grs, plugin, wrapped);
-                }
-                return new DetachedBukkitTask(plugin, type);
-            }
-            if (player != null) {
-                // EntityScheduler (player)
-                Object es = Entity.class.getMethod("getScheduler").invoke(player);
-                if (delay > 0L) {
-                    invokeEntityDelayed(es, plugin, wrapped, delay);
-                } else {
-                    invokeEntityRun(es, plugin, wrapped);
-                }
-                return new DetachedBukkitTask(plugin, type);
-            }
-            if (entityOrLoc instanceof Entity ent) {
-                Object es = Entity.class.getMethod("getScheduler").invoke(ent);
-                if (delay > 0L) {
-                    invokeEntityDelayed(es, plugin, wrapped, delay);
-                } else {
-                    invokeEntityRun(es, plugin, wrapped);
-                }
-                return new DetachedBukkitTask(plugin, type);
-            }
-            if (entityOrLoc instanceof Location loc) {
-                Object rs = Bukkit.class.getMethod("getRegionScheduler").invoke(null);
-                invokeRegionExecute(rs, plugin, loc, wrapped);
-                return new DetachedBukkitTask(plugin, type);
-            }
-            throw new IllegalStateException("unsupported Folia dispatch combination for " + type);
-        } catch (NoSuchMethodException e) {
-            // Folia API 不存在於此 classpath（典型 MockBukkit 環境）
-            throw new IllegalStateException("Folia scheduler API not present: " + e.getMessage(), e);
-        } catch (InvocationTargetException e) {
-            // 反射呼叫本身成功，但底層丟例外
-            Throwable cause = e.getTargetException();
-            throw new RuntimeException("Folia dispatch threw: " + safeMessage(cause), cause);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("Folia API not accessible: " + e.getMessage(), e);
-        }
-    }
-
-    // --- Folia reflection helpers (cache lookups per call; not on hot path) ---
-
-    private static void invokeAsyncNow(Class<?> asyncCls, Object asyncSched,
-                                       JavaPlugin plugin, Runnable r) throws Exception {
-        // AsyncScheduler.runNow(Plugin, Consumer) — Consumer<Object>
-        Method m = asyncCls.getMethod("runNow",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class);
-        m.invoke(asyncSched, plugin, toConsumer(r));
-    }
-
-    private static void invokeGlobalRun(Object grs, JavaPlugin plugin, Runnable r) throws Exception {
-        // GlobalRegionScheduler.run(Plugin, Consumer)
-        Method m = grs.getClass().getMethod("run",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class);
-        m.invoke(grs, plugin, toConsumer(r));
-    }
-
-    private static void invokeGlobalDelayed(Object grs, JavaPlugin plugin, Runnable r, long delay) throws Exception {
-        Method m = grs.getClass().getMethod("runDelayed",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class, long.class);
-        m.invoke(grs, plugin, toConsumer(r), delay);
-    }
-
-    private static void invokeGlobalAtFixedRate(Object grs, JavaPlugin plugin, Runnable r,
-                                                long delay, long period) throws Exception {
-        Method m = grs.getClass().getMethod("runAtFixedRate",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class, long.class, long.class);
-        m.invoke(grs, plugin, toConsumer(r), delay, period);
-    }
-
-    private static void invokeEntityRun(Object es, JavaPlugin plugin, Runnable r) throws Exception {
-        // EntityScheduler.run(Plugin, Consumer, Runnable)
-        Method m = es.getClass().getMethod("run",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class, Runnable.class);
-        m.invoke(es, plugin, toConsumer(r), null);
-    }
-
-    private static void invokeEntityDelayed(Object es, JavaPlugin plugin, Runnable r, long delay) throws Exception {
-        Method m = es.getClass().getMethod("runDelayed",
-            org.bukkit.plugin.Plugin.class, java.util.function.Consumer.class, Runnable.class, long.class);
-        m.invoke(es, plugin, toConsumer(r), null, delay);
-    }
-
-    private static void invokeRegionExecute(Object rs, JavaPlugin plugin, Location loc, Runnable r) throws Exception {
-        // RegionScheduler.execute(Plugin, Location, Consumer)
-        Method m = rs.getClass().getMethod("execute",
-            org.bukkit.plugin.Plugin.class, Location.class, java.util.function.Consumer.class);
-        m.invoke(rs, plugin, loc, toConsumer(r));
-    }
-
-    /**
-     * 將 {@link Runnable} 包裝成 Folia API 期待的 {@code Consumer<Object>}。
-     */
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static java.util.function.Consumer<Object> toConsumer(Runnable r) {
-        return o -> r.run();
     }
 
     /**
@@ -677,56 +581,6 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         @Override
         public long getCreationTick() {
             return creationTick;
-        }
-    }
-
-    /**
-     * Folia dispatch 的相容性佔位 {@link BukkitTask}。
-     *
-     * <p>由於 Folia API 回傳的 retired task 在不同版本間不保證相容 {@link BukkitTask}，
-     * 統一以這個 lightweight 實作包裝；{@link SafeSchedulerImpl} 本身仍透過
-     * {@link #cancelAll()} 統一管理所有 Folia 派送任務的生命週期。</p>
-     */
-    static final class DetachedBukkitTask implements BukkitTask {
-        private final org.bukkit.plugin.Plugin owner;
-        private final int taskId;
-        private volatile boolean cancelled = false;
-
-        DetachedBukkitTask(JavaPlugin plugin, TaskType type) {
-            this.owner = plugin;
-            this.taskId = nextDetachedId();
-        }
-
-        private static int nextDetachedId() {
-            // 使用 System.identityHashCode + 負數區間以避免與 Bukkit.getScheduler() 的 taskId 衝突
-            return -1 - (System.identityHashCode(Thread.currentThread()) & 0x3FFFFFFF);
-        }
-
-        @Override
-        public void cancel() {
-            this.cancelled = true;
-        }
-
-        @Override
-        public boolean isCancelled() {
-            return cancelled;
-        }
-
-        @Override
-        public org.bukkit.plugin.Plugin getOwner() {
-            return owner;
-        }
-
-        @Override
-        public int getTaskId() {
-            return taskId;
-        }
-
-        @Override
-        public boolean isSync() {
-            // Folia 環境下每個 task 都隱含綁定到自己的 region/thread，
-            // 沒有 Paper 的「全域同步 vs async」二分法；回傳 true 表示「由 scheduler 管理」語意。
-            return true;
         }
     }
 
