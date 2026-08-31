@@ -40,9 +40,9 @@ jobs:
           distribution: 'temurin'
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-      # 完整 build（含測試與文件門禁）；失敗會使本 job 失敗，進而阻止上傳。
-      - name: Build and test
-        run: ./gradlew build --no-daemon --console=plain
+      # 完整 release gate：build + docsCheck + compatibilityCheck；任一失敗即阻止後續 JAR 選取與上傳。
+      - name: Build and test (release gate)
+        run: ./gradlew build docsCheck compatibilityCheck --no-daemon --console=plain
       # 只挑選由 release version 推導的 canonical runtime JAR：
       #   - 從 RELEASE_TAG 去除單一前綴 'v' 得到 release version
       #   - 預期檔名 = AceLib-${releaseVersion}.jar
