@@ -4,7 +4,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 ## [1.2.0] - 2026-08-28
 
-v1.2.0 以與 1.1.2 相同的 GitHub Release 方式發布（Release 沒有 binary asset）；請從公開 repository 建置取得。
+v1.2.0 以 GitHub Release 發布，提供可下載的 `AceLib-1.2.0.jar`；管理員可直接下載，或仍可從 `v1.2.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。
 
 ### 主要功能
 

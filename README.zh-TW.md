@@ -4,7 +4,7 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-此 checkout 的原始碼版本為 **1.2.0**（新增 Adventure Component 訊息 API 與基岩版 click fallback）。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程，從原始碼建置——GitHub Release 沒有 binary asset，請從公開 repository 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.0` 對應 `v1.2.0` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.0`）。詳情見 CHANGELOG。
+此 checkout 的原始碼版本為 **1.2.0**（新增 Adventure Component 訊息 API 與基岩版 click fallback）。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.2.0 的 GitHub Release 提供可下載的 `AceLib-1.2.0.jar`，管理員可直接下載，或仍可從 `v1.2.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.0` 對應 `v1.2.0` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.0`）。詳情見 CHANGELOG。
 
 ## 支援版本
 
@@ -104,7 +104,7 @@ public final class MyPlugin extends JavaPlugin {
 
 ## 重要限制
 
-- GitHub Release 沒有可下載的 server plugin JAR。管理員需依[部署步驟](docs/operator/README.md)從原始碼建置 `AceLib-1.2.0.jar`。
+- v1.2.0 的 GitHub Release 提供可下載的 `AceLib-1.2.0.jar`。管理員可直接下載，或依[部署步驟](docs/operator/README.md)從 `v1.2.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置。
 - AceLib 不支援 Bukkit `/reload`。文件中的 AceLib reload 是函式庫自己的生命週期操作，兩者不同。
 - MockBukkit 測試不能取代 Folia 真實 region scheduler 的執行驗證。
 - 日誌中的對外錯誤使用 `ACELIB-<AREA>-<CODE>` 格式，可在[錯誤碼頁](docs/reference/error-codes.md)查詢。
