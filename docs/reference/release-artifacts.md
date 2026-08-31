@@ -19,9 +19,27 @@ JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.0` 對應 `v1.2.0` tag，
 
 JitPack 舊的建置紀錄可能與目前可下載檔案不同，請以本頁座標與實際解析結果為準。
 
-## 伺服器管理員：建立 plugin JAR
+## 伺服器管理員：取得 plugin JAR
 
-GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 已公開。請 checkout 對應版本後從原始碼建置（`git checkout v1.2.0` 對應 v1.2.0 tag）：
+GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 的 v1.2.0 Release 已附上可直接放入 `plugins/` 的 runtime asset：
+
+```text
+https://github.com/smile-minecraft/AceLib/releases/download/v1.2.0/AceLib-1.2.0.jar
+```
+
+下載後請驗證 SHA-256：
+
+```bash
+shasum -a 256 AceLib-1.2.0.jar
+```
+
+預期值為：
+
+```text
+da9f196b47c2b28c6db443d102236b27c1a1bbdf7dd3e7c22470170420935278
+```
+
+不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.2.0` 對應 v1.2.0 tag）：
 
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
@@ -36,7 +54,7 @@ git checkout v1.2.0  # v1.2.0 tag
 build/libs/AceLib-1.2.0.jar
 ```
 
-不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。完整步驟請看[伺服器管理員指南](../operator/README.md)。
+完整步驟請看[伺服器管理員指南](../operator/README.md)。
 
 Git tag `v1.0.0` 指向 commit `cbf4a80f69c83bf3095258b42321c5b6b359f8cf`。<!-- 版本歷史 -->
 
