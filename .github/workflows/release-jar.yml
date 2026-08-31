@@ -1,0 +1,133 @@
+name: Release JAR
+
+# 此 workflow 只在 GitHub Release 發布（published）時觸發，涵蓋 stable 與
+# pre-release。它從該 release 的 tag checkout 原始碼、以 Java 25 執行完整
+# Gradle build，並把唯一的主 runtime JAR（保留 AceLib-<version>.jar 檔名）
+# 上傳到同一個 Release。觸發事件的 ref/sha 對應 tagged release，因此 checkout
+# 精確 tag 可避免從 default branch 漂移建置。
+#
+# 安全性：release tag 從不直接插入任何 run shell；它只經由 step/job env 傳入，
+# 並在 shell 中以加雙引號的變數使用，避免特殊 tag 造成 shell injection。
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build runtime JAR (Java 25)
+    # 最小權限：建置只需要讀取 repository 內容。
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      # release tag 經由 env 傳入 shell，避免直接把 expression 插入 run 命令。
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    outputs:
+      # 在 job 層顯式宣告，讓 actionlint 能靜態校驗
+      # needs.build.outputs.runtime_sha256 的型別。
+      runtime_sha256: ${{ steps.select.outputs.runtime_sha256 }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          # 精確 checkout 觸發此 workflow 的 release tag，不使用 default branch。
+          # action input 可直接使用 expression，不是 shell，因此安全。
+          ref: ${{ github.event.release.tag_name }}
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      # 完整 build（含測試與文件門禁）；失敗會使本 job 失敗，進而阻止上傳。
+      - name: Build and test
+        run: ./gradlew build --no-daemon --console=plain
+      # 只挑選由 release version 推導的 canonical runtime JAR：
+      #   - 從 RELEASE_TAG 去除單一前綴 'v' 得到 release version
+      #   - 預期檔名 = AceLib-${releaseVersion}.jar
+      #   - 排除 *-sources.jar / *-javadoc.jar
+      #   - candidates 必須恰好 1 個，且等於預期檔名
+      # 零個、多於一個、或唯一但名稱不符（例如 -all.jar 變體）都视为失敗。
+      - name: Select canonical runtime JAR
+        id: select
+        run: |
+          set -euo pipefail
+          releaseVersion="${RELEASE_TAG#v}"
+          expected="AceLib-${releaseVersion}.jar"
+          # -printf '%f\n' 只取 basename，避免 find 回傳的 build/libs/ 前綴
+          # 導致與 expected 比對時永不失敗。
+          mapfile -t names < <(find build/libs -maxdepth 1 -type f -name 'AceLib-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -printf '%f\n' | sort)
+          if [ "${#names[@]}" -ne 1 ]; then
+            echo "ERROR: runtime candidates 數量為 ${#names[@]}，期望恰好 1 個：${names[*]:-（無）}"
+            exit 1
+          fi
+          if [ "${names[0]}" != "$expected" ]; then
+            echo "ERROR: runtime candidate ${names[0]} 與 canonical 檔名 $expected 不符"
+            exit 1
+          fi
+          runtime_jar="build/libs/${names[0]}"
+          sha=$(sha256sum "$runtime_jar" | awk '{print $1}')
+          echo "runtime_jar=$runtime_jar" >> "$GITHUB_OUTPUT"
+          echo "runtime_sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "Selected: $runtime_jar (sha256=$sha)"
+      - name: Upload runtime JAR as build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-jar
+          path: ${{ steps.select.outputs.runtime_jar }}
+          if-no-files-found: error
+
+  upload:
+    name: Upload to GitHub Release
+    # 只有上傳需要寫入權限；使用內建 GITHUB_TOKEN，不引入個人 token 或新 secret。
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      # release tag 與 build 端算出的 expected digest 經由 env 傳入 shell。
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      EXPECTED_SHA256: ${{ needs.build.outputs.runtime_sha256 }}
+    steps:
+      - name: Download runtime JAR artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: runtime-jar
+      # download-artifact 對服務端 digest mismatch 只 warning，不阻止後續步驟；
+      # 因此在上傳前重新嚴格選出 canonical basename，計算實際 SHA-256 並與
+      # build 端輸出比對，不一致或 expected digest 空白時退出。
+      - name: Verify downloaded runtime JAR digest
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPECTED_SHA256" ]; then
+            echo "ERROR: 缺少 build 端輸出的 expected SHA-256（runtime_sha256 為空）"
+            exit 1
+          fi
+          releaseVersion="${RELEASE_TAG#v}"
+          expected="AceLib-${releaseVersion}.jar"
+          # -printf '%f\n' 只取 basename，避免 find 回傳的路徑前綴影響比對。
+          mapfile -t names < <(find . -maxdepth 1 -type f -name 'AceLib-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -printf '%f\n' | sort)
+          if [ "${#names[@]}" -ne 1 ]; then
+            echo "ERROR: 下載後 runtime candidates 數量為 ${#names[@]}，期望恰好 1 個：${names[*]:-（無）}"
+            exit 1
+          fi
+          if [ "${names[0]}" != "$expected" ]; then
+            echo "ERROR: 下載後 candidate ${names[0]} 與 canonical 檔名 $expected 不符"
+            exit 1
+          fi
+          actual=$(sha256sum "${names[0]}" | awk '{print $1}')
+          if [ "$actual" != "$EXPECTED_SHA256" ]; then
+            echo "ERROR: 下載後 SHA-256 $actual 與 build 端 expected $EXPECTED_SHA256 不一致"
+            exit 1
+          fi
+          echo "Digest verified: ${names[0]} (sha256=$actual)"
+      # 上傳到觸發此 workflow 的 Release；--clobber 讓重跑同一個 release 時
+      # 可安全更新同名附件，而不是建立重複附件或靜默忽略上傳錯誤。
+      - name: Upload JAR to release
+        run: |
+          releaseVersion="${RELEASE_TAG#v}"
+          gh release upload "$RELEASE_TAG" "AceLib-${releaseVersion}.jar" --clobber --repo "$GITHUB_REPOSITORY"
+        env:
+          # 使用 repository 內建的 GITHUB_TOKEN，映射到 gh CLI 的 GH_TOKEN。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
