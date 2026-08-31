@@ -648,6 +648,14 @@
          <sha256 value="296b21955ff65b8b50898b4a7d59cb183703007aa31bf7617d529132e5275223"/>
       </artifact>
    </component>
+   <component group="net.kyori" name="adventure-bom" version="5.2.0">
+      <artifact name="adventure-bom-5.2.0.module">
+         <sha256 value="3db1aa6e9c97aaf8cb578927d0a23fb49bba587937a774772e6c18a4bbd4a017"/>
+      </artifact>
+      <artifact name="adventure-bom-5.2.0.pom">
+         <sha256 value="0519e02407da6b270bb50ca4922fd9324aea212e453cecc2628ef7d2847d6c88"/>
+      </artifact>
+   </component>
    <component group="net.kyori" name="adventure-key" version="4.20.0">
       <artifact name="adventure-key-4.20.0-sources.jar">
          <sha256 value="75ed7c8b0a4ef3439a2504cccdc25363510661c1f964c13a74c048ce3a7ffd56"/>
