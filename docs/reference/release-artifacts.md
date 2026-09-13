@@ -27,10 +27,16 @@ GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/
 https://github.com/smile-minecraft/AceLib/releases/download/v1.2.1/AceLib-1.2.1.jar
 ```
 
-下載後請驗證 SHA-256（預期值見 Release 說明）：
+下載後請驗證 SHA-256：
 
 ```bash
 shasum -a 256 AceLib-1.2.1.jar
+```
+
+預期值為：
+
+```text
+2da9d21e6a81eb3086aac3dcf87ad11f6dbcbfef5d3c80263270b3f074dc1d6d
 ```
 
 不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.2.1` 對應 v1.2.1 tag）：
