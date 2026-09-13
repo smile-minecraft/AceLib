@@ -5,7 +5,7 @@
 > - Java 端 `hover-showtext` 與四種 click（`RUN_COMMAND`／`SUGGEST_COMMAND`／`OPEN_URL`／`COPY_TO_CLIPBOARD`）為 `保留`——證據：使用者以 Java 客戶端實際測試回報「基本上沒問題」。
 > - Bedrock 端四種 click 為 `忽略`——證據：使用者以 Bedrock 客戶端實際點擊測試無效果；伺服器 log 的「已送出」不等於客戶端互動成功。
 > - Bedrock 端 `hover-showtext` 維持 `未驗證`——無明確 tooltip／客戶端互動證據，不作成功或失敗推論。
-> - 探針執行環境為 Folia `26.2-4` beta、Geyser-Spigot `2.11.2-b1232`、Floodgate `2.2.5-SNAPSHOT`；本次結果屬 beta 探索性證據，不宣稱穩定版 `26.1.2` 行為。**不以推論取代實機證據**。
+> - 探針執行環境為 Folia `26.2-4`、Geyser-Spigot `2.11.2-b1232`、Floodgate `2.2.5-SNAPSHOT`；本次結果屬 beta 探索性證據，不宣稱穩定版 `26.1.2` 行為。**不以推論取代實機證據**。
 
 ## 1. 目的與範圍
 
@@ -117,7 +117,7 @@ renderer、LangManager 玩家 locale、AceLibApi getter，也不把任何 Compon
 
 | 項目 | 目前狀態 | 解除條件 |
 | ---- | -------- | -------- |
-| `folia-test-server` | **已於 Folia `26.2-4` beta 完成發送驗證**（console 可見 12 筆 `[mprobe-send]`）；`26.1.2` 穩定版待重測 | 在穩定版 Folia `26.1.2` 重跑第 4 節流程，確認結果是否與本次 beta 一致。 |
+| `folia-test-server` | **已於 Folia `26.2-4` 完成發送驗證**（console 可見 12 筆 `[mprobe-send]`）；`26.1.2` 穩定版待重測 | 在穩定版 Folia `26.1.2` 重跑第 4 節流程，確認結果是否與本次 beta 一致。 |
 | Java 客戶端 | **已驗證**——使用者以 Java 客戶端實際測試回報「基本上沒問題」（hover 與四種 click 記為 `保留`，視覺特性由兩張截圖確認） | 無需再為本次 beta 補 Java 觀察；穩定版重測時再覆核。 |
 | Bedrock 客戶端 | **部分已驗證**——視覺 `保留`（兩張截圖可見）；四種 click `忽略`（使用者以 Bedrock 客戶端實際點擊測試無效果）；hover 維持 `未驗證` | 僅剩 Bedrock `hover-showtext` 若要判定，需補 tooltip／懸停互動的客戶端證據。 |
 | Geyser / Floodgate 接入 | **已接入**——Geyser-Spigot `2.11.2-b1232`、Floodgate `2.2.5-SNAPSHOT`（beta exploratory） | 穩定版環境重測時確認版本與轉換行為。 |

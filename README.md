@@ -4,17 +4,17 @@ English · [繁體中文](README.zh-TW.md)
 
 AceLib is a shared foundation library for Paper and Folia plugins. It provides safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, and diagnostics.
 
-The source version in this checkout is **1.2.0** (adds Adventure Component message APIs and Bedrock click fallback). The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.2.0 GitHub Release provides a downloadable `AceLib-1.2.0.jar`, so operators can download it directly, or still build the server JAR from the `v1.2.0` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.0` corresponds to the `v1.2.0` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.2.0`). See CHANGELOG for history.
+The source version in this checkout is **1.2.1** (adds Adventure Component message APIs and Bedrock click fallback). The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.2.1 GitHub Release provides a downloadable `AceLib-1.2.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.2.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.1` corresponds to the `v1.2.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.2.1`). See CHANGELOG for history.
 
 ## Supported Versions
 
 | Item | Version |
 | --- | --- |
 | Java | 25 |
-| Paper | 26.1.2 |
-| Folia | 26.1.2 |
+| Paper | 26.1.2, 26.2 |
+| Folia | 26.1.2, 26.2 |
 
-Paper and Folia 26.2 are marked VERIFIED-BETA: we have started a server on each listed build and confirmed that the plugin loads and runs, with additional message and Bedrock testing on Folia 26.2-4. Since upstream 26.2 is still in beta, each new build needs to be re-verified before it is considered supported. See [Compatibility](docs/consumer/compatibility.md) for details.
+Paper and Folia 26.2 are officially supported as of AceLib 1.2.1: Paper 26.2-120 and Folia 26.2-7 passed the lifecycle smoke and capability gate, and Folia 26.2-4 additionally passed status, scheduler, context, and message-fallback checks with real-player Bedrock verification. See [Compatibility](docs/consumer/compatibility.md) for details.
 
 ## Adding AceLib to Your Plugin
 
@@ -26,11 +26,11 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.2.0")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.2.1")
 }
 ```
 
-This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.0` corresponds to the `v1.2.0` tag; the source version in this checkout is 1.2.0. To verify locally before relying on the published artifact, run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.2.0`). See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
+This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.1` corresponds to the `v1.2.1` tag; the source version in this checkout is 1.2.1. To verify locally before relying on the published artifact, run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.2.1`). See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
 
 ## Configuring `plugin.yml`
 
@@ -92,18 +92,18 @@ Do not depend directly on `AceLibPlugin`. If your plugin is long-running, see [P
 | Task group | Document | When to use it |
 | --- | --- | --- |
 | Getting started | [Quick Start](docs/consumer/quickstart.md) | First time integrating AceLib — set up Gradle, declare dependencies, and obtain `AceLibProvider` |
-| Getting started | [How AceLib is released](docs/reference/release-artifacts.md) | Verify the public repository status and copy the JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.0` |
+| Getting started | [How AceLib is released](docs/reference/release-artifacts.md) | Verify the public repository status and copy the JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.1` |
 | Daily integration | [Module Guide](docs/modules/) | Look up a specific subsystem — scheduler, context, config, messages, commands, events, data, player, world, GUI, items, externals |
 | Daily integration | [Provider Lifecycle](docs/consumer/provider-lifecycle.md) | Handle reload and disable correctly for long-running plugins |
 | Daily integration | [Error Codes](docs/reference/error-codes.md) | Look up `ACELIB-<AREA>-<CODE>` and the five required fields in each message |
 | Operations | [Operator Guide](docs/operator/README.md) | Build the server plugin jar from source and deploy it |
-| Operations | [Compatibility](docs/consumer/compatibility.md) | Check the supported baseline (Java 25 / Paper 26.1.2 / Folia 26.1.2) and the verification scope and limitations for 26.2 VERIFIED-BETA |
+| Operations | [Compatibility](docs/consumer/compatibility.md) | Check the supported baseline (Java 25 / Paper 26.1.2, 26.2 / Folia 26.1.2, 26.2) and the verification scope and limitations |
 | Reference | [Contributor Guide](docs/contributor/README.md) | Contribution workflow, verification gates, and style rules |
 | Reference | [Changelog](CHANGELOG.md) | Version history, release notes, and upgrade guidance |
 
 ## Important Limitations
 
-- The v1.2.0 GitHub Release includes a downloadable `AceLib-1.2.0.jar`. Operators can download it directly, or [build from source](docs/operator/README.md) at the `v1.2.0` tag with `./gradlew clean build --no-daemon --console=plain`.
+- The v1.2.1 GitHub Release includes a downloadable `AceLib-1.2.1.jar`. Operators can download it directly, or [build from source](docs/operator/README.md) at the `v1.2.1` tag with `./gradlew clean build --no-daemon --console=plain`.
 - AceLib does not support Bukkit `/reload`. The reload documented in AceLib is the library's own lifecycle operation — not the same as `/reload`.
 - MockBukkit tests cannot replace real region-scheduler verification on a Folia server.
 - External errors in logs use the `ACELIB-<AREA>-<CODE>` format — see the [error codes](docs/reference/error-codes.md).

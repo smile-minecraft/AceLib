@@ -3,7 +3,7 @@
 > 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
 
 
-AceLib 1.2.0（此 checkout 的原始碼版本為 1.2.0）需要 Java 25，採用的 server 版本是 Paper 或 Folia 26.1.2。v1.2.0 的 GitHub Release 提供可下載的 `AceLib-1.2.0.jar`，管理員可直接下載，或從 `v1.2.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 自行建置；`git checkout v1.2.0` 對應 `v1.2.0` tag，JitPack `com.github.smile-minecraft:AceLib:v1.2.0` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
+AceLib 1.2.1（此 checkout 的原始碼版本為 1.2.1）需要 Java 25，支援的 server 版本是 Paper 或 Folia 26.1.2 與 26.2。v1.2.1 的 GitHub Release 提供可下載的 `AceLib-1.2.1.jar`，管理員可直接下載，或從 `v1.2.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 自行建置；`git checkout v1.2.1` 對應 `v1.2.1` tag，JitPack `com.github.smile-minecraft:AceLib:v1.2.1` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
 
 ## 目錄
 
@@ -20,29 +20,29 @@ AceLib 1.2.0（此 checkout 的原始碼版本為 1.2.0）需要 Java 25，採�
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.2.0  # v1.2.0 tag
+git checkout v1.2.1  # v1.2.1 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 
 建置成功後會產生：
 
 ```text
-build/libs/AceLib-1.2.0.jar
+build/libs/AceLib-1.2.1.jar
 ```
 
-`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.2.0.jar`。
+`build/libs/` 也可能包含 sources 與 javadoc JAR。Server 只需要沒有後綴的 `AceLib-1.2.1.jar`。
 
 ## 放進 server
 
 1. 停止 server。
-2. 把 `AceLib-1.2.0.jar` 複製到 server 的 `plugins/`。
+2. 把 `AceLib-1.2.1.jar` 複製到 server 的 `plugins/`。
 3. 把需要 AceLib 的下游 plugin JAR 也放進 `plugins/`。下游 plugin 的 `plugin.yml` 應含 `depend: [AceLib]`。
 4. 以 Java 25 啟動 Paper 或 Folia。
 
 例如：
 
 ```bash
-cp build/libs/AceLib-1.2.0.jar /path/to/server/plugins/
+cp build/libs/AceLib-1.2.1.jar /path/to/server/plugins/
 cd /path/to/server
 java -jar paper-26.1.2.jar --nogui
 ```
@@ -61,7 +61,7 @@ acelib status
 
 ```text
 === AceLib Diagnostics Report ===
-Version: 1.2.0
+Version: 1.2.1
 Platform: Paper
 Ready: true
 ```
@@ -105,7 +105,7 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 確認 `plugins/` 同時有 AceLib JAR，並檢查 AceLib 是否在啟用時先發生錯誤。
 
-### 找不到 `build/libs/AceLib-1.2.0.jar`
+### 找不到 `build/libs/AceLib-1.2.1.jar`
 
 確認你在 AceLib repository 根目錄執行建置，並使用 Java 25。重新執行完整的 `./gradlew clean build --no-daemon --console=plain`，不要只找 GitHub Release asset。
 
@@ -113,9 +113,9 @@ server 需安裝 Floodgate plugin（搭配 Geyser，可同機或位於 proxy）�
 
 從 server console 執行，或授予玩家 `acelib.admin`。
 
-### 想升級到 26.2
+### 升級到 26.2
 
-Paper 與 Folia 26.2 標為 VERIFIED-BETA（已驗證的測試版）：我們已在矩陣列出的每個版本上實際啟動伺服器並確認外掛可正常啟用與停用，Folia 26.2-4 另外完成了部分功能與真人基岩玩家的實測；不過上游 26.2 仍為 beta，尚未列入正式支援，每個新 build 都需要重新驗證才會納入支援。升級前請先在獨立的測試伺服器上驗證，再決定是否更新正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
+Paper 與 Folia 26.2 自 v1.2.1 起正式支援：Paper 26.2-120 與 Folia 26.2-7 通過了啟動 smoke 與執行期能力閘驗證，Folia 26.2-4 另外完成了部分功能與真人基岩玩家的實測。升級前請先備份世界，並先在獨立的測試伺服器上驗證，再更新正式環境。完整版本資訊見[相容性](../consumer/compatibility.md)。
 
 ## 相關頁面
 

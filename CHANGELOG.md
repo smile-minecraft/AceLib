@@ -2,6 +2,22 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.2.1] - 2026-09-14
+
+v1.2.1 以 GitHub Release 發布，提供可下載的 `AceLib-1.2.1.jar`；管理員可直接下載，或從 `v1.2.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。
+
+### 主要功能
+
+- Paper 與 Folia 26.2 升為正式支援（SUPPORTED）：Paper 26.2-120 與 Folia 26.2-7 通過了啟動 smoke 與執行期能力閘驗證；Folia 26.2-4 另外通過了狀態、排程、上下文、訊息 fallback 檢查與真人基岩玩家的四項實測。
+- 執行期驗證矩陣納入 26.2：在上述三個 26.2 build 上啟動不再輸出 `ACELIB-PLAT-009` UNVERIFIED 警告。
+- 相容性文件、執行期相容矩陣與 consumer fixture 同步更新。
+
+### 版本與限制
+
+- 本版為 1.2.0 之上的加法性更新：未變更任何既有公開 API 語意或簽章。
+- `api-version` 維持 `26.1.2`，Java 25；正式支援為 Paper 26.1.2-72、Folia 26.1.2-8、Paper 26.2-120、Folia 26.2-7、Folia 26.2-4，其他未列出的未來版本皆為 UNVERIFIED（尚未驗證）。
+- 機器可讀的執行期相容矩陣見 `docs/reference/runtime-compatibility-matrix.json`。
+
 ## [1.2.0] - 2026-08-28
 
 v1.2.0 以 GitHub Release 發布，提供可下載的 `AceLib-1.2.0.jar`；管理員可直接下載，或仍可從 `v1.2.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。

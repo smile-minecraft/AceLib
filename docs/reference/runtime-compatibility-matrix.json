@@ -1,6 +1,6 @@
 {
-  "libraryVersion": "1.2.0",
-  "generatedAt": "2026-08-28",
+  "libraryVersion": "1.2.1",
+  "generatedAt": "2026-09-14",
   "minBaseline": "26.1.2",
   "java": {
     "min": "25"
@@ -25,20 +25,20 @@
     {
       "platform": "Paper",
       "version": "26.2-120",
-      "status": "VERIFIED-BETA",
-      "evidence": "lifecycle smoke + capability gate（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）；非全功能實機驗證"
+      "status": "SUPPORTED",
+      "evidence": "lifecycle smoke + capability gate PLAT-005~009（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）"
     },
     {
       "platform": "Folia",
       "version": "26.2-7",
-      "status": "VERIFIED-BETA",
-      "evidence": "lifecycle smoke + capability gate（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）；非全功能實機驗證"
+      "status": "SUPPORTED",
+      "evidence": "lifecycle smoke + capability gate PLAT-005~009（isolated lane，startup→enabled→stop→disabled，console 零 linkage error）"
     },
     {
       "platform": "Folia",
       "version": "26.2-4",
-      "status": "VERIFIED-BETA",
-      "evidence": "lifecycle smoke + capability gate + status/scheduler/context/message fallback + real Bedrock four-entry verified（Geyser 2.11.2-SNAPSHOT + Floodgate 2.2.5-SNAPSHOT）；非全功能實機驗證"
+      "status": "SUPPORTED",
+      "evidence": "lifecycle smoke + capability gate PLAT-005~009 + status/scheduler/context/message fallback + real Bedrock four-entry verified（Geyser 2.11.2-SNAPSHOT + Floodgate 2.2.5-SNAPSHOT）"
     }
   ],
   "bedrock": {

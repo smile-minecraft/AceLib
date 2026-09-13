@@ -10,7 +10,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 ## Consumer
 - [Consumer Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/README.md): Where downstream plugins start — how to get the provider API and where to read next.
 - [Quick Start](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/quickstart.md): Complete Gradle setup, plugin.yml declaration, and provider retrieval for first-time integration.
-- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Supported baseline for AceLib 1.2.0 (Java 25 / Paper 26.1.2 / Folia 26.1.2), per-build VERIFIED-BETA for 26.2, UNVERIFIED for unknown future versions, plus Bedrock dependencies and limitations.
+- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Supported baseline for AceLib 1.2.1 (Java 25 / Paper 26.1.2 and 26.2 / Folia 26.1.2 and 26.2 supported), UNVERIFIED for unknown future versions, plus Bedrock dependencies and limitations.
 - [Provider Lifecycle](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/provider-lifecycle.md): How to handle AceLib ready, reload, and disable states by re-acquiring the provider API.
 
 ## Operator
@@ -43,7 +43,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 - [Error Codes](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/error-codes.md): Lookup table for ACELIB-<AREA>-<CODE> including trigger conditions and categories.
 - [Release Artifacts](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/release-artifacts.md): How to obtain the API from JitPack, build the server JAR, and use the local Maven coordinate.
 - [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification for all 143 public types into Supported, SPI, and Internal.
-- [Runtime Compatibility Matrix](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/runtime-compatibility-matrix.json): Machine-readable version matrix (JSON) with platform, status (SUPPORTED / VERIFIED-BETA / UNVERIFIED), and evidence for each verified runtime.
+- [Runtime Compatibility Matrix](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/runtime-compatibility-matrix.json): Machine-readable version matrix (JSON) with platform, status (SUPPORTED / UNVERIFIED), and evidence for each verified runtime.
 
 ## Changelog
 - [Changelog](https://github.com/smile-minecraft/AceLib/blob/main/CHANGELOG.md): Version history and upgrade notes for all releases.

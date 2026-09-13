@@ -58,7 +58,7 @@ messages.broadcast(c);
 - `parseMiniMessage(input, vars)`：直接解析 MiniMessage 字串；`vars` 以 `<key>` placeholder 形式、一律 `unparsed` 注入，使用者值不會被解析成標籤或 click/hover 互動。
 - `sendChat` / `sendActionBar` / `sendTitle` / `broadcast`（Component 多載）：直接送出原始 Component，**不**套 prefix、**不**執行任何 Bedrock fallback；prefix 與 key 模板請使用 `formatComponent`。
 
-> **Bedrock 相容性**：本管線不對 Bedrock 玩家做特殊處理或 fallback。實機觀察顯示 Bedrock 端視覺樣式（顏色、gradient、rainbow、translatable 等）保留、四種 click（`open_url`／`run_command`／`suggest_command`／`copy_to_clipboard`）無效果、hover tooltip 尚未驗證；詳見 [Bedrock 訊息相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)。該矩陣為 beta 探索性觀察（Folia `26.2-4` beta + Geyser `2.11.2-b1232`），不作為穩定版保證。
+> **Bedrock 相容性**：本管線不對 Bedrock 玩家做特殊處理或 fallback。實機觀察顯示 Bedrock 端視覺樣式（顏色、gradient、rainbow、translatable 等）保留、四種 click（`open_url`／`run_command`／`suggest_command`／`copy_to_clipboard`）無效果、hover tooltip 尚未驗證；詳見 [Bedrock 訊息相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)。該矩陣為 beta 探索性觀察（Folia `26.2-4` + Geyser `2.11.2-b1232`），不作為穩定版保證。
 
 ## 讓 Bedrock 玩家看懂失效的 click（顯式 WithFallback）
 
@@ -153,7 +153,7 @@ message.bedrock.fallback.copy_to_clipboard: 'Copy to clipboard: <payload>'
 - Folia 執行緒限制仍適用：`player.sendMessage` / `sendActionBar` / `showTitle` / `broadcast` 在錯誤 region 拋 `IllegalStateException` 時，Folia 平台記 `ACELIB-MSG-002`，Paper / UNKNOWN 平台記 `ACELIB-MSG-003`；其他 `Throwable` 一律記 `ACELIB-MSG-003`。`broadcastWithFallback` 與一般 `broadcast(Component)` 相同，採逐玩家 `try/catch`，單一玩家失敗不阻斷其他玩家。
 - 取得 `Player.locale()` 或 `BedrockService.getPlayerInfo` 拋例外時，記錄對應 warning 後退回下一層 locale，發送本身不中斷。
 
-> **Beta 限制**：相容性觀察基於 Folia `26.2-4` beta + Geyser `2.11.2-b1232` + Floodgate `2.2.5-SNAPSHOT` 的探索性實機測試，結果不作為穩定版保證。Bedrock 的 click 失效與 hover 未驗證狀態以[相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)為準，文件不把觀察寫成穩定承諾。
+> **Beta 限制**：相容性觀察基於 Folia `26.2-4` + Geyser `2.11.2-b1232` + Floodgate `2.2.5-SNAPSHOT` 的探索性實機測試，結果不作為穩定版保證。Bedrock 的 click 失效與 hover 未驗證狀態以[相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)為準，文件不把觀察寫成穩定承諾。
 
 ## 相關頁面
 

@@ -24,13 +24,13 @@ import org.junit.jupiter.api.Test;
 /**
  * 版本一致性契約（Supported）：AceLibVersion.VERSION、plugin.yml 的 version 欄位、
  * 與 docs/reference/runtime-compatibility-matrix.json 的 libraryVersion 必須四個來源一致，
- * 且矩陣必須記錄已驗證的 SUPPORTED 與 VERIFIED-BETA runtime。
+ * 且矩陣必須記錄已驗證的 SUPPORTED runtime。
  *
- * <p>此測試是 TDD 的 Red→Green 錨點：在版本號尚未同步至 1.2.0 前會失敗。</p>
+ * <p>此測試是 TDD 的 Red→Green 錨點：在版本號尚未同步至 1.2.1 前會失敗。</p>
  */
 class VersionConsistencyTest {
 
-    private static final String EXPECTED_VERSION = "1.2.0";
+    private static final String EXPECTED_VERSION = "1.2.1";
     private static final Pattern BUILD_VERSION =
         Pattern.compile("^version[ \\t]*=[ \\t]*\"([^\"]+)\"[ \\t]*$", Pattern.MULTILINE);
     private static final Pattern PLUGIN_VERSION =
@@ -76,7 +76,7 @@ class VersionConsistencyTest {
     }
 
     @Test
-    @DisplayName("矩陣必須記錄 SUPPORTED 的 Paper/Folia 26.1.2 與 VERIFIED-BETA 的 26.2")
+    @DisplayName("矩陣必須記錄 SUPPORTED 的 Paper/Folia 26.1.2 與 26.2")
     void matrix_recordsVerifiedRuntimes() throws IOException {
         Path matrix = resolveMatrixFile();
         List<Object> runtimes = arrayField(
@@ -84,9 +84,9 @@ class VersionConsistencyTest {
         Map<String, RuntimeExpectation> expected = Map.of(
             "26.1.2-72", new RuntimeExpectation("Paper", "SUPPORTED"),
             "26.1.2-8", new RuntimeExpectation("Folia", "SUPPORTED"),
-            "26.2-120", new RuntimeExpectation("Paper", "VERIFIED-BETA"),
-            "26.2-7", new RuntimeExpectation("Folia", "VERIFIED-BETA"),
-            "26.2-4", new RuntimeExpectation("Folia", "VERIFIED-BETA")
+            "26.2-120", new RuntimeExpectation("Paper", "SUPPORTED"),
+            "26.2-7", new RuntimeExpectation("Folia", "SUPPORTED"),
+            "26.2-4", new RuntimeExpectation("Folia", "SUPPORTED")
         );
         Map<String, RuntimeExpectation> actual = new LinkedHashMap<>();
         assertEquals(expected.size(), runtimes.size(), "矩陣 runtime 記錄數必須固定為五筆");
