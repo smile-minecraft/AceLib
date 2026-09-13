@@ -4,7 +4,7 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-此 checkout 的原始碼版本為 **1.2.1**（新增 Adventure Component 訊息 API 與基岩版 click fallback）。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.2.1 的 GitHub Release 提供可下載的 `AceLib-1.2.1.jar`，管理員可直接下載，或仍可從 `v1.2.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.1` 對應 `v1.2.1` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.1`）。詳情見 CHANGELOG。
+此 checkout 的原始碼版本為 **1.2.1**（新增對 Paper 與 Folia 26.2 的正式支援）。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.2.1 的 GitHub Release 提供可下載的 `AceLib-1.2.1.jar`，管理員可直接下載，或仍可從 `v1.2.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.1` 對應 `v1.2.1` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.1`）。詳情見 CHANGELOG。
 
 ## 支援版本
 

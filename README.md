@@ -4,7 +4,7 @@ English · [繁體中文](README.zh-TW.md)
 
 AceLib is a shared foundation library for Paper and Folia plugins. It provides safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, and diagnostics.
 
-The source version in this checkout is **1.2.1** (adds Adventure Component message APIs and Bedrock click fallback). The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.2.1 GitHub Release provides a downloadable `AceLib-1.2.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.2.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.1` corresponds to the `v1.2.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.2.1`). See CHANGELOG for history.
+The source version in this checkout is **1.2.1** (adds official support for Paper and Folia 26.2). The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.2.1 GitHub Release provides a downloadable `AceLib-1.2.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.2.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.2.1` corresponds to the `v1.2.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.2.1`). See CHANGELOG for history.
 
 ## Supported Versions
 
