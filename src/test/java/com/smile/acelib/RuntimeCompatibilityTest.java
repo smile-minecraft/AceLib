@@ -71,6 +71,26 @@ class RuntimeCompatibilityTest {
         assertTrue(st.isReady());
     }
 
+    @Test
+    @DisplayName("(a) PAPER 26.2 + 完整 capability → SUPPORTED 且 ready")
+    void verifiedPaper262Profile_isSupported() {
+        EnumMap<CapabilityProbe.CapabilityKey, CapabilityProbe.ProbeOutcome> outcomes = allPresent();
+        RuntimeFingerprint fp = RuntimeFingerprint.capture(Platform.PAPER, "26.2", "21", outcomes);
+        CompatibilityStatus st = CompatibilityGate.decide(fp, outcomes);
+        assertEquals(CompatibilityStatus.State.SUPPORTED, st.state);
+        assertTrue(st.isReady());
+    }
+
+    @Test
+    @DisplayName("(a) FOLIA 26.2 + 完整 capability → SUPPORTED 且 ready")
+    void verifiedFolia262Profile_isSupported() {
+        EnumMap<CapabilityProbe.CapabilityKey, CapabilityProbe.ProbeOutcome> outcomes = allPresent();
+        RuntimeFingerprint fp = RuntimeFingerprint.capture(Platform.FOLIA, "26.2", "21", outcomes);
+        CompatibilityStatus st = CompatibilityGate.decide(fp, outcomes);
+        assertEquals(CompatibilityStatus.State.SUPPORTED, st.state);
+        assertTrue(st.isReady());
+    }
+
     // ---------------------------------------------------------------------
     // (b) 未知未來版本但 required capabilities 完整 → UNVERIFIED
     // ---------------------------------------------------------------------

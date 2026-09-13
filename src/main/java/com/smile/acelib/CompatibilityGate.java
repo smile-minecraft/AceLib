@@ -13,12 +13,13 @@ import java.util.Set;
  *   <li>任一 required capability 缺失 → {@link CompatibilityStatus.State#INCOMPATIBLE}
  *       （fail-closed，理由列出缺失項與其錯誤代碼）</li>
  *   <li>否則若 {@code platform:version} 落在內建已驗證矩陣
- *       （{@code PAPER:26.1.2} / {@code FOLIA:26.1.2}）→ SUPPORTED</li>
+ *       （{@code PAPER:26.1.2} / {@code FOLIA:26.1.2} /
+ *       {@code PAPER:26.2} / {@code FOLIA:26.2}）→ SUPPORTED</li>
  *   <li>否則 → UNVERIFIED（best-effort，輸出 warning）</li>
  * </ol>
  *
- * <p>已驗證矩陣刻意只內建 26.1.2 Paper/Folia：AceLib 的 Folia-safe 路徑與
- * Adventure 整合僅在該版本組合經過驗證；其他版本不假裝 verified，避免
+ * <p>已驗證矩陣內建 26.1.2 與 26.2 的 Paper/Folia：AceLib 的 Folia-safe 路徑與
+ * Adventure 整合在這兩個版本組合經過驗證；其他版本不假裝 verified，避免
  * 「看起來 ready 但其實沒驗證過」的假象。</p>
  *
  * <p>本型別刻意為 package-private，避免被 api-surface scanner 視為對外契約。</p>
@@ -30,7 +31,8 @@ import java.util.Set;
 final class CompatibilityGate {
 
     /** 內建已驗證 runtime 矩陣（platform:version）。 */
-    private static final Set<String> VERIFIED = Set.of("PAPER:26.1.2", "FOLIA:26.1.2");
+    private static final Set<String> VERIFIED =
+        Set.of("PAPER:26.1.2", "FOLIA:26.1.2", "PAPER:26.2", "FOLIA:26.2");
 
     private CompatibilityGate() {
         // utility class

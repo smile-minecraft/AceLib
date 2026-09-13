@@ -7,7 +7,7 @@ import java.util.Objects;
  *
  * <p>三態分類：</p>
  * <ul>
- *   <li>{@link State#SUPPORTED} — 平台 + 版本落在內建已驗證矩陣（僅 26.1.2 Paper/Folia）</li>
+ *   <li>{@link State#SUPPORTED} — 平台 + 版本落在內建已驗證矩陣（26.1.2 / 26.2 Paper/Folia）</li>
  *   <li>{@link State#UNVERIFIED} — 關鍵 capability 皆存在，但版本不在已驗證矩陣；
  *       仍視為 ready，但輸出 warning 提示 best-effort</li>
  *   <li>{@link State#INCOMPATIBLE} — 任一 required capability 缺失；fail-closed，
