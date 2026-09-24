@@ -7,26 +7,44 @@
 
 ## 插件開發者：從 JitPack 取得 API
 
-Gradle repository 是 `https://jitpack.io`；v1.2.2 Release 發布後，`compileOnly` 座標將是 `com.github.smile-minecraft:AceLib:v1.2.2`（此 checkout 的原始碼版本為 1.2.2；該座標將對應 `v1.2.2` tag，在本機驗證請用 `publishToMavenLocal` 搭配 `com.smile:acelib:1.2.2`）。可直接複製的完整設定與 Paper API dependency 請看[快速開始](../consumer/quickstart.md)。
+Gradle repository 是 `https://jitpack.io`，`compileOnly` 座標是 `com.github.smile-minecraft:AceLib:v1.2.2`（此 checkout 的原始碼版本為 1.2.2；該座標對應 `v1.2.2` tag，在本機驗證請用 `publishToMavenLocal` 搭配 `com.smile:acelib:1.2.2`）。可直接複製的完整設定與 Paper API dependency 請看[快速開始](../consumer/quickstart.md)。
 
-v1.2.2 Release 發布後，JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 將對應 `v1.2.2` tag，提供編譯用 API；其 artifact 命名如下：
+JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 對應 `v1.2.2` tag，提供編譯用 API；其 artifact 命名如下：
 
 - `AceLib-v1.2.2.jar`
 - `AceLib-v1.2.2-sources.jar`
 - `AceLib-v1.2.2-javadoc.jar`
 
-v1.2.2 Release 發布後，JitPack 產生的主 JAR 將包含 `AceLibApi`、`AceLibApi.AceLibProvider` 與 `AceLibVersion`。POM 座標將為 `com.github.smile-minecraft:AceLib:v1.2.2`（對應 v1.2.2 Git tag），沒有 transitive dependencies；Gradle module metadata 要求 Java 25。
+主 JAR 包含 `AceLibApi`、`AceLibApi.AceLibProvider` 與 `AceLibVersion`。POM 座標為 `com.github.smile-minecraft:AceLib:v1.2.2`（對應 v1.2.2 Git tag），沒有 transitive dependencies；Gradle module metadata 要求 Java 25。
 
 JitPack 舊的建置紀錄可能與目前可下載檔案不同，請以本頁座標與實際解析結果為準。
 
-## 伺服器管理員：建立 plugin JAR
+## 伺服器管理員：取得 plugin JAR
 
-GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 已公開。請 checkout 對應版本後從原始碼建置（`git checkout v1.2.2` 對應 v1.2.2 tag，該 tag 於 Release 發布後建立；發布前請直接以當前 checkout 建置）：
+GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 的 v1.2.2 Release 提供可直接放入 `plugins/` 的 runtime asset：
+
+```text
+https://github.com/smile-minecraft/AceLib/releases/download/v1.2.2/AceLib-1.2.2.jar
+```
+
+下載後請驗證 SHA-256：
+
+```bash
+shasum -a 256 AceLib-1.2.2.jar
+```
+
+預期值為：
+
+```text
+05c0752260638a7a5938a3bcc4230671c32a64ffafe5df3a8462b73723d97619
+```
+
+不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.2.2` 對應 v1.2.2 tag）：
 
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.2.2  # v1.2.2 tag（Release 發布後；發布前省略此行）
+git checkout v1.2.2  # v1.2.2 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 
@@ -36,7 +54,7 @@ git checkout v1.2.2  # v1.2.2 tag（Release 發布後；發布前省略此行）
 build/libs/AceLib-1.2.2.jar
 ```
 
-不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。完整步驟請看[伺服器管理員指南](../operator/README.md)。
+完整步驟請看[伺服器管理員指南](../operator/README.md)。
 
 Git tag `v1.0.0` 指向 commit `cbf4a80f69c83bf3095258b42321c5b6b359f8cf`。<!-- 版本歷史 -->
 

@@ -39,7 +39,7 @@ dependencies {
 }
 ```
 
-AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.2.2.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 將於 v1.2.2 Release 發布後對應 `v1.2.2` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.2.2；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.2.2`）。
+AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.2.2.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 對應 `v1.2.2` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.2.2；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.2.2`）。
 
 若 Gradle 找不到 AceLib，先確認 repository URL 是 `https://jitpack.io`，座標的 group 是 `com.github.smile-minecraft`，版本包含 `v`：`v1.2.2`。
 

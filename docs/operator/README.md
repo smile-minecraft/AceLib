@@ -3,7 +3,7 @@
 > 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
 
 
-AceLib 1.2.2（此 checkout 的原始碼版本為 1.2.2）需要 Java 25，支援的 server 版本是 Paper 或 Folia 26.1.2 與 26.2。v1.2.2 發布後，其 GitHub Release 將提供可下載的 `AceLib-1.2.2.jar`；在此之前，管理員可從當前 checkout 以 `./gradlew clean build --no-daemon --console=plain` 自行建置。該 Release 發布後，`git checkout v1.2.2` 將對應 `v1.2.2` tag，JitPack `com.github.smile-minecraft:AceLib:v1.2.2` 將為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
+AceLib 1.2.2（此 checkout 的原始碼版本為 1.2.2）需要 Java 25，支援的 server 版本是 Paper 或 Folia 26.1.2 與 26.2。v1.2.2 的 GitHub Release 提供可下載的 `AceLib-1.2.2.jar`，管理員可直接下載，或從 `v1.2.2` tag 以 `./gradlew clean build --no-daemon --console=plain` 自行建置；`git checkout v1.2.2` 對應 `v1.2.2` tag，JitPack `com.github.smile-minecraft:AceLib:v1.2.2` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
 
 ## 目錄
 
@@ -20,7 +20,7 @@ AceLib 1.2.2（此 checkout 的原始碼版本為 1.2.2）需要 Java 25，支�
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.2.2  # v1.2.2 tag（Release 發布後；發布前省略此行）
+git checkout v1.2.2  # v1.2.2 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 

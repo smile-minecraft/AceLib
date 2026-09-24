@@ -4,7 +4,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 ## [1.2.2] - 2026-09-24
 
-v1.2.2 是修補版，修正 GUI 關窗時的世代判定問題；將以 GitHub Release 發布。
+v1.2.2 是修補版，修正 GUI 關窗時的世代判定問題；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.2.2.jar`，管理員可直接下載，或從 `v1.2.2` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。
 
 ### 修補內容
 

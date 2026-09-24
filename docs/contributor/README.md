@@ -46,7 +46,7 @@ cd AceLib
 ./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
 ```
 
-本機座標是 `com.smile:acelib:1.2.2`（此 checkout 的原始碼版本為 1.2.2）。這只供 repository 開發與測試，不代表 Maven Central 已發布。一般 plugin 開發者使用的是 JitPack `com.github.smile-minecraft:AceLib:v1.2.2`（將於 v1.2.2 Release 發布後對應 `v1.2.2` tag；發布前在本機驗證請用 `publishToMavenLocal`）。
+本機座標是 `com.smile:acelib:1.2.2`（此 checkout 的原始碼版本為 1.2.2）。這只供 repository 開發與測試，不代表 Maven Central 已發布。一般 plugin 開發者使用的是 JitPack `com.github.smile-minecraft:AceLib:v1.2.2`（對應 `v1.2.2` tag；在本機驗證請用 `publishToMavenLocal`）。
 
 只檢查 Markdown 連結、anchor、版本文字與 consumer 範例契約時，可執行：
 

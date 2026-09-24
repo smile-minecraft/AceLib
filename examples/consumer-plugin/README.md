@@ -7,7 +7,7 @@
 - 檢查 `api().isReady()`，再使用 API。
 - 依 Paper 或 Folia 的平台能力選擇操作路徑。
 
-一般 plugin 專案請先看[快速開始](../../docs/consumer/quickstart.md)，並於 v1.2.2 Release 發布後使用 JitPack `com.github.smile-minecraft:AceLib:v1.2.2`。
+一般 plugin 專案請先看[快速開始](../../docs/consumer/quickstart.md)，並使用 JitPack `com.github.smile-minecraft:AceLib:v1.2.2`。
 
 ## 在 AceLib repository 內編譯
 

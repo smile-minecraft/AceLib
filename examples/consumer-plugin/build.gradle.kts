@@ -4,9 +4,9 @@
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
 // AceLib 的 GitHub repository 已公開。本 fixture 使用「本地 mavenLocal artifact」解析
 // （com.smile:acelib:1.2.2），因為它是貢獻者本地開發用途；公開安裝座標為
-// JitPack com.github.smile-minecraft:AceLib:v1.2.2（Release 發布後對應 v1.2.2 tag）。
+// JitPack com.github.smile-minecraft:AceLib:v1.2.2（對應 v1.2.2 tag）。
 // 說明：本 fixture 是編譯驗證用途，不發布、不宣稱外部可用；JitPack 是否提供編譯用 API
-// 取決於 v1.2.2 tag 是否已在 GitHub 建立並由 JitPack 建置完成。
+// v1.2.2 tag 已於 GitHub 建立並由 JitPack 建置完成（2026-09-24 發布）。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
