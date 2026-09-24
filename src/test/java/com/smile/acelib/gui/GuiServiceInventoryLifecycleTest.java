@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.bukkit.Bukkit;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -25,11 +26,9 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 /**
- * GuiService 真實 Bukkit inventory lifecycle（Plan §十六 Phase 11 第一個可驗收切片）。
- *
- * <p>對應 Evidence Pack §5 Red 6：openInventory 對在線玩家建立 + 連結 + 開啟
- * 真實 Bukkit inventory；protected click/drag 被取消；close event 移除 session；
- * closeInventory 觸發實際 close；reload/shutdown 不殘留 link / listener。</p>
+ * GuiService 的真實 Bukkit inventory 生命週期行為契約測試。涵蓋：openInventory 對在線玩家建立、
+ * 連結並開啟真實 Bukkit inventory；protected click/drag 被取消；close event 依世代判定
+ * 移除對應 session；closeInventory 觸發實際 close；reload/shutdown 不殘留 link 或 listener。
  *
  * <p>本測試透過 {@link PlayerContextExecutor#direct()} 注入「直接同步執行」
  * executor，模擬 Paper main-thread 環境下同一 region context 內執行的語意。
@@ -190,6 +189,128 @@ class GuiServiceInventoryLifecycleTest {
         GuiResult query = service.getActiveSession(uuid);
         assertEquals(GuiState.REJECTED, query.state());
         assertEquals(GuiErrorCode.SESSION_NOT_FOUND, query.errorCode());
+    }
+
+    @Test
+    @DisplayName("舊視窗的 close event 晚到：保留重新開啟的新 session")
+    void staleCloseEventAfterReopen_keepsNewSession() {
+        GuiArgument argA = GuiArgument.of(player, "A", 9, List.of());
+        GuiResult openedA = service.openInventory(argA);
+        assertEquals(GuiState.SUCCESS, openedA.state());
+        long generationA = openedA.session().generation();
+        InventoryView viewA = player.getOpenInventory();
+        Inventory topA = viewA.getTopInventory();
+
+        GuiResult closedA = service.closeInventory(uuid, generationA);
+        assertEquals(GuiState.SUCCESS, closedA.state());
+
+        GuiArgument argB = GuiArgument.of(player, "B", 9, List.of());
+        GuiResult openedB = service.openInventory(argB);
+        assertEquals(GuiState.SUCCESS, openedB.state());
+        long generationB = openedB.session().generation();
+
+        service.handleClose(new InventoryCloseEvent(viewA));
+
+        GuiResult active = service.getActiveSession(uuid);
+        assertEquals(GuiState.SUCCESS, active.state(),
+            "舊視窗的 close event 不得清除新 session");
+        assertEquals(generationB, active.session().generation());
+        GuiResult click = service.validateClick(uuid, generationB, 0);
+        assertEquals(GuiState.ALLOWED, click.state(),
+            "新 session 的點擊不得回 SESSION_NOT_FOUND");
+        assertEquals(null, GuiInventoryLink.generationOf(topA),
+            "舊視窗仍須解除 inventory link");
+    }
+
+    @Test
+    @DisplayName("reload 後 A 的晚到 close event：保留 B 的新 session")
+    void reloadThenLateCloseEvent_keepsNewSession() {
+        service.shutdown();
+        GuiServiceImpl service1 = new GuiServiceImpl(PlayerContextExecutor.direct());
+        service = service1;
+        GuiArgument argA = GuiArgument.of(player, "A", 9, List.of());
+        GuiResult openedA = service1.openInventory(argA);
+        assertEquals(GuiState.SUCCESS, openedA.state());
+        InventoryView viewA = player.getOpenInventory();
+        Inventory topA = viewA.getTopInventory();
+
+        service1.shutdown();
+        GuiServiceImpl service2 = new GuiServiceImpl(PlayerContextExecutor.direct());
+        service = service2;
+        GuiArgument argB = GuiArgument.of(player, "B", 9, List.of());
+        GuiResult openedB = service2.openInventory(argB);
+        assertEquals(GuiState.SUCCESS, openedB.state());
+        long generationB = openedB.session().generation();
+
+        service2.handleClose(new InventoryCloseEvent(viewA));
+
+        GuiResult active = service2.getActiveSession(uuid);
+        assertEquals(GuiState.SUCCESS, active.state(),
+            "reload 後舊視窗的 close event 不得清除新 session");
+        assertEquals(generationB, active.session().generation());
+        GuiResult click = service2.validateClick(uuid, generationB, 0);
+        assertEquals(GuiState.ALLOWED, click.state(),
+            "新 session 的點擊不得回 SESSION_NOT_FOUND");
+        assertEquals(null, GuiInventoryLink.generationOf(topA),
+            "舊視窗仍須解除 inventory link");
+    }
+
+    @Test
+    @DisplayName("同一個舊視窗的 close event 連續兩次：保留新 session")
+    void duplicateStaleCloseEvent_keepsNewSession() {
+        GuiArgument argA = GuiArgument.of(player, "A", 9, List.of());
+        GuiResult openedA = service.openInventory(argA);
+        assertEquals(GuiState.SUCCESS, openedA.state());
+        long generationA = openedA.session().generation();
+        InventoryView viewA = player.getOpenInventory();
+
+        GuiResult closedA = service.closeInventory(uuid, generationA);
+        assertEquals(GuiState.SUCCESS, closedA.state());
+
+        GuiArgument argB = GuiArgument.of(player, "B", 9, List.of());
+        GuiResult openedB = service.openInventory(argB);
+        assertEquals(GuiState.SUCCESS, openedB.state());
+        long generationB = openedB.session().generation();
+
+        InventoryCloseEvent staleClose = new InventoryCloseEvent(viewA);
+        service.handleClose(staleClose);
+        service.handleClose(staleClose);
+
+        GuiResult active = service.getActiveSession(uuid);
+        assertEquals(GuiState.SUCCESS, active.state(),
+            "重複的舊視窗 close event 不得清除新 session");
+        assertEquals(generationB, active.session().generation());
+        GuiResult click = service.validateClick(uuid, generationB, 0);
+        assertEquals(GuiState.ALLOWED, click.state(),
+            "新 session 的點擊不得回 SESSION_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("未 link 的視窗 close event：保留現存 session")
+    void unlinkedCloseEvent_keepsActiveSession() {
+        GuiArgument argB = GuiArgument.of(player, "B", 9, List.of());
+        GuiResult openedB = service.openInventory(argB);
+        assertEquals(GuiState.SUCCESS, openedB.state());
+        long generationB = openedB.session().generation();
+        Inventory topB = player.getOpenInventory().getTopInventory();
+
+        Inventory other = Bukkit.createInventory(null, 9);
+        player.openInventory(other);
+        InventoryView viewU = player.getOpenInventory();
+        assertEquals(null, GuiInventoryLink.generationOf(viewU.getTopInventory()),
+            "未由本服務管理的視窗不得有 inventory link");
+
+        service.handleClose(new InventoryCloseEvent(viewU));
+
+        GuiResult active = service.getActiveSession(uuid);
+        assertEquals(GuiState.SUCCESS, active.state(),
+            "未識別視窗的 close event 不得清除現存 session");
+        assertEquals(generationB, active.session().generation());
+        GuiResult click = service.validateClick(uuid, generationB, 0);
+        assertEquals(GuiState.ALLOWED, click.state(),
+            "現存 session 的點擊不得回 SESSION_NOT_FOUND");
+        assertEquals(generationB, GuiInventoryLink.generationOf(topB).longValue(),
+            "未識別視窗的 close event 不得解除 B 的 inventory link");
     }
 
     @Test

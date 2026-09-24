@@ -614,10 +614,10 @@ final class GuiServiceImpl implements GuiService {
     // -----------------------------------------------------------------
 
     /**
-     * 內部清理：由 Bukkit {@link InventoryCloseEvent} listener 呼叫，
-     * <strong>不驗證 generation</strong>（Bukkit 關閉事件本身即為可信來源）。
+     * 內部清理：移除玩家目前 session 與待處理狀態，<strong>不驗證 generation</strong>。
+     * generation 與關閉視窗的比對由 {@link #handleClose(InventoryCloseEvent)} 在呼叫前完成。
      *
-     * <p>若遊戲內關閉 GUI（例如玩家按 ESC、視窗被伺服器關閉），內部 listener
+     * <p>若遊戲內關閉目前 GUI（例如玩家按 ESC、視窗被伺服器關閉），內部 listener
      * 會呼叫此方法移除 session。後續 closeInventory 必須回 SESSION_NOT_FOUND，
      * 證明 session 已被清理。</p>
      *
@@ -715,7 +715,12 @@ final class GuiServiceImpl implements GuiService {
     }
 
     /**
-     * 處理 {@link InventoryCloseEvent}：移除對應 session。
+     * 處理 {@link InventoryCloseEvent}：解除視窗綁定，並清理非過時的關閉事件。
+     *
+     * <p>僅在目前不存在 session，或關閉視窗仍有 linked generation 且其 generation
+     * 與目前 session 相同時，才清理目前 session。generation 為 null 的未識別視窗，
+     * 以及 generation 與目前 session 不同的舊視窗，都只解除 inventory link 並保留
+     * 目前 session。</p>
      *
      * @param event Bukkit 派送的 close event；不可為 null
      */
@@ -725,10 +730,17 @@ final class GuiServiceImpl implements GuiService {
             return;
         }
         Inventory top = event.getView().getTopInventory();
+        Long closingGeneration = GuiInventoryLink.generationOf(top);
         GuiInventoryLink.unlink(top);
         org.bukkit.entity.HumanEntity who = event.getPlayer();
         if (who instanceof Player p) {
-            internalCleanup(p.getUniqueId());
+            GuiSession current = registry.getSession(p.getUniqueId());
+            boolean closingOwnedByCurrent = closingGeneration != null
+                && current != null
+                && current.generation() == closingGeneration.longValue();
+            if (current == null || closingOwnedByCurrent) {
+                internalCleanup(p.getUniqueId());
+            }
         }
     }
 
