@@ -2,6 +2,15 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.2.2] - 2026-09-24
+
+v1.2.2 是修補版，修正 GUI 關窗時的世代判定問題；將以 GitHub Release 發布。
+
+### 修補內容
+
+- 修正 GUI 關窗事件在世代切換期間可能錯誤判定為目前世代的問題。
+- 本版未變更任何既有公開 API 的簽章或語意。
+
 ## [1.2.1] - 2026-09-14
 
 v1.2.1 以 GitHub Release 發布，提供可下載的 `AceLib-1.2.1.jar`；管理員可直接下載，或從 `v1.2.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。
