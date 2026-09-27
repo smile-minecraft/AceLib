@@ -33,10 +33,10 @@ https://github.com/smile-minecraft/AceLib/releases/download/v1.3.0/AceLib-1.3.0.
 shasum -a 256 AceLib-1.3.0.jar
 ```
 
-預期值為（以 v1.3.0 GitHub Release 資產頁公告的 SHA-256 為準；實際值於 Release 建立後補上）：
+預期值為（v1.3.0 GitHub Release 資產 `AceLib-1.3.0.jar` 的 SHA-256；與 Release 資產頁公告值一致）：
 
 ```text
-（待補：填入已發布 `AceLib-1.3.0.jar` 的實際 SHA-256）
+363871a3f38081105603243e0996946bf4f7bd3181cdd47d66ae13fc3b097f8d
 ```
 
 不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.3.0` 對應 v1.3.0 tag）：
