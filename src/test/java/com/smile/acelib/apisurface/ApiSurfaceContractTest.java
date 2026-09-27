@@ -122,6 +122,160 @@ class ApiSurfaceContractTest {
     }
 
     @Test
+    void markdownStatisticsConsistentWithAllowlist() throws IOException {
+        Path root = projectRoot();
+        Path jsonPath = root.resolve("docs/reference/api-surface.json");
+        Path mdPath = root.resolve("docs/reference/api-surface.md");
+        assertTrue(Files.exists(jsonPath), "allowlist 不存在");
+        assertTrue(Files.exists(mdPath), "人類可讀 API surface 文件不存在：" + mdPath);
+
+        List<Map<String, String>> types = parseTypes(Files.readString(jsonPath));
+        assertStatisticsConsistent(types, Files.readString(mdPath));
+    }
+
+    @Test
+    void statisticsBlock_wrongNumber_failsWithDocumentedVsActual() {
+        List<Map<String, String>> types = List.of(
+            typeEntry("a.A", "Supported"),
+            typeEntry("a.B", "Supported"),
+            typeEntry("a.C", "SPI"));
+        String md = """
+            ## 統計
+
+            - 總數：2 個 public 頂層型別
+            - Supported：2
+            - SPI：1
+            - Internal：0
+            """;
+
+        AssertionError failure = org.junit.jupiter.api.Assertions.assertThrows(
+            AssertionError.class, () -> assertStatisticsConsistent(types, md));
+        assertTrue(failure.getMessage().contains("2")
+                && failure.getMessage().contains("3"),
+            "錯誤訊息必須同時指出文件值與 allowlist 實際值，實際：" + failure.getMessage());
+    }
+
+    @Test
+    void statisticsBlock_missingLine_failsInsteadOfSilentlyPassing() {
+        List<Map<String, String>> types = List.of(typeEntry("a.A", "Supported"));
+        String md = """
+            ## 統計
+
+            - 總數：1 個 public 頂層型別
+            - Supported：1
+            - Internal：0
+            """;
+
+        org.junit.jupiter.api.Assertions.assertThrows(AssertionError.class,
+            () -> assertStatisticsConsistent(types, md),
+            "統計行缺失時不得靜默通過");
+    }
+
+    @Test
+    void statisticsBlock_whitespaceVariants_stillParsed() {
+        List<Map<String, String>> types = List.of(typeEntry("a.A", "Internal"));
+        String md = """
+            ## 統計
+
+            -   總數:  1  個  public  頂層型別
+            - Supported : 0
+            -   SPI:0
+            - Internal：  1
+            """;
+
+        assertStatisticsConsistent(types, md);
+    }
+
+    /**
+     * 斷言「## 統計」區塊的四個數字與 allowlist 推導的期望值一致。
+     *
+     * <p>期望值一律由 {@code types} 動態計算，不硬編數字；統計行缺失或無法解析時
+     * 失敗並指出缺少哪一行（fail-closed，不回傳預設值）。</p>
+     */
+    static void assertStatisticsConsistent(List<Map<String, String>> types, String md) {
+        int supported = 0;
+        int spi = 0;
+        int internal = 0;
+        for (Map<String, String> t : types) {
+            switch (t.get("classification")) {
+                case "Supported" -> supported++;
+                case "SPI" -> spi++;
+                case "Internal" -> internal++;
+                default -> throw new IllegalStateException("非法分類：" + t.get("fqcn"));
+            }
+        }
+        int total = types.size();
+
+        Map<String, Integer> stats = parseStatisticsBlock(md);
+
+        assertTrue(stats.containsKey("總數"),
+            "API surface 文件缺少「## 統計」區塊的「總數」行");
+        assertTrue(stats.containsKey("Supported"),
+            "API surface 文件缺少「## 統計」區塊的「Supported」行");
+        assertTrue(stats.containsKey("SPI"),
+            "API surface 文件缺少「## 統計」區塊的「SPI」行");
+        assertTrue(stats.containsKey("Internal"),
+            "API surface 文件缺少「## 統計」區塊的「Internal」行");
+
+        assertEquals(total, stats.get("總數"),
+            "API surface 文件「## 統計」總數寫 " + stats.get("總數")
+                + "、allowlist 實際 " + total);
+        assertEquals(supported, stats.get("Supported"),
+            "API surface 文件「## 統計」Supported 寫 " + stats.get("Supported")
+                + "、allowlist 實際 " + supported);
+        assertEquals(spi, stats.get("SPI"),
+            "API surface 文件「## 統計」SPI 寫 " + stats.get("SPI")
+                + "、allowlist 實際 " + spi);
+        assertEquals(internal, stats.get("Internal"),
+            "API surface 文件「## 統計」Internal 寫 " + stats.get("Internal")
+                + "、allowlist 實際 " + internal);
+    }
+
+    /**
+     * 解析「## 統計」區塊的四個數字（容忍空白與半形／全形冒號差異，僅限該區塊內）。
+     *
+     * <p>行缺失、區塊缺失或無法解析時該 key 不存在，由呼叫端斷言失敗；
+     * 絕不回傳預設值，避免解析失敗靜默通過。</p>
+     */
+    static Map<String, Integer> parseStatisticsBlock(String md) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        String section = statisticsSection(md);
+        if (section == null) {
+            return out;
+        }
+        putStat(out, section, Pattern.compile("-\\s*總數\\s*[:：]\\s*(\\d+)\\s*個\\s*public\\s*頂層型別"),
+            "總數");
+        putStat(out, section, Pattern.compile("-\\s*Supported\\s*[:：]\\s*(\\d+)"), "Supported");
+        putStat(out, section, Pattern.compile("-\\s*SPI\\s*[:：]\\s*(\\d+)"), "SPI");
+        putStat(out, section, Pattern.compile("-\\s*Internal\\s*[:：]\\s*(\\d+)"), "Internal");
+        return out;
+    }
+
+    private static String statisticsSection(String md) {
+        int start = md.indexOf("## 統計");
+        if (start < 0) {
+            return null;
+        }
+        int end = md.indexOf("\n## ", start);
+        return end < 0 ? md.substring(start) : md.substring(start, end);
+    }
+
+    private static void putStat(Map<String, Integer> out, String section, Pattern pattern,
+            String label) {
+        Matcher m = pattern.matcher(section);
+        if (m.find()) {
+            out.put(label, Integer.parseInt(m.group(1)));
+        }
+    }
+
+    private static Map<String, String> typeEntry(String fqcn, String classification) {
+        Map<String, String> entry = new LinkedHashMap<>();
+        entry.put("fqcn", fqcn);
+        entry.put("classification", classification);
+        return entry;
+    }
+
+    @Test
     void artifactsContainNoWorkflowIds() throws IOException {
         Path root = projectRoot();
         String json = Files.readString(root.resolve("docs/reference/api-surface.json"));

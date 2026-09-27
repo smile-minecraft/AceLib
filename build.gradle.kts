@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "com.smile"
-version = "1.2.2"
+version = "1.3.0"
 
 // Java 25 是 Paper 26.1+ 的最低需求；保留 toolchain 確保跨開發者一致。
 java {
@@ -38,15 +38,18 @@ repositories {
 }
 
 // ---------------------------------------------------------------------------
-// Adventure 5.2 isolated runtime 驗證（Adventure 相容邊界 task）
+// Adventure 5.2 isolated runtime 驗證（Adventure 相容邊界 task + FormText 跨版本 task）
 // ---------------------------------------------------------------------------
 // 獨立 configuration，不進入 compile / test classpath，避免與 paper-api 攜帶的
 // Adventure 4.26.1 衝突（同一座標兩版本會造成 classpath 歧義，導致 v4 測試
-// 行為漂移）。僅解析 adventure-api jar 本身（isTransitive=false）；其
+// 行為漂移）。adventure-api 僅解析 jar 本身（isTransitive=false）；其
 // key / nbt / examination 傳遞依賴由 testRuntimeClasspath 的 v4 版本提供
-// （API 相容，見 Adventure5ClickCompatTest 前提驗證）。此 jar 僅供 isolated
-// URLClassLoader 在測試中載入 v5 runtime，驗證同一份 production JAR 的
-// click descriptor helper 在 Adventure 5.2.0 下不發生 linkage error。
+// （API 相容，見 Adventure5ClickCompatTest 前提驗證）。FormText 跨版本 task
+// 另需同為 5.2.0 的 legacy / plain serializer jar（各 isTransitive=false，
+// 兩者皆只依賴 adventure-api，無需額外傳遞依賴），供 isolated URLClassLoader
+// 在測試中載入 v5 runtime，實際執行 FormText.render 轉換案例。
+// 此 configuration 的 jar 僅供 isolated URLClassLoader 在測試中載入 v5，
+// 驗證同一份 production JAR 在 Adventure 5.2.0 下無 linkage error 且輸出正確。
 val adventure5ApiConfig by configurations.creating {
     isTransitive = false
 }
@@ -54,11 +57,21 @@ val adventure5ApiConfig by configurations.creating {
 dependencies {
     // Adventure 5.2.0 isolated runtime 驗證用（見上方 configuration 說明）。
     adventure5ApiConfig("net.kyori:adventure-api:5.2.0")
+    // FormText 在 isolated v5 空間執行 legacy / plain 序列化需要同版本 jar；
+    // 僅進 adventure5ApiConfig，不進 compile / test classpath。
+    adventure5ApiConfig("net.kyori:adventure-text-serializer-legacy:5.2.0") { isTransitive = false }
+    adventure5ApiConfig("net.kyori:adventure-text-serializer-plain:5.2.0") { isTransitive = false }
 
     // 編譯期需要 paper-api；運行期由伺服器提供（provided scope）
     // 版本固定為 26.1.2.build.72-stable 以對齊 MockBukkit 4.113.1 的 paper-api 版本，
     // 避免 binary incompatible 問題。如需升級 paper-api 須同步升級 MockBukkit。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
+
+    // FormText 用的 legacy / plain serializer：運行期由伺服器上的 Adventure 提供，
+    // 故僅 compileOnly；此處顯式宣告版本（與 paper-api 攜帶的 4.26.1 一致），
+    // 不依賴傳遞解析的隱含保證。
+    compileOnly("net.kyori:adventure-text-serializer-legacy:4.26.1")
+    compileOnly("net.kyori:adventure-text-serializer-plain:4.26.1")
 
     // Floodgate API（基岩玩家偵測）。compileOnly：運行期由伺服器上的 floodgate
     // plugin 提供；缺席時 AceLib 以 reflection-only 探測安全降級。
@@ -140,9 +153,19 @@ tasks.test {
     )
     // 將 Adventure 5.2.0 isolated runtime jar 路徑傳給測試，供 isolated
     // URLClassLoader 載入 v5（不進入 test classpath，避免與 v4 衝突）。
+    // 以 artifact 名稱精準定位 api / legacy / plain 三個 jar。
+    val adventure5Jars = adventure5ApiConfig.files.associateBy { it.name }
     systemProperty(
         "acelib.adventure5ApiJar",
-        adventure5ApiConfig.files.first().absolutePath
+        adventure5Jars.entries.first { it.key.startsWith("adventure-api-") }.value.absolutePath
+    )
+    systemProperty(
+        "acelib.adventure5LegacyJar",
+        adventure5Jars.entries.first { it.key.startsWith("adventure-text-serializer-legacy-") }.value.absolutePath
+    )
+    systemProperty(
+        "acelib.adventure5PlainJar",
+        adventure5Jars.entries.first { it.key.startsWith("adventure-text-serializer-plain-") }.value.absolutePath
     )
     testLogging {
         events("passed", "failed", "skipped")

@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：143 個 public 頂層型別
-- Supported：111
+- 總數：151 個 public 頂層型別
+- Supported：119
 - SPI：12
 - Internal：20
 
@@ -43,7 +43,11 @@
 | `com.smile.acelib.command.BukkitCommandBridge` | class | Internal | Bukkit CommandExecutor 橋接內部實作；非穩定契約。 | AceLibPlugin（com.smile.acelib）跨 package 建構並 attach 到 Bukkit CommandExecutor；v1 前保留 public。 | AceLibPlugin 註冊指令。 |
 | `com.smile.acelib.command.BukkitReplySink` | class | Internal | ReplySink 的 Bukkit 內部實作；消費者應使用 ReplySink 抽象而非此類。 | AceLibPlugin 跨 package 建構 ReplySink（含 nested SafeExecutorBackend）；v1 前保留 public 供既有組裝鏈使用。 | AceLibStatusHandler；指令 dispatch。 |
 | `com.smile.acelib.command.BukkitSender` | class | Internal | Sender 的 Bukkit 內部實作；消費者應使用 Sender 抽象。 | v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。 | 指令 dispatch。 |
+| `com.smile.acelib.command.CatalogMeta` | record | Supported | 指令目錄發布元資料值型別（分類、圖示、需確認子指令）；v1 穩定。 |  | CommandCatalog.publish；消費者發布指令描述。 |
+| `com.smile.acelib.command.CatalogResult` | enum | Supported | 指令目錄發布結果列舉；v1 凍結常數順序。 |  | CommandCatalog.publish。 |
+| `com.smile.acelib.command.CommandCatalog` | interface | Supported | 指令目錄服務介面，只存指令描述、不註冊不執行；v1 承諾相容。 |  | 消費者發布指令描述；說明頁產生器讀取快照。 |
 | `com.smile.acelib.command.CommandContext` | class | Supported | 傳遞給 SubCommand 的執行上下文（指令、參數、sender）；指令擴充契約的一部分，v1 穩定。 |  | SubCommand.execute。 |
+| `com.smile.acelib.command.CommandDoc` | record | Supported | 指令純描述投影值型別（不含 handler／completer／插件實例）；v1 穩定。 |  | CommandCatalog.publish／snapshot；說明頁產生器。 |
 | `com.smile.acelib.command.CommandErrorKind` | enum | Supported | 指令錯誤分類列舉，出現在 CommandException 與回覆語意中；v1 凍結常數順序。 |  | CommandException；BukkitReplySink。 |
 | `com.smile.acelib.command.CommandException` | class | Supported | 指令層級例外，消費者在 SubCommand 中可拋出；v1 契約。 |  | SubCommand；CommandRegistry。 |
 | `com.smile.acelib.command.CommandRegistry` | interface | Supported | 指令註冊服務介面，消費者用來註冊 SubCommand；v1 承諾相容。 |  | AceLibPlugin；消費者。 |
@@ -56,6 +60,7 @@
 | `com.smile.acelib.command.SubCommand` | interface | SPI | 消費者實作的指令邏輯介面（extension point）；文件須寫明實作者責任與相容性。 |  | CommandRegistry 呼叫；消費者實作。 |
 | `com.smile.acelib.command.SubCommandCompleter` | interface | SPI | 消費者實作的 tab 補全介面；extension point。 |  | CommandRegistry 呼叫補全。 |
 | `com.smile.acelib.command.SubCommandSpec` | class | Supported | 子指令規格值型別（名稱、權限、冷卻）；註冊時使用；v1 穩定。 |  | CommandRegistry.register。 |
+| `com.smile.acelib.command.SubDoc` | record | Supported | 子指令純描述投影值型別（不含 handler／completer）；v1 穩定。 |  | CommandDoc.subcommands；說明頁產生器。 |
 
 ### com.smile.acelib.config
 
@@ -155,6 +160,7 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.form.FormErrorCodes` | class | Supported | 表單服務錯誤代碼常數（ACELIB-FORM-*）；與 ErrorCodeRegistry/error-codes.md 同步。 |  | FormService.FormSender.absent；FormServiceImpl。 |
+| `com.smile.acelib.form.FormImage` | record | Supported | Simple 表單按鈕圖示值型別（PATH 資源包路徑／URL 網址；nested Type 列舉）；消費者提供圖示資料，Cumulus 外部型別不外洩。 |  | FormSpec.Simple.button(String, FormImage)；CumulusFormTranslator 圖示映射。 |
 | `com.smile.acelib.form.FormResponse` | class | Supported | 表單回應值型別（immutable：狀態＋可選按鈕索引＋元件答案清單）；經 sendForm 三參數 overload 的 consumer 於玩家 region context 內交付。 |  | FormService.sendForm 三參數 overload；FormServiceImpl 回應派送；CumulusFormTranslator 映射產出。 |
 | `com.smile.acelib.form.FormResponseStatus` | enum | Supported | 表單回應狀態語意列舉（VALID/CLOSED/INVALID）；描述玩家回應分類，回應的接收與派送機制不在本型別範圍。 |  | FormService 回應語意文件；後續回應派送以本語意為基礎。 |
 | `com.smile.acelib.form.FormSendResult` | enum | Supported | 表單發送結果列舉（SENT/REJECTED）；把 Floodgate 內部 boolean 轉譯為具名遞送狀態，原始 boolean 不外洩。 |  | FormService.sendForm；FormService.FormSender.sendForm。 |
@@ -194,6 +200,8 @@
 
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.message.FormText` | class | Supported | Adventure Component → 基岩表單可安全顯示字串的靜態渲染入口（click/hover 移除、hex 降 16 色、translatable 解析、換行 §r、長度截斷）；下游同一份語系餵聊天與表單。 |  | 消費者；MessageService.formatFormText。 |
+| `com.smile.acelib.message.FormTextOptions` | record | Supported | 表單文字渲染選項值型別（click 提示開關、可見字元上限、locale；defaults 為 false/0/null）。 |  | FormText.render；MessageService.formatFormText。 |
 | `com.smile.acelib.message.MessageService` | class | Supported | 訊息格式化/發送服務；v1 穩定。 |  | 消費者；LangManager。 |
 
 ### com.smile.acelib.platform

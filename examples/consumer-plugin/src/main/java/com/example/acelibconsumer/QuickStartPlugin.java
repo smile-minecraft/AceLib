@@ -1,6 +1,13 @@
 package com.example.acelibconsumer;
 
 import com.smile.acelib.AceLibApi;
+import com.smile.acelib.command.CommandCatalog;
+import com.smile.acelib.command.CommandDoc;
+import com.smile.acelib.form.FormImage;
+import com.smile.acelib.message.FormText;
+import com.smile.acelib.message.FormTextOptions;
+import java.util.List;
+import net.kyori.adventure.text.Component;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -50,5 +57,36 @@ public class QuickStartPlugin extends JavaPlugin {
         } else if (api.getPlatformCapability().globalScheduler()) {
             // Paper 環境：可安全使用全域 BukkitScheduler。
         }
+
+        // 5. 只依賴公開 API 使用本版三個新功能（編譯期即證明 Supported 面足夠）。
+        demonstrateNewApis(api);
+    }
+
+    /**
+     * 最小消費示範：外部插件只依賴 Supported API 就能使用
+     * {@link FormImage}、{@link FormText}／{@link FormTextOptions}、
+     * {@link CommandCatalog} 三者。
+     *
+     * @param api 已就緒的 AceLib facade；不可為 null
+     */
+    private void demonstrateNewApis(AceLibApi api) {
+        // 表單按鈕圖示：資源包路徑圖示值型別（Cumulus 型別不外洩）。
+        FormImage icon = FormImage.path("textures/items/example");
+
+        // 表單安全字串：Adventure Component → 基岩表單可顯示字串。
+        String label = FormText.render(
+            Component.text("hello"), FormTextOptions.defaults());
+        getLogger().info("form label preview: " + label + " (icon=" + icon + ")");
+
+        // 指令目錄：讀快照並以前後 revision 判斷期間有無變動。
+        CommandCatalog catalog = api.getCommandCatalog();
+        long before = catalog.revision();
+        List<CommandDoc> docs = catalog.snapshot();
+        long after = catalog.revision();
+        if (before != after) {
+            getLogger().info("command catalog changed while reading ("
+                + before + " -> " + after + "); re-read if a stable view is needed.");
+        }
+        getLogger().info("command catalog holds " + docs.size() + " entries.");
     }
 }

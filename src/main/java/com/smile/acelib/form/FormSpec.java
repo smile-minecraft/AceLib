@@ -2,6 +2,7 @@ package com.smile.acelib.form;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 基岩原生表單規格（AceLib 自有 DSL，Supported API）。
@@ -113,13 +114,35 @@ public abstract sealed class FormSpec permits FormSpec.Simple, FormSpec.Modal, F
     /** 按鈕列表表單（標題＋說明＋一顆以上按鈕）。 */
     public static final class Simple extends FormSpec {
 
+        /**
+         * Simple 表單的一顆按鈕（文字＋可選圖示）。
+         *
+         * @param text 按鈕文字；必須非 null 且非空白
+         * @param image 按鈕圖示；必須非 null（無圖示時為 {@link Optional#empty}）
+         */
+        public record Button(String text, Optional<FormImage> image) {
+            /**
+             * 正規化建構子：文字與圖示 optional 本身皆不可繞過驗證。
+             *
+             * @throws IllegalArgumentException text 為 null 或空白，或 image 為 null
+             */
+            public Button {
+                requireNonBlank(text, "button text");
+                if (image == null) {
+                    throw new IllegalArgumentException(
+                        "form button image must not be null "
+                            + "(use Optional.empty() for plain buttons)");
+                }
+            }
+        }
+
         private final String content;
-        private final List<String> buttons;
+        private final List<Button> buttonEntries;
 
         private Simple(Builder builder) {
             super(builder.title);
             this.content = builder.content;
-            this.buttons = List.copyOf(builder.buttons);
+            this.buttonEntries = List.copyOf(builder.buttons);
         }
 
         /** @return 表單說明文字；永不為 null */
@@ -129,7 +152,19 @@ public abstract sealed class FormSpec permits FormSpec.Simple, FormSpec.Modal, F
 
         /** @return 按鈕文字清單（依加入順序）；不可變、至少一個元素 */
         public List<String> buttons() {
-            return buttons;
+            List<String> texts = new ArrayList<>(buttonEntries.size());
+            for (Button entry : buttonEntries) {
+                texts.add(entry.text());
+            }
+            return List.copyOf(texts);
+        }
+
+        /**
+         * @return 按鈕 entries（含可選圖示，依加入順序）；不可變、與 {@link #buttons()}
+         *         同長度、同索引
+         */
+        public List<Button> buttonEntries() {
+            return buttonEntries;
         }
 
         @Override
@@ -142,7 +177,7 @@ public abstract sealed class FormSpec permits FormSpec.Simple, FormSpec.Modal, F
 
             private final String title;
             private String content;
-            private final List<String> buttons = new ArrayList<>();
+            private final List<Button> buttons = new ArrayList<>();
 
             private Builder(String title) {
                 // 先通過 title 驗證（與父類別建構路徑一致）
@@ -172,7 +207,24 @@ public abstract sealed class FormSpec permits FormSpec.Simple, FormSpec.Modal, F
              */
             public Builder button(String text) {
                 requireNonBlank(text, "button text");
-                buttons.add(text);
+                buttons.add(new Button(text, Optional.empty()));
+                return this;
+            }
+
+            /**
+             * 新增一顆帶圖示的按鈕。
+             *
+             * @param text 按鈕文字；必須非 null 且非空白
+             * @param image 按鈕圖示；不可為 null
+             * @return this
+             * @throws IllegalArgumentException text 為 null 或空白，或 image 為 null
+             */
+            public Builder button(String text, FormImage image) {
+                requireNonBlank(text, "button text");
+                if (image == null) {
+                    throw new IllegalArgumentException("form button image must not be null");
+                }
+                buttons.add(new Button(text, Optional.of(image)));
                 return this;
             }
 

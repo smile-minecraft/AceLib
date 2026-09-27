@@ -20,4 +20,7 @@ public final class FormErrorCodes {
 
     /** 002 — 表單服務已停用（onDisable / reload 失敗後的 shutdown）。 */
     public static final String ACELIB_FORM_SERVICE_SHUTDOWN = "ACELIB-FORM-002";
+
+    /** 003 — 單顆按鈕圖示轉換失敗，已退回純文字（warning，不中斷整張表單）。 */
+    public static final String ACELIB_FORM_IMAGE_FALLBACK = "ACELIB-FORM-003";
 }

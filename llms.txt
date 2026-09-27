@@ -10,7 +10,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 ## Consumer
 - [Consumer Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/README.md): Where downstream plugins start — how to get the provider API and where to read next.
 - [Quick Start](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/quickstart.md): Complete Gradle setup, plugin.yml declaration, and provider retrieval for first-time integration.
-- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Supported baseline for AceLib 1.2.2 (Java 25 / Paper 26.1.2 and 26.2 / Folia 26.1.2 and 26.2 supported), UNVERIFIED for unknown future versions, plus Bedrock dependencies and limitations.
+- [Compatibility](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/compatibility.md): Supported baseline for AceLib 1.3.0 (Java 25 / Paper 26.1.2 and 26.2 / Folia 26.1.2 and 26.2 supported), UNVERIFIED for unknown future versions, plus Bedrock dependencies and limitations.
 - [Provider Lifecycle](https://github.com/smile-minecraft/AceLib/blob/main/docs/consumer/provider-lifecycle.md): How to handle AceLib ready, reload, and disable states by re-acquiring the provider API.
 
 ## Operator
@@ -26,8 +26,8 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 - [Thread Context Safety](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/context.md): Check and dispatch work to the correct thread or region via SafeExecutor and ContextInspector.
 - [Platform Capability](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/platform.md): Detect Paper versus Folia and branch logic via Platform and PlatformCapability.
 - [Configuration](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/config.md): Manage YAML config schemas, defaults, reload, and versioned migrations with ConfigManager.
-- [Message Service](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/message.md): Localized chat, action bar, title, and broadcast messaging via LangManager and MessageService.
-- [Command Model](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/command.md): Describe commands and subcommands with CommandSpec, SubCommandSpec, and ReplySink abstractions.
+- [Message Service](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/message.md): Localized chat, action bar, title, and broadcast messaging via LangManager and MessageService; FormText converts Adventure Components to Bedrock-form-safe strings.
+- [Command Model](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/command.md): Describe commands and subcommands with CommandSpec, SubCommandSpec, and ReplySink abstractions; CommandCatalog shares description-only snapshots with revision tracking.
 - [Event Registry](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/event.md): Region-aware Bukkit event registration with SafeEventRegistry and ListenerPolicy.
 - [Data Store](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/data.md): Persistent data interface with schema migrations, async submission, and lifecycle control via DataStore.
 - [Player Data and Session](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/player.md): Load, track, and persist player sessions and dirty records with PlayerDataService.
@@ -35,7 +35,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 - [GUI](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/gui.md): Open and manage protected inventory GUIs with generation-checked sessions and async updates.
 - [Custom Items](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/item.md): Create, identify, serialize, and migrate custom ItemStacks with AceItemFactory.
 - [Bedrock Players](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/bedrock.md): Detect Bedrock players via Floodgate and query device, input, language, and link state.
-- [Forms](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/form.md): Send Bedrock native forms via FormSpec DSL and receive responses with region-redispatched callbacks.
+- [Forms](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/form.md): Send Bedrock native forms via FormSpec DSL and receive responses with region-redispatched callbacks; Simple buttons support FormImage icons (PATH/URL) with plain-text fallback.
 - [External Integrations](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/external.md): Probe Vault, PlaceholderAPI, LuckPerms, and Floodgate availability via ExternalIntegrationService.
 - [Diagnostics](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/diagnostics.md): Collect module states, error throttling, and diagnostic reports via acelib status and DiagnosticsService.
 

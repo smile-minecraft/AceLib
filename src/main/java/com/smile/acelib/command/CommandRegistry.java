@@ -15,7 +15,7 @@ import java.util.List;
  *   <li>{@link #unregister(String)} — 解除主指令（依名稱或別名）</li>
  *   <li>{@link #dispatch(Sender, String, List)} — 內部 dispatch（測試 / Bukkit adapter 使用）</li>
  *   <li>{@link #tabComplete(Sender, String, List)} — 內部 tab complete</li>
- *   <li>{@link #onPluginDisable()} — 標記停用、清除所有指令</li>
+ *   <li>{@link #onPluginDisable()} — 標記停用（既有指令 map 與冷卻狀態保留）</li>
  * </ul>
  *
  * <h2>執行緒安全</h2>

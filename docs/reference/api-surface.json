@@ -103,6 +103,33 @@
       "mainCallers": "指令 dispatch。"
     },
     {
+      "fqcn": "com.smile.acelib.command.CatalogMeta",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CatalogMeta",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "指令目錄發布元資料值型別（分類、圖示、需確認子指令）；v1 穩定。",
+      "mainCallers": "CommandCatalog.publish；消費者發布指令描述。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CatalogResult",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CatalogResult",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "指令目錄發布結果列舉；v1 凍結常數順序。",
+      "mainCallers": "CommandCatalog.publish。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandCatalog",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandCatalog",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "指令目錄服務介面，只存指令描述、不註冊不執行；v1 承諾相容。",
+      "mainCallers": "消費者發布指令描述；說明頁產生器讀取快照。"
+    },
+    {
       "fqcn": "com.smile.acelib.command.CommandContext",
       "package": "com.smile.acelib.command",
       "simpleName": "CommandContext",
@@ -110,6 +137,15 @@
       "classification": "Supported",
       "reason": "傳遞給 SubCommand 的執行上下文（指令、參數、sender）；指令擴充契約的一部分，v1 穩定。",
       "mainCallers": "SubCommand.execute。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandDoc",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandDoc",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "指令純描述投影值型別（不含 handler／completer／插件實例）；v1 穩定。",
+      "mainCallers": "CommandCatalog.publish／snapshot；說明頁產生器。"
     },
     {
       "fqcn": "com.smile.acelib.command.CommandErrorKind",
@@ -219,6 +255,15 @@
       "classification": "Supported",
       "reason": "子指令規格值型別（名稱、權限、冷卻）；註冊時使用；v1 穩定。",
       "mainCallers": "CommandRegistry.register。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.SubDoc",
+      "package": "com.smile.acelib.command",
+      "simpleName": "SubDoc",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "子指令純描述投影值型別（不含 handler／completer）；v1 穩定。",
+      "mainCallers": "CommandDoc.subcommands；說明頁產生器。"
     },
     {
       "fqcn": "com.smile.acelib.config.AceLibConfig",
@@ -807,6 +852,15 @@
       "mainCallers": "FormService.FormSender.absent；FormServiceImpl。"
     },
     {
+      "fqcn": "com.smile.acelib.form.FormImage",
+      "package": "com.smile.acelib.form",
+      "simpleName": "FormImage",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "Simple 表單按鈕圖示值型別（PATH 資源包路徑／URL 網址；nested Type 列舉）；消費者提供圖示資料，Cumulus 外部型別不外洩。",
+      "mainCallers": "FormSpec.Simple.button(String, FormImage)；CumulusFormTranslator 圖示映射。"
+    },
+    {
       "fqcn": "com.smile.acelib.form.FormResponse",
       "package": "com.smile.acelib.form",
       "simpleName": "FormResponse",
@@ -1021,6 +1075,24 @@
       "classification": "Supported",
       "reason": "物品 schema 版本值型別（major.minor）；v1 凍結結構。",
       "mainCallers": "ItemMigration；ItemMigrationResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.FormText",
+      "package": "com.smile.acelib.message",
+      "simpleName": "FormText",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "Adventure Component → 基岩表單可安全顯示字串的靜態渲染入口（click/hover 移除、hex 降 16 色、translatable 解析、換行 §r、長度截斷）；下游同一份語系餵聊天與表單。",
+      "mainCallers": "消費者；MessageService.formatFormText。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.FormTextOptions",
+      "package": "com.smile.acelib.message",
+      "simpleName": "FormTextOptions",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "表單文字渲染選項值型別（click 提示開關、可見字元上限、locale；defaults 為 false/0/null）。",
+      "mainCallers": "FormText.render；MessageService.formatFormText。"
     },
     {
       "fqcn": "com.smile.acelib.message.MessageService",

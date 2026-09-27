@@ -41,6 +41,7 @@ Thumbs.db
 
 # Agent memory (do not commit local L1 memory)
 .opencode/
+.ultrawork/
 
 # Local secrets
 *.env

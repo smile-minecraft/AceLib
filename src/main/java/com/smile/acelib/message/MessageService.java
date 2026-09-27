@@ -40,6 +40,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       與 {@link PlatformCapability}</li>
  *   <li>{@link #format(String, Map)} — 純文字格式化（含 {@code message.prefix}）</li>
  *   <li>{@link #formatConsole(String, Map)} — console 專用格式（不套 prefix）</li>
+ *   <li>{@link #formatFormText(String, Map, Locale)} /
+ *       {@link #formatFormText(String, Map, FormTextOptions)} — 表單文字格式化
+ *       （基岩表單可安全顯示字串，不套 prefix）</li>
  *   <li>{@link #sendChat(Player, String, Map)} — 玩家 chat</li>
  *   <li>{@link #sendActionBar(Player, String, Map)} — 玩家 action bar</li>
  *   <li>{@link #sendTitle(Player, String, Map)} — 玩家 title</li>
@@ -72,6 +75,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       API 拋 IllegalStateException 的安全降級</li>
  *   <li>{@code ACELIB-MSG-004} — 基岩玩家查詢失敗（lookup / getPlayerInfo 拋例外或
  *       無法判定）；視為非基岩玩家並沿用原始 Component，但留下可追蹤 warning</li>
+ *   <li>{@code ACELIB-MSG-005} — 表單文字渲染失敗；回傳純文字版本，不中斷執行</li>
  * </ul>
  *
  * <h2>執行緒安全</h2>
@@ -315,6 +319,104 @@ public final class MessageService {
         Objects.requireNonNull(key, "key");
         String body = renderBody(key, vars, false);
         return body == null ? "" : body;
+    }
+
+    /**
+     * 表單文字格式化（基岩表單可安全顯示字串）：讀取 rich template
+     * （MiniMessage 字串），經安全變數替換後以 {@link FormText} 規則轉換。
+     *
+     * <p>與 {@link #format(String, Map)} 不同，本方法<strong>不</strong>套用
+     * {@code message.prefix}，且 click 提示使用插件語系
+     * （{@code message.bedrock.fallback.*}，沿用既有安全預設文字行為）。
+     * 本 overload 不附加 click 提示、不截斷。</p>
+     *
+     * <p><strong>多載歧義提醒</strong>：另有
+     * {@link #formatFormText(String, Map, FormTextOptions)} 多載；
+     * 第三個參數若要傳 {@code null}，字面 {@code null} 會因多載歧義而無法編譯，
+     * 請先指派給具明確型別的變數（{@code Locale} 或 {@code FormTextOptions}）再傳入。</p>
+     *
+     * <p>錯誤處理（與 {@link #format} 一致）：key 為 null 拋
+     * {@link NullPointerException}；key 缺失回傳空字串 +
+     * {@code ACELIB-MSG-001}；解析失敗回傳純文字退回 +
+     * {@code ACELIB-MSG-003}；渲染失敗回傳純文字退回 +
+     * {@code ACELIB-MSG-005}。純格式化方法不受服務啟用狀態 guard 影響。</p>
+     *
+     * @param key    訊息 key；不可為 null
+     * @param vars   變數替換表；可為 null
+     * @param locale 翻譯 locale；可為 null（→ 預設語系）
+     * @return 表單可安全顯示的字串；key 缺失時為空字串
+     * @since 1.3.0
+     */
+    public String formatFormText(String key, Map<String, Object> vars, Locale locale) {
+        Objects.requireNonNull(key, "key");
+        Locale effective = locale != null ? locale : lang.getDefaultLocale();
+        Component component = loadFormTextComponent(key, vars);
+        if (component == null) {
+            return "";
+        }
+        return FormText.renderInternal(component, effective, false, 0, this::buildBedrockHint);
+    }
+
+    /**
+     * 表單文字格式化（完整選項）：同
+     * {@link #formatFormText(String, Map, Locale)}，另依
+     * {@link FormTextOptions} 決定是否附加插件語系 click 提示、
+     * 可見字元上限與 locale（null locale → 預設語系）。
+     * 多載歧義提醒見 {@link #formatFormText(String, Map, Locale)}。
+     *
+     * @param key     訊息 key；不可為 null
+     * @param vars    變數替換表；可為 null
+     * @param options 渲染選項；不可為 null
+     * @return 表單可安全顯示的字串；key 缺失時為空字串
+     * @throws IllegalArgumentException 當 {@code options} 為 null
+     * @since 1.3.0
+     */
+    public String formatFormText(String key, Map<String, Object> vars, FormTextOptions options) {
+        Objects.requireNonNull(key, "key");
+        if (options == null) {
+            throw new IllegalArgumentException("options must not be null");
+        }
+        Locale effective = options.locale() != null ? options.locale() : lang.getDefaultLocale();
+        Component component = loadFormTextComponent(key, vars);
+        if (component == null) {
+            return "";
+        }
+        return FormText.renderInternal(component, effective,
+            options.clickHints(), options.maxLength(), this::buildBedrockHint);
+    }
+
+    /**
+     * 讀取 rich template 並做安全替換與 MiniMessage 解析（不套 prefix）。
+     *
+     * @return 解析後的 Component；key 缺失或讀取失敗時回傳 null
+     *     （呼叫端回空字串，錯誤碼已在本方法內記錄）
+     */
+    private Component loadFormTextComponent(String key, Map<String, Object> vars) {
+        Optional<String> opt;
+        try {
+            opt = lang.get(key, null);
+        } catch (Throwable t) {
+            safeLog(Level.WARNING,
+                "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key + ": " + t.getMessage(),
+                t);
+            return null;
+        }
+        if (opt.isEmpty()) {
+            safeLog(Level.WARNING,
+                "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
+            return null;
+        }
+        String template = opt.get();
+        if (template == null) {
+            safeLog(Level.WARNING,
+                "[" + ERR_FORMAT_ERROR + "] lang.get returned Optional with null body for key="
+                    + key);
+            return null;
+        }
+        String substituted = safeSubstitute(template, vars);
+        Component parsed = deserializeOrNull(substituted, null, ERR_FORMAT_ERROR,
+            "formatFormText parse failed for key=" + key);
+        return parsed == null ? Component.text(substituted) : parsed;
     }
 
     // -----------------------------------------------------------------

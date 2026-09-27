@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibFormCompatibilityProbe
+main: com.example.acelibformprobe.FormCompatibilityProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 表單相容性探針：經 FormService 發送固定 FormSpec 案例供 Bedrock 客戶端觀察
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+commands:
+  fprobe:
+    description: 表單相容性探針指令（list / send）
+    usage: /fprobe <list | send [player] [caseId]>
+    permission: acelibformprobe.use
+permissions:
+  acelibformprobe.use:
+    description: 使用 /fprobe 探針指令
+    default: op

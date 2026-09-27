@@ -103,9 +103,15 @@ public final class ErrorCodeRegistry {
         // MSG
         m.put("ACELIB-MSG-001", new ErrorCodeInfo(ErrorCategory.MESSAGE,
             "訊息服務內部錯誤"));
+        m.put("ACELIB-MSG-005", new ErrorCodeInfo(ErrorCategory.MESSAGE,
+            "表單文字渲染失敗，已退回純文字"));
         // CMD
         m.put("ACELIB-CMD-001", new ErrorCodeInfo(ErrorCategory.COMMAND,
             "指令執行錯誤"));
+        m.put("ACELIB-CMD-013", new ErrorCodeInfo(ErrorCategory.COMMAND,
+            "跨擁有者同名指令描述並存"));
+        m.put("ACELIB-CMD-014", new ErrorCodeInfo(ErrorCategory.COMMAND,
+            "指令目錄服務未就緒或已停用"));
         // EVT
         m.put("ACELIB-EVT-001", new ErrorCodeInfo(ErrorCategory.EVENT,
             "事件監聽錯誤"));
@@ -127,6 +133,8 @@ public final class ErrorCodeRegistry {
             "表單服務尚未啟用"));
         m.put("ACELIB-FORM-002", new ErrorCodeInfo(ErrorCategory.FORM,
             "表單服務已停用"));
+        m.put("ACELIB-FORM-003", new ErrorCodeInfo(ErrorCategory.FORM,
+            "按鈕圖示轉換失敗，已退回純文字"));
         KNOWN = Map.copyOf(m);
     }
 

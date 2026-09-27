@@ -155,6 +155,48 @@ message.bedrock.fallback.copy_to_clipboard: 'Copy to clipboard: <payload>'
 
 > **Beta 限制**：相容性觀察基於 Folia `26.2-4` + Geyser `2.11.2-b1232` + Floodgate `2.2.5-SNAPSHOT` 的探索性實機測試，結果不作為穩定版保證。Bedrock 的 click 失效與 hover 未驗證狀態以[相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)為準，文件不把觀察寫成穩定承諾。
 
+## 表單文字轉換（FormText）
+
+`FormText`（`com.smile.acelib.message`）把 Adventure Component 轉為基岩表單可安全顯示的字串，讓同一份 MiniMessage 語系同時餵 Java 聊天與基岩表單。靜態入口可在任意執行緒呼叫，不依賴插件啟用狀態：
+
+```java
+import com.smile.acelib.message.FormText;
+import com.smile.acelib.message.FormTextOptions;
+
+String label = FormText.render(Component.text("hello"), FormTextOptions.defaults());
+```
+
+`FormTextOptions` 只有三個欄位：`clickHints`（是否在原本帶 click 的文字後附加可讀提示；靜態路徑用內建英文提示）、`maxLength`（可見字元上限，色碼不計入、省略號 `…` 計入；`0` 不截斷，負數以 `IllegalArgumentException` 拒絕）、`locale`（`translatable` 解析用；靜態路徑為 null 時用 `Locale.ROOT`）。
+
+`MessageService.formatFormText` 讀語言檔模板走同一條管線，有兩個多載：
+
+```java
+// 不附加 click 提示、不截斷；locale 為 null 時用預設語系
+String a = messages.formatFormText("form.welcome", Map.of("name", name), Locale.TAIWAN);
+
+// 完整選項：插件語系 click 提示、可見字元上限與 locale
+String b = messages.formatFormText("form.welcome", Map.of("name", name),
+    new FormTextOptions(true, 120, Locale.TAIWAN));
+```
+
+注意以下四點：
+
+- **變數表型別是 `Map<String, Object>`**（與 `format` 一致），不是 `Map<String, String>`。
+- **不套 `message.prefix`**：表單內文不需要聊天前綴；`formatConsole` 同樣不套 prefix，只有玩家導向的 `format` 會套。
+- **缺 key 回空字串**：與 `format` 一致，記錄 `ACELIB-MSG-001` warning，不中斷執行。
+- **多載歧義**：第三個參數若直接傳字面 `null`，編譯器無法在 `Locale` 與 `FormTextOptions` 之間選擇；請先指派給具明確型別的變數再傳入（例如 `Locale locale = null;`）。
+
+轉換規則（完整定義見 `FormText` Javadoc）：
+
+- click 遞迴移除（含 hover 內 Component payload 中的 click）；`clickHints` 為 true 才在原文字後附加可讀提示。
+- hover 移除（表單沒有 hover，hover 內容不進入輸出）。
+- hex 色、gradient、rainbow 一律降為最接近的 16 色具名色。
+- 粗體、斜體、混淆保留；底線與刪除線移除。
+- `translatable` 以全域翻譯依 locale 解析，解析不到用 fallback，都沒有則保留 key。
+- 換行保留，每行結尾補 `§r`，最終輸出亦以 `§r` 結尾；跨行延續的樣式在下一行重新套用。
+- `maxLength` 為正值時以完整可見字元計數截斷（色碼與換行不計入），不切斷代理對、組合字元序列或 emoji。
+- 渲染內部失敗時記錄 `ACELIB-MSG-005` warning 並回傳純文字版本，不拋例外。
+
 ## 相關頁面
 
 - [設定檔](config.md)

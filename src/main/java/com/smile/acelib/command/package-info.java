@@ -28,6 +28,12 @@
  *   <li>{@link com.smile.acelib.command.CommandException} /
  *       {@link com.smile.acelib.command.CommandErrorKind}（Supported）—
  *       指令錯誤與 {@code ACELIB-CMD-*} 錯誤代碼</li>
+ *   <li>{@link com.smile.acelib.command.CommandCatalog} /
+ *       {@link com.smile.acelib.command.CommandDoc} /
+ *       {@link com.smile.acelib.command.SubDoc} /
+ *       {@link com.smile.acelib.command.CatalogMeta} /
+ *       {@link com.smile.acelib.command.CatalogResult}（Supported）— 只存指令描述的
+ *       共用目錄（不註冊、不執行；快照深層不可變）</li>
  * </ul>
  *
  * <h2>執行緒與 Folia 契約</h2>
@@ -52,7 +58,9 @@
  * <h2>錯誤代碼</h2>
  * <p>所有指令錯誤以 {@link com.smile.acelib.command.CommandException} 表達，
  * 攜帶 {@code ACELIB-CMD-001} ~ {@code ACELIB-CMD-011} 標準代碼
- * （見 {@link com.smile.acelib.command.CommandErrorKind}）。</p>
+ * （見 {@link com.smile.acelib.command.CommandErrorKind}）。
+ * 指令目錄另有 {@code ACELIB-CMD-013}（跨擁有者同名並存）與
+ * {@code ACELIB-CMD-014}（目錄服務未就緒或已停用）。</p>
  *
  * @since 1.0.0
  */

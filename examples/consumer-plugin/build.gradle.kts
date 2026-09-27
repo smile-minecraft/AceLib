@@ -3,10 +3,10 @@
 //
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
 // AceLib 的 GitHub repository 已公開。本 fixture 使用「本地 mavenLocal artifact」解析
-// （com.smile:acelib:1.2.2），因為它是貢獻者本地開發用途；公開安裝座標為
-// JitPack com.github.smile-minecraft:AceLib:v1.2.2（對應 v1.2.2 tag）。
+// （com.smile:acelib:1.3.0），因為它是貢獻者本地開發用途；公開安裝座標為
+// JitPack com.github.smile-minecraft:AceLib:v1.3.0（對應 v1.3.0 tag）。
 // 說明：本 fixture 是編譯驗證用途，不發布、不宣稱外部可用；JitPack 是否提供編譯用 API
-// v1.2.2 tag 已於 GitHub 建立並由 JitPack 建置完成（2026-09-24 發布）。
+// v1.3.0 tag 於 GitHub Release 建立時同步建立，由 JitPack 建置提供。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
@@ -29,9 +29,9 @@ repositories {
 }
 
 dependencies {
-    // AceLib 1.2.2 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.2.2，僅供貢獻者本地開發，
-    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.2.2。
-    compileOnly("com.smile:acelib:1.2.2")
+    // AceLib 1.3.0 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.3.0，僅供貢獻者本地開發，
+    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.3.0（對應 v1.3.0 tag）。
+    compileOnly("com.smile:acelib:1.3.0")
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
@@ -203,12 +203,32 @@ val verifyConsumerDocs by tasks.registering {
             "發現 task-history 文字：\n" + taskHistoryHits.joinToString("\n")
         }
 
-        // 4) 版本一致：README 必須以實際 build.gradle.kts 的 version 為準
+        // 4) 版本一致：以實際 build.gradle.kts 的 version 為準。
+        //    `-PacelibDocsVersion=<version>` 可覆寫本次檢查的受測版本，僅供驗證
+        //    門禁自身的雙路徑（預覽版／正式版本）嚴格度，不得作為日常放寬手段。
         val buildScript = File(repoRoot, "build.gradle.kts").readText()
         val versionMatch = Regex("""version\s*=\s*"([^"]+)"""").find(buildScript)
-        val expectedVersion = versionMatch?.groupValues?.get(1)
+        val configuredVersion = versionMatch?.groupValues?.get(1)
             ?: throw IllegalStateException("build.gradle.kts 找不到 version 欄位")
+        val overriddenVersion = (findProperty("acelibDocsVersion") as String?)?.trim().orEmpty()
+        val expectedVersion = overriddenVersion.ifEmpty { configuredVersion }
+        val isPreview = expectedVersion.endsWith("-SNAPSHOT")
+        val expectedBase = expectedVersion.substringBefore("-")
+        // 最新已發布版本：CHANGELOG 第一個不帶 -SNAPSHOT 的 `## [x.y.z]` section。
+        // 預覽版期間文件必須保留該版本的安裝座標，不得改成預覽版座標。
+        val changelogFile = File(repoRoot, "CHANGELOG.md")
+        require(changelogFile.exists()) { "找不到 CHANGELOG.md：$changelogFile" }
+        val changelogText = changelogFile.readText()
+        val latestRelease = Regex("""^##\s+\[(\d+\.\d+\.\d+)\]""", RegexOption.MULTILINE)
+            .findAll(changelogText).map { it.groupValues[1] }.firstOrNull()
+            ?: throw IllegalStateException("CHANGELOG.md 找不到已發布版本 section '## [x.y.z]'")
+        val releasedJitpackCoordinate = "com.github.smile-minecraft:AceLib:v$latestRelease"
         val jitpackCoordinate = "com.github.smile-minecraft:AceLib:v$expectedVersion"
+        // 否定語境：含這些字樣的行視為「澄清未發布」，不算發布宣稱。
+        fun hasNegation(line: String): Boolean {
+            return listOf("未", "不", "非", "沒有", "尚未", "not", "n't", "no ")
+                .any { line.contains(it, ignoreCase = true) }
+        }
         for (readmeFile in readmes) {
             val readmeText = readmeFile.readText()
             val readmeRel = readmeFile.relativeTo(repoRoot).invariantSeparatorsPath
@@ -233,17 +253,42 @@ val verifyConsumerDocs by tasks.registering {
                 }
             }
             // 不得把 current-state 寫成未發布／Release Candidate（歷史段落如 0.5.0 封存、RC 同步說明不含「未發布」，不誤判）。
-            val unpublishedCurrentState = Regex("""v?""" + Regex.escape(expectedVersion) + """[^\n]*(未發布|Release Candidate[^\n]*尚未發布)""")
-            require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
-                "$readmeRel 不得把 $expectedVersion 現況宣稱為未發布／Release Candidate"
-            }
-            // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + 當前版本座標）。
-            // 座標以根專案 version 為準（expectedVersion），避免版本前進時門禁本身寫死舊版號。
-            require(readmeText.contains("jitpack.io", ignoreCase = true)) {
-                "$readmeRel 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
-            }
-            require(readmeText.contains(jitpackCoordinate)) {
-                "$readmeRel 必須包含公開 JitPack 座標 $jitpackCoordinate"
+            // 正式版本路徑：維持現行全部檢查，一行都不放寬。
+            if (!isPreview) {
+                val unpublishedCurrentState = Regex("""v?""" + Regex.escape(expectedVersion) + """[^\n]*(未發布|Release Candidate[^\n]*尚未發布)""")
+                require(!unpublishedCurrentState.containsMatchIn(readmeText)) {
+                    "$readmeRel 不得把 $expectedVersion 現況宣稱為未發布／Release Candidate"
+                }
+                // 正向 current-state：README 必須描述公開 JitPack 安裝方式（repository + 當前版本座標）。
+                // 座標以根專案 version 為準（expectedVersion），避免版本前進時門禁本身寫死舊版號。
+                require(readmeText.contains("jitpack.io", ignoreCase = true)) {
+                    "$readmeRel 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
+                }
+                require(readmeText.contains(jitpackCoordinate)) {
+                    "$readmeRel 必須包含公開 JitPack 座標 $jitpackCoordinate"
+                }
+            } else {
+                // 預覽版路徑：安裝說明必須仍然真實——保留已發布版本的 JitPack 座標，
+                // 且不得把預覽版寫成公開座標或已發布狀態。
+                require(readmeText.contains("jitpack.io", ignoreCase = true)) {
+                    "$readmeRel 必須包含 JitPack repository（maven(\"https://jitpack.io\")）"
+                }
+                require(readmeText.contains(releasedJitpackCoordinate)) {
+                    "$readmeRel 在預覽版期間仍須包含已發布版本 $latestRelease 的公開 JitPack 座標 $releasedJitpackCoordinate（安裝說明必須真實）"
+                }
+                require(!readmeText.contains(jitpackCoordinate)) {
+                    "$readmeRel 不得把預覽版 $expectedVersion 寫成公開 JitPack 座標（預覽版尚未發布）"
+                }
+                val previewPublishedClaim = readmeFile.readLines().any { line ->
+                    line.contains(expectedVersion)
+                        && (line.contains("已發布") || line.contains("提供可下載")
+                            || line.contains("published", ignoreCase = true)
+                            || line.contains("released", ignoreCase = true))
+                        && !hasNegation(line)
+                }
+                require(!previewPublishedClaim) {
+                    "$readmeRel 不得把預覽版 $expectedVersion 描述成已發布（須以開發中／尚未發布措辭）"
+                }
             }
             // 負向 current-state：不得宣稱已發布至 Maven Central。
             // 本機 mavenLocal() 座標僅供貢獻者本地開發，不代表 Maven Central 已發布。
@@ -263,30 +308,62 @@ val verifyConsumerDocs by tasks.registering {
 
         // 4b) CHANGELOG 目前 release section 檢查：避免只檢查 README 而漏掉 CHANGELOG 的 stale RC 描述。
         // 僅擷取目前版本 section（從 `## [<version>]` 到下一個同層 `## ` heading），不掃描歷史版本段落。
-        val changelog = File(repoRoot, "CHANGELOG.md")
-        require(changelog.exists()) { "找不到 CHANGELOG.md：$changelog" }
-        val changelogLines = changelog.readLines()
-        val currentSectionStart = changelogLines.indexOfFirst {
-            it.matches(Regex("##\\s+\\[" + Regex.escape(expectedVersion) + "].*"))
-        }
-        require(currentSectionStart >= 0) {
-            "CHANGELOG.md 找不到目前版本 section '## [$expectedVersion]'"
-        }
-        val currentSectionEnd = changelogLines.subList(currentSectionStart + 1, changelogLines.size)
-            .indexOfFirst { it.startsWith("## ") }
-            .let { if (it < 0) changelogLines.size else currentSectionStart + 1 + it }
-        val currentSection = changelogLines.subList(currentSectionStart, currentSectionEnd).joinToString("\n")
-        require(currentSection.contains(expectedVersion)) {
-            "CHANGELOG.md 目前 $expectedVersion section 必須提到版本 $expectedVersion"
-        }
-        require(currentSection.contains("GitHub Release")) {
-            "CHANGELOG.md 目前 $expectedVersion section 必須描述 GitHub Release 狀態"
-        }
-        // 拒絕目前 release section 的 current-state RC 表述（歷史 section 不在此範圍，不誤判）。
-        // 以明確 marker「本 RC」／「Release Candidate」判定，不用廣泛的 !contains("RC") 破壞歷史版本。
-        val changelogCurrentRc = Regex("""本\s*RC|Release Candidate""")
-        require(!changelogCurrentRc.containsMatchIn(currentSection)) {
-            "CHANGELOG.md 目前 $expectedVersion section 不得把現況宣稱為本 RC／Release Candidate"
+        // 正式版本路徑維持現行檢查；預覽版路徑要求預覽 section 誠實標示開發中／尚未發布，
+        // 且最新已發布版本的 section 必須保留。
+        val changelogLines = changelogText.lines()
+        if (!isPreview) {
+            val currentSectionStart = changelogLines.indexOfFirst {
+                it.matches(Regex("##\\s+\\[" + Regex.escape(expectedVersion) + "].*"))
+            }
+            require(currentSectionStart >= 0) {
+                "CHANGELOG.md 找不到目前版本 section '## [$expectedVersion]'"
+            }
+            val currentSectionEnd = changelogLines.subList(currentSectionStart + 1, changelogLines.size)
+                .indexOfFirst { it.startsWith("## ") }
+                .let { if (it < 0) changelogLines.size else currentSectionStart + 1 + it }
+            val currentSection = changelogLines.subList(currentSectionStart, currentSectionEnd).joinToString("\n")
+            require(currentSection.contains(expectedVersion)) {
+                "CHANGELOG.md 目前 $expectedVersion section 必須提到版本 $expectedVersion"
+            }
+            require(currentSection.contains("GitHub Release")) {
+                "CHANGELOG.md 目前 $expectedVersion section 必須描述 GitHub Release 狀態"
+            }
+            // 拒絕目前 release section 的 current-state RC 表述（歷史 section 不在此範圍，不誤判）。
+            // 以明確 marker「本 RC」／「Release Candidate」判定，不用廣泛的 !contains("RC") 破壞歷史版本。
+            val changelogCurrentRc = Regex("""本\s*RC|Release Candidate""")
+            require(!changelogCurrentRc.containsMatchIn(currentSection)) {
+                "CHANGELOG.md 目前 $expectedVersion section 不得把現況宣稱為本 RC／Release Candidate"
+            }
+        } else {
+            val previewSectionStart = changelogLines.indexOfFirst {
+                it.matches(Regex("##\\s+\\[" + Regex.escape(expectedVersion) + "].*"))
+            }
+            require(previewSectionStart >= 0) {
+                "CHANGELOG.md 找不到預覽版 section '## [$expectedVersion]'"
+            }
+            val previewSectionEnd = changelogLines.subList(previewSectionStart + 1, changelogLines.size)
+                .indexOfFirst { it.startsWith("## ") }
+                .let { if (it < 0) changelogLines.size else previewSectionStart + 1 + it }
+            val previewSection = changelogLines.subList(previewSectionStart, previewSectionEnd).joinToString("\n")
+            require(previewSection.contains(expectedVersion)) {
+                "CHANGELOG.md 預覽版 $expectedVersion section 必須提到版本 $expectedVersion"
+            }
+            require(previewSection.contains("GitHub Release")) {
+                "CHANGELOG.md 預覽版 $expectedVersion section 必須誠實描述 GitHub Release 狀態（尚未建立）"
+            }
+            require(previewSection.contains("尚未發布") || previewSection.contains("開發中")
+                || previewSection.contains("未發布")) {
+                "CHANGELOG.md 預覽版 $expectedVersion section 必須明確標示為開發中／尚未發布"
+            }
+            val previewRc = Regex("""本\s*RC|Release Candidate""")
+            require(!previewRc.containsMatchIn(previewSection)) {
+                "CHANGELOG.md 預覽版 $expectedVersion section 不得把現況宣稱為本 RC／Release Candidate"
+            }
+            require(changelogLines.any {
+                it.matches(Regex("##\\s+\\[" + Regex.escape(latestRelease) + "].*"))
+            }) {
+                "CHANGELOG.md 必須保留最新已發布版本 section '## [$latestRelease]'"
+            }
         }
 
         // 4c) 版本受檔頁面一致：quickstart / compatibility / operator / release-artifacts /
@@ -320,6 +397,9 @@ val verifyConsumerDocs by tasks.registering {
             Regex("""^\s*Version:\s*v?(\d+\.\d+\.\d+)\s*$""")
         )
         val docVersionDrift = mutableListOf<String>()
+        // 允許的版本基線：正式版本路徑維持嚴格相等；預覽版路徑允許已發布版本
+        //（頁面保留真實的安裝座標）與預覽版基線（正規化後比對，-SNAPSHOT 後綴不造成漂移）。
+        val allowedBases = if (isPreview) setOf(expectedBase, latestRelease) else setOf(expectedVersion)
         for (page in versionedPages) {
             page.readLines().forEachIndexed { index, line ->
                 if (line.contains(versionHistoryMarker) && line.trimStart().startsWith("Git tag")) {
@@ -328,7 +408,7 @@ val verifyConsumerDocs by tasks.registering {
                 for (pattern in aceLibVersionPatterns) {
                     for (match in pattern.findAll(line)) {
                         val found = match.groupValues[1]
-                        if (found != expectedVersion) {
+                        if (found !in allowedBases) {
                             docVersionDrift.add(
                                 "${page.relativeTo(repoRoot)}:${index + 1}: " +
                                     "'${match.value}' 的版本 $found 與目前版本 $expectedVersion 不一致"
@@ -341,6 +421,27 @@ val verifyConsumerDocs by tasks.registering {
         require(docVersionDrift.isEmpty()) {
             "文件頁面存在與目前版本 $expectedVersion 不一致的 AceLib 版本語境：\n" +
                 docVersionDrift.joinToString("\n")
+        }
+        // 預覽版期間：版本受檔頁面不得出現預覽版的公開 JitPack 座標
+        //（`v<previewBase>` 尚未發布；本機驗證請用 mavenLocal 座標）。
+        // consumer fixture README 以佔位 `v<release>` 描述該座標，不含版本數字，不在此限。
+        if (isPreview) {
+            val previewJitpackCoord = "com.github.smile-minecraft:AceLib:v$expectedBase"
+            val previewCoordPages = versionedPages.filter {
+                it.name != "README.md" || it.parentFile.name != "consumer-plugin"
+            }
+            val previewCoordHits = previewCoordPages.flatMap { page ->
+                page.readLines().mapIndexedNotNull { index, line ->
+                    if (line.contains(previewJitpackCoord)) {
+                        "${page.relativeTo(repoRoot)}:${index + 1}: 不得在預覽版期間使用尚未發布的 JitPack 座標 '$previewJitpackCoord'"
+                    } else {
+                        null
+                    }
+                }
+            }
+            require(previewCoordHits.isEmpty()) {
+                "文件頁面含有預覽版的公開 JitPack 座標：\n" + previewCoordHits.joinToString("\n")
+            }
         }
 
         // 5) docs 導航：consumer quickstart 必須存在（IA 預留給本任務的頁面）

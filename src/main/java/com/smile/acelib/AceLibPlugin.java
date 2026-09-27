@@ -4,6 +4,8 @@ import com.smile.acelib.command.AceLibStatusHandler;
 import com.smile.acelib.bedrock.BedrockService;
 import com.smile.acelib.command.BukkitCommandBridge;
 import com.smile.acelib.command.BukkitReplySink;
+import com.smile.acelib.command.CatalogMeta;
+import com.smile.acelib.command.CommandCatalog;
 import com.smile.acelib.command.CommandRegistryImpl;
 import com.smile.acelib.command.CommandSpec;
 import com.smile.acelib.command.SubCommandSpec;
@@ -39,6 +41,8 @@ import com.smile.acelib.world.WorldServiceUnavailableImpl;
 import com.smile.acelib.world.WorldErrorCode;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -54,6 +58,8 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -174,6 +180,11 @@ public class AceLibPlugin extends JavaPlugin {
      * plugin disabled 後仍派送到 AceLib 的 dispatcher。
      */
     private volatile BukkitCommandBridge commandBridge;
+    /** 指令目錄實例：onEnable 建立並自我發布，reload 保留，onDisable 清空並標記不可用。 */
+    private volatile CommandCatalog commandCatalog;
+    /** 指令目錄撤下 listener reference：onDisable 時確保不殘留於 HandlerList。 */
+    private volatile Listener catalogDisableListener;
+    private volatile boolean catalogDisableListenerRegistered;
     /**
      * world/block/entity/teleport 安全 facade。
      *
@@ -302,6 +313,8 @@ public class AceLibPlugin extends JavaPlugin {
         this.guiService = GuiService.forUnavailable(GuiErrorCode.NOT_READY);
         // bedrockService 的 NOT_READY unavailable facade；於 onEnable 後被 bindBedrockService() 替換。
         this.bedrockService = BedrockService.forUnavailable(BedrockService.NOT_READY);
+        // commandCatalog 的 unavailable 退回實例；於 onEnable 後被 bindCommandCatalog() 替換。
+        this.commandCatalog = CommandCatalog.forUnavailable();
     }
 
     // ---------------------------------------------------------------------
@@ -428,6 +441,7 @@ public class AceLibPlugin extends JavaPlugin {
         // v0.1.0：建立管理指令系統（/acelib status 等）。在 player listener 註冊
         // 之前先建立並 attach bridge；PluginCommand 的取得來自 plugin.yml，
         // 與 player listener 註冊時機無依賴關係。
+        bindCommandCatalog();
         bindCommandFramework();
 
         // 5. 發佈 facade（攜帶已 bind 的 worldService + guiService + externalService；對齊 reload 路徑）
@@ -439,6 +453,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.guiService,
             this.externalService,
             this.bedrockService,
+            this.commandCatalog,
             () -> ready,
             () -> reload()
         );
@@ -510,6 +525,9 @@ public class AceLibPlugin extends JavaPlugin {
         // {@code ACELIB-CMD-009 REGISTRY_DISABLED} 而非靜默執行。
         unbindCommandFramework();
 
+        // 指令目錄：解除撤下 listener 並清空目錄、標記不可用（舊參考不可再寫入）。
+        unbindCommandCatalog();
+
         if (oldPlayerService != null) {
             try {
                 oldPlayerService.shutdown();
@@ -539,7 +557,7 @@ public class AceLibPlugin extends JavaPlugin {
         this.server = null;
         this.platformDetector = null;
         // 保留 SHUTDOWN worldService 與 guiService reference，避免 double-fork 既有 contract。
-        this.api = AceLibApi.shutDown(this.worldService, this.guiService);
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog);
         // 已持有 provider 的呼叫端改讀 shutdown facade（與 plugin.getApi() 一致），
         // 再清除 plugin 端 reference 協助 GC。
         updateApiProvider(this.api);
@@ -1040,6 +1058,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.guiService,
             this.externalService,
             this.bedrockService,
+            this.commandCatalog,
             () -> ready,
             () -> reload()
         );
@@ -1283,6 +1302,8 @@ public class AceLibPlugin extends JavaPlugin {
         // 4. 管理指令框架解除（與 onDisable 同序：listener 解除後、player 服務 shutdown 前）。
         //    unbindCommandFramework 內部已 try/catch。
         unbindCommandFramework();
+        // 指令目錄 listener 解除 + 目錄清空並標記不可用（與 onDisable 同序）。
+        try { unbindCommandCatalog(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): catalog unbind failed (ignored): " + t); }
         // 5. player 服務 shutdown
         if (oldPlayerService != null) {
             try {
@@ -1301,7 +1322,7 @@ public class AceLibPlugin extends JavaPlugin {
 
         // 7. 切換 cached facade 為 shutdown，並讓已持有 provider 的呼叫端讀到 shutdown 語意
         //    （與 onDisable 末尾一致：updateApiProvider 更新 provider 內部快照，再清 reference）。
-        this.api = AceLibApi.shutDown(this.worldService, this.guiService);
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog);
         updateApiProvider(this.api);
         this.apiProvider = null;
 
@@ -1469,6 +1490,7 @@ public class AceLibPlugin extends JavaPlugin {
             .subCommand(statusSpec)
             .build();
         registry.register(rootSpec);
+        publishSelfToCatalog(rootSpec);
 
         BukkitCommandBridge bridge = new BukkitCommandBridge(registry);
         PluginCommand attached = bridge.attach(this, ADMIN_COMMAND_NAME);
@@ -1524,6 +1546,108 @@ public class AceLibPlugin extends JavaPlugin {
         }
         this.commandRegistry = null;
         this.commandBridge = null;
+    }
+
+    /**
+     * 建立指令目錄並準備撤下 listener。
+     *
+     * <p>於 onEnable（管理指令框架之前）呼叫，建立可用狀態的目錄實例與
+     * {@link CatalogDisableListener}；listener 註冊延後到
+     * {@link #onPluginReady()}。reload 不呼叫本方法（目錄純資料保留）。</p>
+     */
+    private void bindCommandCatalog() {
+        this.commandCatalog = CommandCatalog.forProduction();
+        this.catalogDisableListener = new CatalogDisableListener();
+        this.catalogDisableListenerRegistered = false;
+        logFine("command catalog bound");
+    }
+
+    /**
+     * 解除指令目錄：先解除撤下 listener 註冊，再清空目錄並標記不可用。
+     *
+     * <p>清空後透過舊參考再發布一律回 {@code REJECTED}。本方法冪等，
+     * 內部每一步獨立保護、不拋例外。</p>
+     */
+    private void unbindCommandCatalog() {
+        Listener listener = this.catalogDisableListener;
+        if (listener != null) {
+            try {
+                HandlerList.unregisterAll(listener);
+            } catch (Throwable t) {
+                logFine("catalogDisableListener unregister failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.catalogDisableListener = null;
+        this.catalogDisableListenerRegistered = false;
+        CommandCatalog catalog = this.commandCatalog;
+        if (catalog != null) {
+            try {
+                catalog.shutdown();
+            } catch (Throwable t) {
+                logFine("commandCatalog.shutdown failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 把 {@code /acelib} 管理指令的同一份 {@link CommandSpec} 投影發布進目錄。
+     *
+     * <p>只取描述性欄位（名稱、別名、描述、用法、權限、分類、子指令），handler 與
+     * completer 不進入目錄。{@code status} 子指令不需二次確認，故確認集合為空。
+     * 本發布不改變 {@code /acelib} 的既有執行行為；失敗只記錄、不中斷啟用流程。</p>
+     *
+     * @param rootSpec {@link #bindCommandFramework()} 使用的同一份 root spec
+     */
+    private void publishSelfToCatalog(CommandSpec rootSpec) {
+        CommandCatalog catalog = this.commandCatalog;
+        if (catalog == null || rootSpec == null) {
+            return;
+        }
+        CatalogMeta meta = new CatalogMeta("admin", Optional.empty(), Set.of());
+        try {
+            catalog.publish(this, rootSpec, meta);
+        } catch (Throwable t) {
+            logFine("catalog self-publish of /acelib failed (ignored): " + t.getMessage());
+        }
+    }
+
+    /**
+     * 插件停用時撤下該插件目錄描述的分派入口（package-private 測試 seam）。
+     *
+     * <p>永不拋例外：任何失敗只以 fine-level 記錄，確保不中斷其他 listener
+     * 對同一事件的處理。{@code catalog} 或 {@code plugin} 為 null 時直接返回。</p>
+     *
+     * @param catalog 目錄實例；可為 null（null 時 no-op）
+     * @param plugin  被停用的插件；可為 null（null 時 no-op）
+     */
+    static void handleCatalogPluginDisable(CommandCatalog catalog, Plugin plugin) {
+        try {
+            if (catalog == null || plugin == null) {
+                return;
+            }
+            catalog.unpublishAll(plugin);
+        } catch (Throwable t) {
+            Logger.getLogger(LOG_NAME).log(Level.FINE,
+                "catalog disable dispatch failed (ignored): " + t);
+        }
+    }
+
+    /**
+     * 任一插件停用時撤下該插件所有目錄描述的 listener。
+     *
+     * <p>只做觀察（MONITOR）：不取消亦不修改事件。事件處理委派給
+     * {@link #handleCatalogPluginDisable(CommandCatalog, Plugin)}，
+     * 永不拋例外中斷其他 listener。</p>
+     */
+    private final class CatalogDisableListener implements Listener {
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        void onPluginDisable(PluginDisableEvent event) {
+            handleCatalogPluginDisable(commandCatalog,
+                event == null ? null : event.getPlugin());
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -1837,6 +1961,10 @@ public class AceLibPlugin extends JavaPlugin {
             server.getPluginManager().registerEvents(guiListener, this);
             guiListenerRegistered = true;
         }
+        if (!catalogDisableListenerRegistered && catalogDisableListener != null) {
+            server.getPluginManager().registerEvents(catalogDisableListener, this);
+            catalogDisableListenerRegistered = true;
+        }
     }
 
     /**
@@ -1858,6 +1986,9 @@ public class AceLibPlugin extends JavaPlugin {
         }
         registerOneForTest(playerLifecycleListener);
         registerOneForTest(guiListener);
+        if (!catalogDisableListenerRegistered) {
+            registerOneForTest(catalogDisableListener);
+        }
     }
 
     private void registerOneForTest(org.bukkit.event.Listener listener) {
@@ -1884,6 +2015,9 @@ public class AceLibPlugin extends JavaPlugin {
         }
         if (listener == guiListener) {
             guiListenerRegistered = true;
+        }
+        if (listener == catalogDisableListener) {
+            catalogDisableListenerRegistered = true;
         }
     }
 

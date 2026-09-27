@@ -57,7 +57,7 @@ Repository 內的範例使用本機 Maven，方便它編譯目前 checkout 的 A
 ./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
 ```
 
-本機座標 `com.smile:acelib:1.2.2` 不代表 Maven Central。一般使用者從 JitPack 取得 `com.github.smile-minecraft:AceLib:v1.2.2`。
+本機座標 `com.smile:acelib:1.3.0` 不代表 Maven Central。一般使用者從 JitPack 取得 `com.github.smile-minecraft:AceLib:v1.3.0`。
 
 ## Public API 與文件
 

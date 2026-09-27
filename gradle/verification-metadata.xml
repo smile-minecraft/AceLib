@@ -912,6 +912,17 @@
          <sha256 value="242e3fb57466c2b5b795cbcc3e2e82ec809736c7a5caf3f30022dfd08a4540b0"/>
       </artifact>
    </component>
+   <component group="net.kyori" name="adventure-text-serializer-legacy" version="5.2.0">
+      <artifact name="adventure-text-serializer-legacy-5.2.0.jar">
+         <sha256 value="1231a0de417de66c59e2f2a3892ecca6b8d48621df6f1d9a2f81b01f57e328b7"/>
+      </artifact>
+      <artifact name="adventure-text-serializer-legacy-5.2.0.module">
+         <sha256 value="b1d2a3780d1c94773b076b3ba1ce1668a5b2f3699edb39d189a8b61d55a4db62"/>
+      </artifact>
+      <artifact name="adventure-text-serializer-legacy-5.2.0.pom">
+         <sha256 value="12f2ad1ce4c18d42a603a77ccf99e236edf6da1c2e4072a12c8ff0c3846d1276"/>
+      </artifact>
+   </component>
    <component group="net.kyori" name="adventure-text-serializer-plain" version="4.20.0">
       <artifact name="adventure-text-serializer-plain-4.20.0-sources.jar">
          <sha256 value="51c8a77b3782b4416b59866464471c7088e412185f45460988d6d7e13820d917"/>
@@ -935,6 +946,17 @@
       </artifact>
       <artifact name="adventure-text-serializer-plain-4.26.1.pom">
          <sha256 value="ba1839b61df0c9a32cf4e2f09b4bc1bd20d23477c232cc57ebbc020ba9df1aca"/>
+      </artifact>
+   </component>
+   <component group="net.kyori" name="adventure-text-serializer-plain" version="5.2.0">
+      <artifact name="adventure-text-serializer-plain-5.2.0.jar">
+         <sha256 value="f6424cc038a631b79cc4b74b6b353d5d007c99b38f9be482e0c2448a00eecd21"/>
+      </artifact>
+      <artifact name="adventure-text-serializer-plain-5.2.0.module">
+         <sha256 value="a814a14a977889aee879a50c361f8e92489c267c5f7bf5f43297025fc0b5ad59"/>
+      </artifact>
+      <artifact name="adventure-text-serializer-plain-5.2.0.pom">
+         <sha256 value="90099868f9119347c1fd52b8768688dd1cae011e218c78f3269e7232ac42c884"/>
       </artifact>
    </component>
    <component group="net.kyori" name="ansi" version="1.1.1">

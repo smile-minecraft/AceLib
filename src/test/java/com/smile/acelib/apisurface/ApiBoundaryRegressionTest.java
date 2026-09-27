@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs143() throws IOException {
+    void canonicalTopLevelInventoryIs151() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -66,9 +66,10 @@ class ApiBoundaryRegressionTest {
                 default -> throw new IllegalStateException("非法分類：" + t.get("fqcn"));
             }
         }
-        // v1 canonical inventory：111 Supported + 12 SPI + 20 Internal = 143。
-        // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），新增十一個頂層型別：
-        //   Supported +10：
+        // v1 canonical inventory：119 Supported + 12 SPI + 20 Internal = 151。
+        // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），表單圖示任務再 +1（→ 144），
+        // 表單文字任務再 +2（→ 146），指令目錄任務再 +5（→ 151），新增十九個頂層型別：
+        //   Supported +13：
         //     - com.smile.acelib.bedrock.BedrockService（interface）— 基岩玩家查詢 facade，
         //       缺席環境以 absent lookup 零影響
         //     - com.smile.acelib.bedrock.BedrockPlayerInfo（record）— 裝置/輸入/語言/連結
@@ -89,20 +90,38 @@ class ApiBoundaryRegressionTest {
         //       （Text/Option/Number/Switch 以 nested records 承載，label 不產值）
         //     - com.smile.acelib.form.FormErrorCodes（class）— ACELIB-FORM-* 常數表，
         //       比照 BedrockErrorCodes 模式
+        //     - com.smile.acelib.form.FormImage（record）— Simple 按鈕圖示值型別
+        //       （PATH／URL 以 nested Type 列舉承載；Cumulus 外部型別不外洩）
+        //     - com.smile.acelib.message.FormText（class）— Adventure Component →
+        //       基岩表單安全字串的靜態渲染入口（click/hover 移除、hex 降 16 色、
+        //       translatable 解析、換行 §r、長度截斷）；MessageService 語系化提示
+        //     - com.smile.acelib.message.FormTextOptions（record）— 渲染選項值型別
+        //       （clickHints／maxLength／locale；defaults 為 false／0／null）
+        //   Supported +5：
+        //     - com.smile.acelib.command.CommandCatalog（interface）— 指令目錄服務，
+        //       只存指令描述、不註冊不執行；快照深層不可變、revision 快取失效
+        //     - com.smile.acelib.command.CatalogResult（enum）— 發布結果具名狀態
+        //       （PUBLISHED／REPLACED／UNCHANGED／DUPLICATE_NAME／REJECTED）
+        //     - com.smile.acelib.command.CatalogMeta（record）— 發布元資料值型別
+        //       （分類／圖示／需確認子指令；FormImage 跨模組重用不外洩 handler）
+        //     - com.smile.acelib.command.CommandDoc（record）— 指令純描述投影值型別，
+        //       欄位形狀本身排除 handler／completer／插件實例
+        //     - com.smile.acelib.command.SubDoc（record）— 子指令純描述投影值型別
+        //       （maxArgs -1 無上限語意保留；requiresConfirmation 需確認標記）
         //   Internal +1：
         //     - com.smile.acelib.external.FloodgateIntegrationAdapter — plugin 接線需跨
         //       package 建構並讀取 typed lookup，比照既有三個內建 adapter 保留 public
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 111,
-            "Supported 數量偏離 canonical 111，實際=" + supported);
+        assertTrue(supported == 119,
+            "Supported 數量偏離 canonical 119，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
         assertTrue(internal == 20,
             "Internal 數量偏離 canonical 20，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 143,
-            "top-level inventory 偏離 canonical 143，實際=" + types.size());
+        assertTrue(types.size() == 151,
+            "top-level inventory 偏離 canonical 151，實際=" + types.size());
     }
 
     @Test

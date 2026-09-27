@@ -15,9 +15,14 @@
  * <h2>主要型別</h2>
  * <ul>
  *   <li>{@link com.smile.acelib.message.MessageService}（Supported）—
- *       格式化（{@code format} / {@code formatConsole}）與發送
+ *       格式化（{@code format} / {@code formatConsole} /
+ *       {@code formatFormText}）與發送
  *       （{@code sendChat} / {@code sendActionBar} / {@code sendTitle} /
  *       {@code broadcast} / {@code sendConsole}）</li>
+ *   <li>{@link com.smile.acelib.message.FormText}（Supported）—
+ *       Adventure Component → 基岩表單可安全顯示字串的靜態渲染入口</li>
+ *   <li>{@link com.smile.acelib.message.FormTextOptions}（Supported）—
+ *       表單文字渲染選項（提示、上限、locale）值型別</li>
  * </ul>
  *
  * <h2>行為契約</h2>
@@ -39,6 +44,7 @@
  *   <li>{@code ACELIB-MSG-001} — 訊息 key 缺失</li>
  *   <li>{@code ACELIB-MSG-002} — 在不安全上下文操作玩家訊息（Folia）</li>
  *   <li>{@code ACELIB-MSG-003} — 訊息格式錯誤或安全降級</li>
+ *   <li>{@code ACELIB-MSG-005} — 表單文字渲染失敗，已退回純文字</li>
  * </ul>
  *
  * @since 1.0.0

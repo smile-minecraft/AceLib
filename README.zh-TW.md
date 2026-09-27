@@ -4,7 +4,7 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-此 checkout 的原始碼版本為 **1.2.2**。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.2.2 的 GitHub Release 提供可下載的 `AceLib-1.2.2.jar`，管理員可直接下載，或仍可從 `v1.2.2` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 對應 `v1.2.2` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.2`）。詳情見 CHANGELOG。
+此 checkout 的原始碼版本為 **1.3.0**。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.3.0 的 GitHub Release 提供可下載的 `AceLib-1.3.0.jar`，管理員可直接下載，或仍可從 `v1.3.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.0` 對應 `v1.3.0` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.0`）。詳情見 CHANGELOG。
 
 ## 支援版本
 
@@ -26,11 +26,16 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.2.2")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.3.0")
 }
 ```
 
-這個 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` 對應 `v1.2.2` tag；此 checkout 的原始碼版本為 1.2.2。在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.2.2`）。完整且可編譯的 Gradle 設定請看[快速開始](docs/consumer/quickstart.md)。
+這個 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.0` 對應 `v1.3.0` tag；此 checkout 的原始碼版本為 1.3.0。在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.0`）。完整且可編譯的 Gradle 設定請看[快速開始](docs/consumer/quickstart.md)。
+
+## 發布狀態
+
+`1.3.0` 已發布：`v1.3.0` GitHub Release 提供可下載的 `AceLib-1.3.0.jar`，上方的公開 JitPack 座標對應 `v1.3.0` tag。
+貢獻者驗證目前原始碼可用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.0`）。
 
 ## 設定 `plugin.yml`
 
@@ -92,7 +97,7 @@ public final class MyPlugin extends JavaPlugin {
 | 任務分組 | 文件 | 用途 |
 | --- | --- | --- |
 | 入門 | [插件開發者快速開始](docs/consumer/quickstart.md) | 第一次整合 AceLib——設定 Gradle、宣告依賴並取得 `AceLibProvider` |
-| 入門 | [如何取得 AceLib](docs/reference/release-artifacts.md) | 確認 repository 已公開狀態並取得 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.2.2` |
+| 入門 | [如何取得 AceLib](docs/reference/release-artifacts.md) | 確認 repository 已公開狀態並取得 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.0` |
 | 日常整合 | [模組指南](docs/modules/) | 按子系統查詢——排程、上下文、設定、訊息、指令、事件、資料、玩家、世界、GUI、物品與外部整合 |
 | 日常整合 | [Provider 生命週期](docs/consumer/provider-lifecycle.md) | 正確處理重載與停用，適合長時間執行的插件 |
 | 日常整合 | [錯誤碼](docs/reference/error-codes.md) | 查詢 `ACELIB-<AREA>-<CODE>` 涵義與訊息五要件 |
@@ -104,7 +109,7 @@ public final class MyPlugin extends JavaPlugin {
 
 ## 重要限制
 
-- v1.2.2 的 GitHub Release 提供可下載的 `AceLib-1.2.2.jar`。管理員可直接下載，或依[部署步驟](docs/operator/README.md)從 `v1.2.2` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置。
+- v1.3.0 的 GitHub Release 提供可下載的 `AceLib-1.3.0.jar`。管理員可直接下載，或依[部署步驟](docs/operator/README.md)從 `v1.3.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置。
 - AceLib 不支援 Bukkit `/reload`。文件中的 AceLib reload 是函式庫自己的生命週期操作，兩者不同。
 - MockBukkit 測試不能取代 Folia 真實 region scheduler 的執行驗證。
 - 日誌中的對外錯誤使用 `ACELIB-<AREA>-<CODE>` 格式，可在[錯誤碼頁](docs/reference/error-codes.md)查詢。

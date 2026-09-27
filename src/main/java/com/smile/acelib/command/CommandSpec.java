@@ -70,7 +70,7 @@ public final class CommandSpec {
     /** 主指令名稱（小寫）。 */
     public String name() { return name; }
 
-    /** 別名清單（小寫、不可變）。 */
+    /** 別名清單（以呼叫端提供的形式保留，不轉小寫；不可變）。 */
     public List<String> aliases() { return aliases; }
 
     /** 描述。 */

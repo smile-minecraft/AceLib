@@ -70,6 +70,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-MSG-001` | 訊息 key 缺失 | 查詢的 locale key 不存在 |
 | `ACELIB-MSG-002` | 在不安全上下文操作玩家訊息（Folia） | Folia 下非區域執行緒傳送訊息 |
 | `ACELIB-MSG-003` | 訊息格式錯誤 | LangManager 抓不到物件或格式異常 |
+| `ACELIB-MSG-005` | 表單文字渲染失敗，已退回純文字 | FormText 管線內部失敗時 warning 並回傳純文字版本 |
 
 ### 指令系統（CMD）
 
@@ -87,6 +88,8 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-CMD-010` | caller 自訂錯誤碼 | 由 caller 給 code |
 | `ACELIB-CMD-011` | 玩家回覆 backend 不可用 | 無法安全派送到玩家所在 region |
 | `ACELIB-CMD-012` | `/acelib` 指令綁定失敗 | `plugin.yml` 缺少 `acelib` 指令宣告 |
+| `ACELIB-CMD-013` | 跨擁有者同名指令描述並存 | 不同插件發布同名指令（新增或覆蓋）時，兩者皆保留並以 warning 記錄 |
+| `ACELIB-CMD-014` | 指令目錄服務未就緒或已停用 | 目錄不可用時發布被拒、快照為空 |
 
 ### 事件管理（EVT）
 
@@ -203,6 +206,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | --- | --- | --- |
 | `ACELIB-FORM-001` | 表單服務尚未啟用 | Floodgate 缺席（綁定 absent 發送 seam）時 sendForm 被拒絕 |
 | `ACELIB-FORM-002` | 表單服務已停用 | onDisable／reload 失敗後 shutdown，sendForm 被拒絕 |
+| `ACELIB-FORM-003` | 按鈕圖示轉換失敗，已退回純文字 | 單顆 simple 按鈕圖示映射拋例外時 warning 並以純文字送出該按鈕（表單其餘部分不受影響） |
 
 ### 其他
 

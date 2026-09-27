@@ -2,6 +2,20 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.3.0] - 2026-09-28
+
+v1.3.0 以 GitHub Release 發布，提供可下載的 `AceLib-1.3.0.jar`；管理員可直接下載，或從 `v1.3.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者如需驗證目前原始碼，請用 `./gradlew publishToMavenLocal` 取得本機座標 `com.smile:acelib:1.3.0`。
+
+### 新增功能
+
+- 表單按鈕圖示（`FormImage`）：Simple 表單按鈕可帶 PATH（資源包路徑）或 URL 圖示；圖示轉換失敗時該按鈕退回純文字並記錄 `ACELIB-FORM-003`，表單其餘部分不受影響。
+- 表單文字轉換（`FormText`／`FormTextOptions`，`MessageService.formatFormText`）：Adventure Component 轉為基岩表單可安全顯示的字串；渲染失敗時退回純文字並記錄 `ACELIB-MSG-005`。
+- 指令目錄（`CommandCatalog`）：只存描述的共用目錄，不註冊、不執行；跨擁有者同名並存時記錄 `ACELIB-CMD-013`，服務不可用時發布被拒並記錄 `ACELIB-CMD-014`。
+
+### 新增錯誤碼
+
+- `ACELIB-FORM-003`、`ACELIB-MSG-005`、`ACELIB-CMD-013`、`ACELIB-CMD-014`（定義見 `docs/reference/error-codes.md`）。
+
 ## [1.2.2] - 2026-09-24
 
 v1.2.2 是修補版，修正 GUI 關窗時的世代判定問題；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.2.2.jar`，管理員可直接下載，或從 `v1.2.2` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。

@@ -16,6 +16,7 @@ FormService forms = bedrock.forms();
 ## 目錄
 
 - [建立表單](#建立表單)
+- [按鈕圖示](#按鈕圖示formimage)
 - [發送表單](#發送表單)
 - [讀取回應](#讀取回應)
 - [回應派送保證](#回應派送保證)
@@ -66,6 +67,42 @@ FormSpec settings = FormSpec.custom("設定")
 ```
 
 `dropdown` 與 `stepSlider` 另有省略預設索引的多載（預設選第一項／第一步）。
+
+## 按鈕圖示（FormImage）
+
+Simple 表單的按鈕可帶一張圖示（`com.smile.acelib.form.FormImage`），型別只有兩種：
+
+| 型別 | 含義 | 建構驗證規則 |
+| --- | --- | --- |
+| `PATH` | 基岩資源包路徑 | 不得為 null／空白、不可以 `/` 開頭、不得含 `..` |
+| `URL` | 網址 | 必須是具 host 的絕對 http／https URI |
+
+驗證在建構當下（含 canonical constructor）即執行，違規以 `IllegalArgumentException` 拒絕：
+
+```java
+import com.smile.acelib.form.FormImage;
+
+FormImage packIcon = FormImage.path("textures/items/example");
+FormImage webIcon = FormImage.url("https://example.com/icon.png");
+
+FormSpec menu = FormSpec.simple("選單標題")
+    .content("請選擇一個選項")
+    .button("純文字選項")
+    .button("有圖示選項", packIcon)
+    .build();
+```
+
+`button(String)` 為純文字按鈕；`button(String, FormImage)` 的圖示不可為 null（無圖示請用前者）。
+
+`buttonEntries()` 與 `buttons()` 描述同一組按鈕：前者回傳 `List<Button>`（文字＋可選圖示，依加入順序），後者只回傳文字清單，兩者同長度、同索引。需要圖示時讀 `buttonEntries()`；只需要文字時讀 `buttons()`。
+
+圖示轉換失敗（例如內部映射拋例外）時，該按鈕退回純文字並記錄 `ACELIB-FORM-003` warning，表單其餘部分不受影響，後續按鈕索引不變。只有 Simple 表單支援圖示；Modal 與 Custom 沒有圖示參數。
+
+明確的限制：
+
+- AceLib 不下載、不代理、不驗證圖示內容。
+- AceLib 不維護 Java Material 到基岩貼圖的對照表；`PATH` 請直接給基岩資源包路徑。
+- 客戶端下載 URL 失敗或貼圖不存在，不是伺服器端錯誤，不會記錄錯誤碼。
 
 ## 發送表單
 

@@ -4,6 +4,7 @@
   "types": {
     "com.smile.acelib.AceLibApi": [
       "method getBedrockService() : com.smile.acelib.bedrock.BedrockService",
+      "method getCommandCatalog() : com.smile.acelib.command.CommandCatalog",
       "method getExternalIntegrationService() : com.smile.acelib.external.ExternalIntegrationService",
       "method getGuiService() : com.smile.acelib.gui.GuiService",
       "method getPlatform() : com.smile.acelib.platform.Platform",
@@ -11,6 +12,7 @@
       "method getVersion() : java.lang.String",
       "method getWorldService() : com.smile.acelib.world.WorldService",
       "method isReady() : boolean",
+      "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,com.smile.acelib.command.CommandCatalog,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
@@ -20,6 +22,7 @@
       "method reload() : void",
       "method shutDown(com.smile.acelib.world.WorldService) : com.smile.acelib.AceLibApi",
       "method shutDown(com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService) : com.smile.acelib.AceLibApi",
+      "method shutDown(com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.command.CommandCatalog) : com.smile.acelib.AceLibApi",
       "method uninitialized() : com.smile.acelib.AceLibApi"
     ],
     "com.smile.acelib.AceLibVersion": [
@@ -55,6 +58,34 @@
       "method isBedrockPlayer(java.util.UUID) : boolean",
       "method shutdown() : void"
     ],
+    "com.smile.acelib.command.CatalogMeta": [
+      "ctor(java.lang.String,java.util.Optional<com.smile.acelib.form.FormImage>,java.util.Set<java.lang.String>)",
+      "method category() : java.lang.String",
+      "method confirmSubcommands() : java.util.Set<java.lang.String>",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method icon() : java.util.Optional<com.smile.acelib.form.FormImage>",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.command.CatalogResult": [
+      "field DUPLICATE_NAME : com.smile.acelib.command.CatalogResult",
+      "field PUBLISHED : com.smile.acelib.command.CatalogResult",
+      "field REJECTED : com.smile.acelib.command.CatalogResult",
+      "field REPLACED : com.smile.acelib.command.CatalogResult",
+      "field UNCHANGED : com.smile.acelib.command.CatalogResult",
+      "method valueOf(java.lang.String) : com.smile.acelib.command.CatalogResult",
+      "method values() : com.smile.acelib.command.CatalogResult[]"
+    ],
+    "com.smile.acelib.command.CommandCatalog": [
+      "method forProduction() : com.smile.acelib.command.CommandCatalog",
+      "method forUnavailable() : com.smile.acelib.command.CommandCatalog",
+      "method publish(org.bukkit.plugin.Plugin,com.smile.acelib.command.CommandDoc) : com.smile.acelib.command.CatalogResult",
+      "method publish(org.bukkit.plugin.Plugin,com.smile.acelib.command.CommandSpec,com.smile.acelib.command.CatalogMeta) : com.smile.acelib.command.CatalogResult",
+      "method revision() : long",
+      "method shutdown() : void",
+      "method snapshot() : java.util.List<com.smile.acelib.command.CommandDoc>",
+      "method unpublishAll(org.bukkit.plugin.Plugin) : void"
+    ],
     "com.smile.acelib.command.CommandContext": [
       "method args() : java.util.List<java.lang.String>",
       "method commandArgs() : java.util.List<java.lang.String>",
@@ -68,6 +99,22 @@
       "method root() : com.smile.acelib.command.CommandSpec",
       "method sender() : com.smile.acelib.command.Sender",
       "method sub() : com.smile.acelib.command.SubCommandSpec"
+    ],
+    "com.smile.acelib.command.CommandDoc": [
+      "ctor(java.lang.String,java.lang.String,java.util.List<java.lang.String>,java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.util.Optional<com.smile.acelib.form.FormImage>,java.util.List<com.smile.acelib.command.SubDoc>)",
+      "method aliases() : java.util.List<java.lang.String>",
+      "method category() : java.lang.String",
+      "method description() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method icon() : java.util.Optional<com.smile.acelib.form.FormImage>",
+      "method name() : java.lang.String",
+      "method owner() : java.lang.String",
+      "method permission() : java.lang.String",
+      "method subcommands() : java.util.List<com.smile.acelib.command.SubDoc>",
+      "method toString() : java.lang.String",
+      "method usage() : java.lang.String",
+      "method visibleTo(org.bukkit.permissions.Permissible) : boolean"
     ],
     "com.smile.acelib.command.CommandErrorKind": [
       "field ASYNC_EXECUTION_FAILED : com.smile.acelib.command.CommandErrorKind",
@@ -172,6 +219,24 @@
       "method permission() : java.lang.String",
       "method playerOnly() : boolean",
       "method usage() : java.lang.String"
+    ],
+    "com.smile.acelib.command.SubDoc": [
+      "ctor(java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.util.List<java.lang.String>,int,int,boolean,boolean,long,boolean)",
+      "method argNames() : java.util.List<java.lang.String>",
+      "method consoleOnly() : boolean",
+      "method cooldownMillis() : long",
+      "method description() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method maxArgs() : int",
+      "method minArgs() : int",
+      "method name() : java.lang.String",
+      "method permission() : java.lang.String",
+      "method playerOnly() : boolean",
+      "method requiresConfirmation() : boolean",
+      "method toString() : java.lang.String",
+      "method usage() : java.lang.String",
+      "method visibleTo(org.bukkit.permissions.Permissible) : boolean"
     ],
     "com.smile.acelib.config.AceLibConfig": [
       "method bind(org.bukkit.plugin.java.JavaPlugin) : com.smile.acelib.config.AceLibConfig",
@@ -709,8 +774,19 @@
       "method versionUnsupported() : com.smile.acelib.external.IntegrationStatus"
     ],
     "com.smile.acelib.form.FormErrorCodes": [
+      "field ACELIB_FORM_IMAGE_FALLBACK : java.lang.String",
       "field ACELIB_FORM_SERVICE_NOT_READY : java.lang.String",
       "field ACELIB_FORM_SERVICE_SHUTDOWN : java.lang.String"
+    ],
+    "com.smile.acelib.form.FormImage": [
+      "ctor(com.smile.acelib.form.FormImage$Type,java.lang.String)",
+      "method data() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method path(java.lang.String) : com.smile.acelib.form.FormImage",
+      "method toString() : java.lang.String",
+      "method type() : com.smile.acelib.form.FormImage$Type",
+      "method url(java.lang.String) : com.smile.acelib.form.FormImage"
     ],
     "com.smile.acelib.form.FormResponse": [
       "ctor(com.smile.acelib.form.FormResponseStatus,java.lang.Integer,java.util.List<com.smile.acelib.form.FormValue>)",
@@ -971,6 +1047,20 @@
       "method minor() : int",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.message.FormText": [
+      "method render(net.kyori.adventure.text.Component) : java.lang.String",
+      "method render(net.kyori.adventure.text.Component,com.smile.acelib.message.FormTextOptions) : java.lang.String"
+    ],
+    "com.smile.acelib.message.FormTextOptions": [
+      "ctor(boolean,int,java.util.Locale)",
+      "method clickHints() : boolean",
+      "method defaults() : com.smile.acelib.message.FormTextOptions",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method locale() : java.util.Locale",
+      "method maxLength() : int",
+      "method toString() : java.lang.String"
+    ],
     "com.smile.acelib.message.MessageService": [
       "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager)",
       "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager,com.smile.acelib.bedrock.BedrockService)",
@@ -981,6 +1071,8 @@
       "method format(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : java.lang.String",
       "method formatComponent(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : net.kyori.adventure.text.Component",
       "method formatConsole(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : java.lang.String",
+      "method formatFormText(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,com.smile.acelib.message.FormTextOptions) : java.lang.String",
+      "method formatFormText(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : java.lang.String",
       "method getCapability() : com.smile.acelib.platform.PlatformCapability",
       "method getPlatform() : com.smile.acelib.platform.Platform",
       "method parseMiniMessage(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : net.kyori.adventure.text.Component",

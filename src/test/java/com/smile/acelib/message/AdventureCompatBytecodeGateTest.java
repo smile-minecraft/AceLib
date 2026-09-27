@@ -19,14 +19,18 @@ import org.junit.jupiter.api.Test;
  * Adventure 相容邊界：production 位元組碼防護網。
  *
  * <p>同一份 production JAR 必須同時在 Adventure 4.26.1 與 5.2.0 runtime 建立基岩
- * fallback hint。Adventure 5 移除了 {@code ClickEvent.value()}、將
- * {@code ClickEvent.Action} 由 enum 改為 sealed class，因此 production 不得引用：</p>
+ * fallback hint 與表單文字。Adventure 5 移除了 {@code ClickEvent.value()}、將
+ * {@code ClickEvent.Action} 由 enum 改為 sealed class、移除了
+ * {@code GlobalTranslator.get()}（僅剩 {@code translator()}）與
+ * {@code TranslationRegistry}，因此 production 不得引用：</p>
  * <ul>
  *   <li>{@code ClickEvent.value()}（method ref）；</li>
  *   <li>{@code ClickEvent.Action.values()} / {@code valueOf()}（method ref，
  *       含 enum switch 產生的 synthetic class 對 {@code values()} 的引用）；</li>
  *   <li>{@code ClickEvent.Action} 的 static 常數欄位（RUN_COMMAND / SUGGEST_COMMAND /
- *       OPEN_URL / COPY_TO_CLIPBOARD / CHANGE_PAGE / OPEN_FILE / SHOW_DIALOG / CUSTOM）。</li>
+ *       OPEN_URL / COPY_TO_CLIPBOARD / CHANGE_PAGE / OPEN_FILE / SHOW_DIALOG / CUSTOM）；</li>
+ *   <li>{@code GlobalTranslator.get()}（method ref；僅 {@code translator()} 兩版共有）；</li>
+ *   <li>{@code TranslationRegistry}（型別與 method ref；v5 已移除）。</li>
  * </ul>
  *
  * <p>本測試以最小常數池解析器（不引入 ASM 等新依賴）掃描 message 套件所有
@@ -56,7 +60,11 @@ class AdventureCompatBytecodeGateTest {
         "ClickEvent$Action.CHANGE_PAGE:",
         "ClickEvent$Action.OPEN_FILE:",
         "ClickEvent$Action.SHOW_DIALOG:",
-        "ClickEvent$Action.CUSTOM:"
+        "ClickEvent$Action.CUSTOM:",
+        // GlobalTranslator.get() 在 v5 已移除（僅剩 translator()）；FormText 只可使用 translator()
+        "GlobalTranslator.get:()",
+        // TranslationRegistry 在 v5 已移除；FormText 只讀 GlobalTranslator，不得引用
+        "TranslationRegistry"
     );
 
     /**
@@ -66,7 +74,9 @@ class AdventureCompatBytecodeGateTest {
      * 否則會綁死 v5 專屬型別。注意 {@code ClickEvent$Action} 基型本身不在禁止之列。
      */
     private static final List<String> FORBIDDEN_CLASS_PREFIXES = List.of(
-        "net/kyori/adventure/text/event/ClickEvent$Action$"
+        "net/kyori/adventure/text/event/ClickEvent$Action$",
+        // TranslationRegistry 在 v5 已移除；production 不得直接參照該型別
+        "net/kyori/adventure/translation/TranslationRegistry"
     );
 
     @Test
@@ -272,5 +282,28 @@ class AdventureCompatBytecodeGateTest {
             "net/kyori/adventure/text/event/ClickEvent$Action.RUN_COMMAND:");
         List<String> violations = findViolations(refs, List.of());
         assertEquals(2, violations.size(), "應攔截兩筆 method / field 引用：" + violations);
+    }
+
+    @Test
+    @DisplayName("detection: 攔截 GlobalTranslator.get 與 TranslationRegistry 引用")
+    void detection_flagsRemovedTranslatorRefs() {
+        List<String> refs = List.of(
+            "net/kyori/adventure/translation/GlobalTranslator.get:()Lnet/kyori/adventure/translation/GlobalTranslator;",
+            "net/kyori/adventure/translation/TranslationRegistry.create:()Lnet/kyori/adventure/translation/TranslationRegistry;");
+        List<String> classRefs = List.of(
+            "net/kyori/adventure/translation/TranslationRegistry");
+        List<String> violations = findViolations(refs, classRefs);
+        assertEquals(3, violations.size(), "應攔截三筆 translator 引用：" + violations);
+    }
+
+    @Test
+    @DisplayName("detection: 不誤攔 GlobalTranslator.translator / render")
+    void detection_doesNotFlagTranslatorAndRender() {
+        List<String> refs = List.of(
+            "net/kyori/adventure/translation/GlobalTranslator.translator:()Lnet/kyori/adventure/translation/GlobalTranslator;",
+            "net/kyori/adventure/translation/GlobalTranslator.render:(Lnet/kyori/adventure/text/Component;Ljava/util/Locale;)Lnet/kyori/adventure/text/Component;");
+        List<String> violations = findViolations(refs, List.of());
+        assertTrue(violations.isEmpty(),
+            "不得攔截兩版共有的 translator()/render()：" + violations);
     }
 }

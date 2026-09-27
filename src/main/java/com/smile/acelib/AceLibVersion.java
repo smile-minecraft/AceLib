@@ -15,11 +15,11 @@ public final class AceLibVersion {
      * 對外版本字串。
      *
      * <p>由 {@code build.gradle.kts} 的 {@code version} 在發布流程中同步；
-     * 此處為目前快照值。</p>
+     * 此處為目前發布值。</p>
      *
      * @since 1.0.0
      */
-    public static final String VERSION = "1.2.2";
+    public static final String VERSION = "1.3.0";
 
     private AceLibVersion() {
         // utility class

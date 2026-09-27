@@ -1,5 +1,6 @@
 package com.smile.acelib.external;
 
+import com.smile.acelib.form.FormImage;
 import com.smile.acelib.form.FormResponse;
 import com.smile.acelib.form.FormResponseStatus;
 import com.smile.acelib.form.FormSpec;
@@ -7,8 +8,11 @@ import com.smile.acelib.form.FormValue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.geysermc.cumulus.component.util.ComponentType;
 import org.geysermc.cumulus.form.CustomForm;
 import org.geysermc.cumulus.form.Form;
@@ -27,7 +31,8 @@ import org.geysermc.cumulus.response.result.ValidFormResponseResult;
  * <p>這是 {@code org.geysermc.cumulus.*} 型別在表單路徑的唯一產出點：
  * 以窮舉 pattern matching（{@link FormSpec} 為 sealed 型別）把 AceLib 自有
  * DSL 逐欄翻成 Cumulus 1.1 的 form 物件。翻譯為純函式——不觸發任何
- * Floodgate 查詢、不持有狀態。</p>
+ * Floodgate 查詢、不持有狀態（單一例外：圖示退回時寫一筆
+ * {@code ACELIB-FORM-003} warning 日誌，見 {@link #addButton}）。</p>
  *
  * <p>回應路徑：handler 由本層掛在 builder 上（{@code resultHandler}），
  * Cumulus 原始回應的解析與映射（{@code ResultType} →
@@ -37,6 +42,8 @@ import org.geysermc.cumulus.response.result.ValidFormResponseResult;
  * @since 1.0.0
  */
 final class CumulusFormTranslator {
+
+    private static final Logger LOGGER = Logger.getLogger("AceLib");
 
     private CumulusFormTranslator() {
         // utility class
@@ -51,7 +58,7 @@ final class CumulusFormTranslator {
      */
     static Form toCumulus(FormSpec spec) {
         return switch (spec) {
-            case FormSpec.Simple simple -> simple(simple, null);
+            case FormSpec.Simple simple -> simple(simple, null, CumulusFormTranslator::defaultImage);
             case FormSpec.Modal modal -> modal(modal, null);
             case FormSpec.Custom custom -> custom(custom, null);
         };
@@ -67,19 +74,41 @@ final class CumulusFormTranslator {
      */
     static Form toCumulus(FormSpec spec, Consumer<FormResponse> onResponse) {
         Objects.requireNonNull(onResponse, "onResponse");
+        return toCumulus(spec, onResponse, CumulusFormTranslator::defaultImage);
+    }
+
+    /**
+     * 測試接縫：同上，但 simple 表單的圖示映射經由 {@code imageMapper} 進行。
+     *
+     * <p>接縫以參數傳遞（無全域可變狀態）：預設映射見 {@link #defaultImage}。
+     * Cumulus 1.1.2 的 {@code FormImage.of}／{@code ButtonComponent.of}／
+     * {@code SimpleForm.Builder.button} 對合法輸入不做內容驗證，真實失敗僅來自
+     * 未預期的運行期例外；測試以拋例外的 mapper 重現該路徑。</p>
+     *
+     * @param spec 表單規格；不可為 null
+     * @param onResponse 已映射回應的接收端；不可為 null
+     * @param imageMapper AceLib 圖示 → Cumulus 圖示的映射；不可為 null
+     * @return Cumulus form；never null
+     * @throws NullPointerException 任一參數為 null
+     */
+    static Form toCumulus(FormSpec spec, Consumer<FormResponse> onResponse,
+            Function<FormImage, org.geysermc.cumulus.util.FormImage> imageMapper) {
+        Objects.requireNonNull(onResponse, "onResponse");
+        Objects.requireNonNull(imageMapper, "imageMapper");
         return switch (spec) {
-            case FormSpec.Simple simple -> simple(simple, onResponse);
+            case FormSpec.Simple simple -> simple(simple, onResponse, imageMapper);
             case FormSpec.Modal modal -> modal(modal, onResponse);
             case FormSpec.Custom custom -> custom(custom, onResponse);
         };
     }
 
-    private static Form simple(FormSpec.Simple spec, Consumer<FormResponse> onResponse) {
+    private static Form simple(FormSpec.Simple spec, Consumer<FormResponse> onResponse,
+            Function<FormImage, org.geysermc.cumulus.util.FormImage> imageMapper) {
         SimpleForm.Builder builder = SimpleForm.builder()
             .title(spec.title())
             .content(spec.content());
-        for (String button : spec.buttons()) {
-            builder.button(button);
+        for (FormSpec.Simple.Button entry : spec.buttonEntries()) {
+            addButton(builder, entry, imageMapper);
         }
         if (onResponse != null) {
             builder.resultHandler((form, result) -> onResponse.accept(
@@ -88,6 +117,42 @@ final class CumulusFormTranslator {
                     response -> List.of())));
         }
         return builder.build();
+    }
+
+    /**
+     * 加入單顆按鈕：無圖示者為純文字；有圖示者經 {@code imageMapper} 映射。
+     *
+     * <p>映射失敗時該按鈕退回純文字並記錄 {@code ACELIB-FORM-003} warning，
+     * 表單其餘部分不受影響。Cumulus 的 {@code button(text, image)} 為單一
+     * {@code buttons.add(...)} 陳述式：映射（引數求值）先於加入執行，拋例外時
+     * 該按鈕尚未加入；catch 內只加一次純文字按鈕，故不重複加入、後續索引不變。
+     * 環境性 {@link LinkageError}（如 Cumulus 缺席）不在此處理，必須原樣傳播。</p>
+     */
+    private static void addButton(SimpleForm.Builder builder, FormSpec.Simple.Button entry,
+            Function<FormImage, org.geysermc.cumulus.util.FormImage> imageMapper) {
+        Optional<FormImage> image = entry.image();
+        if (image.isEmpty()) {
+            builder.button(entry.text());
+            return;
+        }
+        try {
+            builder.button(entry.text(), imageMapper.apply(image.get()));
+        } catch (RuntimeException mappingFailure) {
+            LOGGER.log(Level.WARNING,
+                "ACELIB-FORM-003: simple form button image mapping failed, "
+                    + "falling back to plain text button '" + entry.text() + "'",
+                mappingFailure);
+            builder.button(entry.text());
+        }
+    }
+
+    /** AceLib 圖示 → Cumulus 圖示的預設映射（型別一一對應，資料原樣傳遞）。 */
+    private static org.geysermc.cumulus.util.FormImage defaultImage(FormImage image) {
+        org.geysermc.cumulus.util.FormImage.Type type = switch (image.type()) {
+            case PATH -> org.geysermc.cumulus.util.FormImage.Type.PATH;
+            case URL -> org.geysermc.cumulus.util.FormImage.Type.URL;
+        };
+        return org.geysermc.cumulus.util.FormImage.of(type, image.data());
     }
 
     private static Form modal(FormSpec.Modal spec, Consumer<FormResponse> onResponse) {
