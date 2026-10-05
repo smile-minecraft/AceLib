@@ -62,6 +62,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-CFG-003` | reload 失敗且無舊值可回退 | 設定 reload 失敗且沒有先前有效值 |
 | `ACELIB-CFG-004` | 設定檔版本遷移失敗 | 設定 migration chain 中任一步驟失敗 |
 | `ACELIB-CFG-005` | 必填欄位缺失 | 設定檔缺少必要欄位 |
+| `ACELIB-CFG-006` | on-disk 設定版本比當前版本新 | 拒絕降版覆寫既有設定檔（load 與 reload 都適用） |
 
 ### 訊息服務（MSG）
 
@@ -96,7 +97,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | 代碼 | 說明 | 觸發情境 |
 | --- | --- | --- |
 | `ACELIB-EVT-001` | listener handler 內部拋例外 | 事件處理器拋錯（不影響其他 listener） |
-| `ACELIB-EVT-002` | Event class 註冊到 PluginManager 失敗 | dispatch 失敗 |
+| `ACELIB-EVT-002` | Event class 無法向 PluginManager 註冊 | HandlerList 無法解析（自身與父類都沒有 static `getHandlerList()`，含 interface），或 registerEvent 失敗 |
 | `ACELIB-EVT-003` | 重複註冊 | 已存在的 identity 重複註冊 |
 | `ACELIB-EVT-004` | 插件停用 | disabled 後 register／dispatch |
 | `ACELIB-EVT-005` | Folia 下 REQUIRES_REGION listener 在錯誤上下文 | Folia 上非區域執行緒觸發區域綁定 listener |
@@ -113,7 +114,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-DATA-005` | 儲存已關閉 | store 已 close 後仍嘗試操作 |
 | `ACELIB-DATA-006` | 序列化失敗 | 型別不支援、循環參考 |
 | `ACELIB-DATA-007` | 非同步逾時 | async 等待超過 deadline |
-| `ACELIB-DATA-008` | 資料源不可用 | JDBC 連線拒絕、SQL 語法錯誤 |
+| `ACELIB-DATA-008` | 資料源不可用 | JDBC 連線拒絕、SQL 語法錯誤；訊息以 `[jdbc:<階段>]` 區分來源：`create-table`（建表）、`read`（查詢）、`migrate-table`（舊表升級）、`write`（init 寫回）、`save`（保存）、`init`（連線層） |
 | `ACELIB-DATA-009` | 無可用 migration | 偵測到舊版本但 chain 中無對應 from |
 | `ACELIB-DATA-010` | on-disk schema 版本比 current 新 | 拒絕降版覆寫既有資料 |
 | `ACELIB-DATA-011` | 非法 SQL identifier | JdbcDataStore table 名稱驗證失敗 |
@@ -125,11 +126,11 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-PLAYER-001` | 資料尚未就緒 | caller 在 LOADING 階段讀取 |
 | `ACELIB-PLAYER-002` | 資料載入失敗 | I/O 或反序列化錯誤 |
 | `ACELIB-PLAYER-003` | 資料保存失敗 | I/O 或序列化錯誤 |
-| `ACELIB-PLAYER-004` | session 重複登入 | 同一 UUID 已有 active session |
+| `ACELIB-PLAYER-004` | session 重複登入 | 同一 UUID 已有 active session；舊 session 尚在 UNLOADING（quit 保存進行中）時新 join 改為鏈接舊 quit、完成後自動重試（成功／保存失敗皆重試），僅無 quit 進行中的重複登入才同步拋出 |
 | `ACELIB-PLAYER-005` | session 未找到 | caller 對未登入 UUID 操作 |
 | `ACELIB-PLAYER-006` | DataStore 未初始化 | store 尚未綁定 |
 | `ACELIB-PLAYER-007` | 服務已關閉 | disable/shutdown 後呼叫 join/quit |
-| `ACELIB-PLAYER-008` | 內部 serial executor 終止失敗 | serial executor 異常關閉 |
+| `ACELIB-PLAYER-008` | 內部 serial executor 終止失敗 | serial executor 異常關閉；shutdown flush 逾時／中斷亦用此碼（dirty 保留、可重試；逾時不等於 flush 成功） |
 
 ### 世界操作（WORLD）
 
@@ -214,8 +215,9 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | --- | --- | --- |
 | `ACELIB-PLAT-001` | 無法識別的伺服器實作 | 平台偵測失敗 |
 | `ACELIB-PLAT-004` | 伺服器實作判定失敗 | UNKNOWN 平台 warning |
-| `ACELIB-LANG-001` | 訊息 key 缺失 | locale key 不存在（warning，不中斷） |
-| `ACELIB-LANG-002` | 語言檔格式錯誤 | YAML 解析失敗 |
+| `ACELIB-LANG-001` | 訊息 key 缺失 | locale key 不存在（warning，不中斷；同一載入週期只記一次） |
+| `ACELIB-LANG-002` | 語言檔格式錯誤或無法寫入 | YAML 解析失敗，或 temp + atomic move 寫入失敗 |
+| `ACELIB-LANG-003` | 語言檔不存在 | 請求 locale 檔不存在，fallback 或負向快取（warning） |
 | `ACELIB-DBG-001` | 診斷模組自身錯誤 | reload 時 diagnostics 重綁失敗 |
 
 ## 相關頁面
