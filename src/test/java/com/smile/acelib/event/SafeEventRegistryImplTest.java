@@ -1093,6 +1093,498 @@ class SafeEventRegistryImplTest {
     }
 
     // =====================================================================
+    // Bridge 唯一性與父類派送邊界
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Bridge 唯一性與父類派送邊界")
+    class BridgeUniquenessAndParentDispatchTests {
+
+        @Test
+        @DisplayName("unregister 全部後再 register：同 eventType 不重複向 Bukkit 註冊 bridge")
+        void unregisterAllForType_thenReregister_bridgeNotDuplicated() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            EventRegistration<ProbeEvent> first = registry.register(ProbeEvent.class,
+                new NamedListener("L1", received));
+            assertEquals(1, ProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "首次 register 應有 1 個 bridge listener");
+
+            registry.unregister(first);
+            assertEquals(1, ProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "unregister 後 bridge 保留（dispatch 入口走 no-op）");
+
+            registry.register(ProbeEvent.class, new NamedListener("L2", received));
+            assertEquals(1, ProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "重註冊同 eventType 不應向 Bukkit 重複註冊 bridge listener");
+
+            fire(new ProbeEvent("x"));
+            assertEquals(List.of("L2:x"), received, "事件應只經由單一 bridge 派送一次");
+        }
+
+        @Test
+        @DisplayName("one-shot 連續觸發：registration list 移除且不累積 bridge callback")
+        void oneShot_repeatedFire_noBridgeAccumulation() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            // 連續三輪「註冊 one-shot → 觸發一次」；每一輪結束後 bridge 數量都必須
+            // 維持 1，否則舊 callback 會累積並在後續事件被重複呼叫。
+            for (int round = 1; round <= 3; round++) {
+                String tag = "L" + round;
+                registry.registerOneShot(ProbeEvent.class,
+                    new NamedListener(tag, received));
+                assertEquals(1, ProbeEvent.getHandlerList().getRegisteredListeners().length,
+                    "第 " + round + " 輪：bridge 數量必須維持 1");
+                fire(new ProbeEvent("r" + round));
+                assertEquals(tag + ":r" + round, received.get(received.size() - 1),
+                    "第 " + round + " 輪：one-shot 應恰好被派送一次");
+                assertEquals(round, received.size(),
+                    "已移除的 one-shot 不應在後續事件被重複派送");
+                assertEquals(0, registry.getTrackedRegistrationCount(),
+                    "one-shot 觸發後 registration list 應移除");
+                assertTrue(registry.getTrackedRegistrations().isEmpty());
+            }
+            assertEquals(1, ProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "多輪 one-shot 後 bridge 仍應只有 1 個");
+        }
+
+        @Test
+        @DisplayName("自帶 HandlerList 的子類事件不命中父類 listener（與 Bukkit 一致）")
+        void subclassWithOwnHandlerList_doesNotHitParentListener() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            registry.register(ParentProbeEvent.class, new ParentListener(received));
+            assertEquals(1, ParentProbeEvent.getHandlerList().getRegisteredListeners().length);
+
+            server.getPluginManager().callEvent(new ChildProbeEvent("s"));
+            assertTrue(received.isEmpty(),
+                "子類自帶 HandlerList → Bukkit 派送到子類清單，父類 listener 不應收到");
+
+            server.getPluginManager().callEvent(new ParentProbeEvent());
+            assertEquals(List.of("P"), received,
+                "父類自身事件仍應命中父類 listener");
+        }
+
+        @Test
+        @DisplayName("共用父類 HandlerList 的子類事件命中父類 listener（與 Bukkit 一致）")
+        void subclassSharingParentHandlerList_hitsParentListener() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            registry.register(AbstractProbeEvent.class, new NamedAbstractListener(received));
+            // Bukkit 註冊目標由 getRegistrationClass 決定：子類未自帶
+            // static getHandlerList() → 註冊落在父類 HandlerList，
+            // 父類 listener 會收到子類事件。
+            server.getPluginManager().callEvent(new ConcreteProbeEvent("c"));
+            assertEquals(List.of("A:c"), received,
+                "共用父類 HandlerList 的子類事件應命中父類 listener");
+        }
+
+        @Test
+        @DisplayName("父類與子類共用同一 HandlerList → bridge 只註冊一次、listener 各派送一次")
+        void sharedHandlerList_bridgeRegisteredOncePerHandlerList() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            registry.register(AbstractProbeEvent.class, new NamedAbstractListener(received));
+            registry.register(ConcreteProbeEvent.class,
+                new NamedConcreteListener(received));
+
+            assertEquals(1, AbstractProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "同一 HandlerList 只允許一個 bridge listener");
+            assertEquals(1, registry.getRegisteredEventTypeCount(),
+                "共用 HandlerList 的兩個 event type 只算一個 Bukkit 註冊目標");
+
+            server.getPluginManager().callEvent(new ConcreteProbeEvent("x"));
+            assertEquals(List.of("A:x", "C:x"), received,
+                "共用 HandlerList 時每個 listener 只應被派送一次");
+        }
+
+        @Test
+        @DisplayName("兄弟子類事件只命中父類與自己的 listener，不命中兄弟子類 listener")
+        void siblingSubclass_doesNotReachSiblingListener() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            // 三個 listener 共用同一個 HandlerList（Bukkit 的共用基底 event 寫法）。
+            // 派送哪一種事件，就只有父類與該型別自己的 listener 該被呼叫。
+            registry.register(AbstractProbeEvent.class, new NamedParentPayloadListener(received));
+            registry.register(ConcreteProbeEvent.class, new NamedConcreteListener(received));
+            registry.register(SiblingProbeEvent.class, new NamedSiblingListener(received));
+            assertEquals(1, AbstractProbeEvent.getHandlerList().getRegisteredListeners().length,
+                "共用 HandlerList 只允許一個 bridge listener");
+
+            server.getPluginManager().callEvent(new SiblingProbeEvent("s"));
+            assertEquals(List.of("A:s", "S:s"), received,
+                "兄弟子類事件不應觸發 ConcreteProbeEvent 的 listener");
+            assertFalse(registry.getRecorder().contains("ACELIB-EVT-001"),
+                "不相干的 listener 不應被呼叫到在內部炸 ClassCastException");
+
+            server.getPluginManager().callEvent(new ConcreteProbeEvent("c"));
+            assertEquals(List.of("A:s", "S:s", "A:c", "C:c"), received,
+                "自己型別的事件仍應命中父類與自己");
+        }
+
+        @Test
+        @DisplayName("one-shot：不相干型別的事件不應消耗掉它")
+        void oneShot_notConsumedByInapplicableEvent() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            registry.registerOneShot(ConcreteProbeEvent.class, new NamedConcreteListener(received));
+            assertEquals(1, registry.getTrackedRegistrationCount());
+
+            // SiblingProbeEvent 與 ConcreteProbeEvent 共用 HandlerList，但對這個
+            // one-shot listener 而言是不相干的型別：不應觸發、也不應消耗它。
+            server.getPluginManager().callEvent(new SiblingProbeEvent("s"));
+            assertTrue(received.isEmpty(), "不相干型別的事件不應觸發 one-shot listener");
+            assertEquals(1, registry.getTrackedRegistrationCount(),
+                "不相干型別的事件不應消耗掉 one-shot");
+
+            server.getPluginManager().callEvent(new ConcreteProbeEvent("c"));
+            assertEquals(List.of("C:c"), received, "one-shot 應在正確型別的事件被派送一次");
+        }
+
+        @Test
+        @DisplayName("Bukkit 無法解析 HandlerList 的 event type → fail closed 記錄 ACELIB-EVT-002")
+        void unresolvableEventType_registrationFailsClosed() {
+            CopyOnWriteArrayList<String> received = new CopyOnWriteArrayList<>();
+            // UnlistableEvent 沒有 static getHandlerList()，一路到 Event 都沒有；
+            // Bukkit 會擲 IllegalPluginAccessException，此處必須明確 fail closed。
+            assertDoesNotThrowCode(() -> registry.register(UnlistableEvent.class,
+                new NamedUnlistableListener(received)));
+            assertTrue(registry.getRecorder().contains("ACELIB-EVT-002"),
+                "無法解析 HandlerList 的 event type 應記錄 EVT-002");
+            assertEquals(0, UnlistableEvent.handlers().getRegisteredListeners().length,
+                "fail closed 時不應向 Bukkit 註冊任何 listener");
+
+            server.getPluginManager().callEvent(new UnlistableEvent());
+            assertTrue(received.isEmpty(), "fail closed 的 listener 不應被 dispatch");
+            assertEquals(0, registry.getTrackedRegistrationCount(),
+                "fail closed 的 event type 不應被追蹤");
+        }
+
+        @Test
+        @DisplayName("非 static getHandlerList() → 註冊階段 fail closed")
+        void nonStaticGetHandlerList_registrationFailsClosed() {
+            // Bukkit 的 getRegistrationClass 不檢查 static，會選到這個類別；
+            // 解析階段若不擋，registerEvent 才會在 invoke 時炸，變成未受控例外。
+            assertDoesNotThrowCode(() -> registry.register(NonStaticHandlerListEvent.class,
+                new NamedGenericListener<>(NonStaticHandlerListEvent.class,
+                    new CopyOnWriteArrayList<>())));
+            assertTrue(registry.getRecorder().contains("ACELIB-EVT-002"),
+                "非 static getHandlerList() 應記錄 EVT-002");
+            assertEquals(0, registry.getTrackedRegistrationCount(),
+                "非 static getHandlerList() 不應被追蹤");
+            assertEquals(0, registry.getRegisteredEventTypeCount(),
+                "非 static getHandlerList() 不應向 Bukkit 註冊 bridge");
+        }
+
+        @Test
+        @DisplayName("static 但回傳型別非 HandlerList 的 getHandlerList() → 註冊階段 fail closed")
+        void wrongReturnTypeGetHandlerList_registrationFailsClosed() {
+            assertDoesNotThrowCode(() -> registry.register(WrongReturnTypeEvent.class,
+                new NamedGenericListener<>(WrongReturnTypeEvent.class,
+                    new CopyOnWriteArrayList<>())));
+            assertTrue(registry.getRecorder().contains("ACELIB-EVT-002"),
+                "回傳型別錯誤的 getHandlerList() 應記錄 EVT-002");
+            assertEquals(0, registry.getTrackedRegistrationCount(),
+                "回傳型別錯誤的 getHandlerList() 不應被追蹤");
+            assertEquals(0, registry.getRegisteredEventTypeCount(),
+                "回傳型別錯誤的 getHandlerList() 不應向 Bukkit 註冊 bridge");
+        }
+    }
+
+    /** 父類 event（非 final，允許子類繼承），自帶獨立 HandlerList。 */
+    public static class ParentProbeEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+
+        public static HandlerList getHandlerList() {
+            return HANDLERS;
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return HANDLERS;
+        }
+    }
+
+    /** ParentProbeEvent 子類；擁有自己的 HandlerList。 */
+    public static final class ChildProbeEvent extends ParentProbeEvent {
+        private static final HandlerList CHILD_HANDLERS = new HandlerList();
+        private final String payload;
+
+        public static HandlerList getHandlerList() {
+            return CHILD_HANDLERS;
+        }
+
+        public ChildProbeEvent(String payload) {
+            this.payload = payload;
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return CHILD_HANDLERS;
+        }
+    }
+
+    private static final class ParentListener
+            implements SafeEventListener<ParentProbeEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        ParentListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<ParentProbeEvent> eventType() {
+            return ParentProbeEvent.class;
+        }
+
+        @Override
+        public void onEvent(ParentProbeEvent event) {
+            received.add("P");
+        }
+    }
+
+    /**
+     * Abstract event type，自帶 static {@code getHandlerList()}。
+     *
+     * <p>Bukkit 的 {@code getRegistrationClass} 只要求「宣告 static
+     * {@code getHandlerList()}」，因此 abstract 與否不影響可否註冊 ——
+     * 真正決定能否註冊的是 HandlerList 是否可解析。</p>
+     */
+    public abstract static class AbstractProbeEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+
+        public static HandlerList getHandlerList() {
+            return HANDLERS;
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return HANDLERS;
+        }
+    }
+
+    /**
+     * {@link AbstractProbeEvent} 的具體子類，<strong>不自帶</strong> HandlerList，
+     * 因此與父類共用同一個 HandlerList（Bukkit 的典型共用基底 event 寫法）。
+     */
+    public static final class ConcreteProbeEvent extends AbstractProbeEvent {
+        private final String payload;
+
+        public ConcreteProbeEvent(String payload) {
+            this.payload = payload;
+        }
+
+        public String payload() {
+            return payload;
+        }
+    }
+
+    /**
+     * 沒有 static {@code getHandlerList()} 的 event type：從自身一路到
+     * {@code Event} 都無法解析 HandlerList，Bukkit 會擲
+     * {@code IllegalPluginAccessException}。
+     */
+    public static final class UnlistableEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+
+        public static HandlerList handlers() {
+            return HANDLERS;
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return HANDLERS;
+        }
+    }
+
+    /**
+     * 宣告了 <strong>非 static</strong> {@code getHandlerList()} 的 event type。
+     *
+     * <p>Bukkit 的 {@code getRegistrationClass} 不檢查 static，會選到這個類別，
+     * 但真正註冊時對 instance method 做 static invoke 會失敗。解析階段就必須
+     * 判定不可用並 fail closed。</p>
+     */
+    public static final class NonStaticHandlerListEvent extends Event {
+        private final HandlerList handlers = new HandlerList();
+
+        public HandlerList getHandlerList() {
+            return handlers;
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return handlers;
+        }
+    }
+
+    /**
+     * 宣告了 static 但回傳型別不是 {@link HandlerList} 的 {@code getHandlerList()}。
+     *
+     * <p>同樣是 Bukkit 選得到、卻在註冊時 cast 失敗的形狀，解析階段必須擋下。</p>
+     */
+    public static final class WrongReturnTypeEvent extends Event {
+        private static final HandlerList HANDLERS = new HandlerList();
+
+        public static String getHandlerList() {
+            return "not-a-handler-list";
+        }
+
+        @Override
+        public HandlerList getHandlers() {
+            return HANDLERS;
+        }
+    }
+
+    private static final class NamedAbstractListener
+            implements SafeEventListener<AbstractProbeEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedAbstractListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<AbstractProbeEvent> eventType() {
+            return AbstractProbeEvent.class;
+        }
+
+        @Override
+        public void onEvent(AbstractProbeEvent event) {
+            received.add("A:" + ((ConcreteProbeEvent) event).payload());
+        }
+    }
+
+    /**
+     * {@link AbstractProbeEvent} 的<strong>另一個</strong>具體子類，同樣不自帶
+     * HandlerList，因此與 {@link ConcreteProbeEvent} 共用同一個 HandlerList。
+     *
+     * <p>兩者互為兄弟子類：事件只該命中父類 listener 與自己型別的 listener。</p>
+     */
+    public static final class SiblingProbeEvent extends AbstractProbeEvent {
+        private final String payload;
+
+        public SiblingProbeEvent(String payload) {
+            this.payload = payload;
+        }
+
+        public String payload() {
+            return payload;
+        }
+    }
+
+    private static final class NamedConcreteListener
+            implements SafeEventListener<ConcreteProbeEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedConcreteListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<ConcreteProbeEvent> eventType() {
+            return ConcreteProbeEvent.class;
+        }
+
+        @Override
+        public void onEvent(ConcreteProbeEvent event) {
+            received.add("C:" + event.payload());
+        }
+    }
+
+    private static final class NamedSiblingListener
+            implements SafeEventListener<SiblingProbeEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedSiblingListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<SiblingProbeEvent> eventType() {
+            return SiblingProbeEvent.class;
+        }
+
+        @Override
+        public void onEvent(SiblingProbeEvent event) {
+            received.add("S:" + event.payload());
+        }
+    }
+
+    /**
+     * 註冊在<b>父類</b> {@link AbstractProbeEvent} 上的 listener，且刻意不把
+     * 事件硬轉成某一個具體子類。
+     *
+     * <p>共用同一 HandlerList 的所有子類事件都會命中它，所以它必須能接受任何
+     * 子類實例 —— 這正是「父類派送」語意要凍結的行為。</p>
+     */
+    private static final class NamedParentPayloadListener
+            implements SafeEventListener<AbstractProbeEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedParentPayloadListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<AbstractProbeEvent> eventType() {
+            return AbstractProbeEvent.class;
+        }
+
+        @Override
+        public void onEvent(AbstractProbeEvent event) {
+            received.add("A:" + payloadOf(event));
+        }
+
+        private static String payloadOf(AbstractProbeEvent event) {
+            if (event instanceof ConcreteProbeEvent concrete) {
+                return concrete.payload();
+            }
+            if (event instanceof SiblingProbeEvent sibling) {
+                return sibling.payload();
+            }
+            return "?";
+        }
+    }
+
+    private static final class NamedUnlistableListener
+            implements SafeEventListener<UnlistableEvent> {
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedUnlistableListener(CopyOnWriteArrayList<String> received) {
+            this.received = received;
+        }
+
+        @Override
+        public Class<UnlistableEvent> eventType() {
+            return UnlistableEvent.class;
+        }
+
+        @Override
+        public void onEvent(UnlistableEvent event) {
+            received.add("U");
+        }
+    }
+
+    /**
+     * 可指定 event type 的具名 listener — 給「只需要一個 listener 實例、
+     * event type 由測試決定」的 fail-closed 形狀使用，避免為每個探針 event
+     * 各寫一個只差eventType 的 listener class。
+     */
+    private static final class NamedGenericListener<T extends Event>
+            implements SafeEventListener<T> {
+        private final Class<T> eventType;
+        private final CopyOnWriteArrayList<String> received;
+
+        NamedGenericListener(Class<T> eventType, CopyOnWriteArrayList<String> received) {
+            this.eventType = eventType;
+            this.received = received;
+        }
+
+        @Override
+        public Class<T> eventType() {
+            return eventType;
+        }
+
+        @Override
+        public void onEvent(T event) {
+            received.add("G");
+        }
+    }
+
+    // =====================================================================
     // 跨 eventType 隔離
     // =====================================================================
 

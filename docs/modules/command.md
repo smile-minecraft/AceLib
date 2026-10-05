@@ -9,6 +9,7 @@ Command 模組公開 `CommandSpec`、`SubCommandSpec`、`CommandContext`、`Comm
 
 - [使用限制](#使用限制)
 - [已公開的指令描述能力](#已公開的指令描述能力)
+- [指令冷卻的清理時機](#指令冷卻的清理時機)
 - [指令目錄](#指令目錄commandcatalog)
 - [消費範例](#消費範例)
 - [相關頁面](#相關頁面)
@@ -34,6 +35,21 @@ AceLib 目前沒有提供給下游 plugin 的 Supported factory，可直接建�
 玩家回覆仍須遵守 Folia region 規則。不要從任意背景執行緒直接操作 Bukkit `Player`；請由提供 registry 的組裝端安排 region-safe 回覆。
 
 完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 指令冷卻的清理時機
+
+`SubCommandSpec.cooldownMillis()` 大於 0 時，dispatcher 會以 `CooldownTracker` 判斷是否放行，冷卻中則以 `COOLDOWN_ACTIVE` 拒絕。key 為 `<command>:<subcommand>`，只在玩家 sender 生效，console 不受冷卻限制。
+
+`CooldownTracker` 在 API 分類中是 Supported，但它是 dispatcher 內部持有的實例，`AceLibApi` 沒有提供取得途徑。因此 dispatch 使用的冷卻表由組裝層維護，consumer 無從自行呼叫清理；`CommandRegistry.onPluginDisable()` 也不會清除冷卻狀態，reload 後冷卻仍然有效（需要完全重置才由組裝層呼叫 `clearAll()`）。
+
+自行建立 `CooldownTracker`（例如做管理指令的 `/cooldown clear <player>`）時要注意：
+
+- `pruneExpired()` 沒有任何自動 caller。AceLib 不會自行排程定時清理，過期紀錄會留在 map 裡，直到呼叫端自己呼叫。
+- 有可清理的 API 不等於累積量自動受到限制；長期運行的伺服器仍要由呼叫端依自己的生命週期安排清理時機（例如 reload 前或定期維護時）。
+- `tryAcquire(...)` 與 `pruneExpired()` 都在外層 map 的同一個 `compute`／`computeIfPresent` 內完成，共用同一把 per-player 鎖，因此清理不會讓併發寫入的冷卻被遺失。
+- `clear(playerId)` 清除單一玩家的全部冷卻，`clearAll()` 清除全部；兩者都是管理用途，正常 dispatch 流程不會呼叫。
+
+命令之外的玩家冷卻（技能、使用者自訂 key）請用 `PlayerCooldownService`，見[玩家資料與 session](player.md)。
 
 ## 指令目錄（CommandCatalog）
 

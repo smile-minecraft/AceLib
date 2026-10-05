@@ -27,10 +27,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * registry 整個釋放，冷卻 tracker 仍可保留狀態直到 GC。</p>
  *
  * <h2>執行緒安全</h2>
- * <p>使用 {@link ConcurrentHashMap}；{@link #tryAcquire} 內部用
- * {@code computeIfAbsent} + {@code put} 組合，雖非完全原子，但效果等同
- * 「last writer wins」且不違反「同玩家冷卻只觸發一次」的語意（因為即使競爭
- * 寫入也只有「更新過期時間為更晚值」，不會讓 acquire 通過多於一次）。</p>
+ * <p>使用 {@link ConcurrentHashMap}，但臨界區一律落在<strong>外層的 per-player
+ * 槽位</strong>：{@link #tryAcquire} 與 {@link #pruneExpired} 都對
+ * {@code expiresAt.compute/computeIfPresent(playerId, ...)} 操作，因此兩者共用同一把
+ * per-player 鎖。</p>
+ *
+ * <p>這樣做而不是對內層 subKey 做 compute：{@link #pruneExpired} 會在表清空時把整張
+ * 內層 map 從外層摘掉；若取得 map 參考與寫入之間沒有同一把鎖護著，寫入就會落在一張
+ * 已經沒有人引用的孤兒 map 上 — 冷卻直接消失、同一冷卻窗被放行多次。共用一把鎖之後，
+ * 「讀既有過期時間 → 寫新過期時間 → 決定放行」與「清過期 → 必要時摘掉表」不可能交錯。</p>
+ *
+ * <p>同一 key 因此不會在同一冷卻窗被多個執行緒同時放行。</p>
  *
  * @see SubCommandSpec#cooldownMillis()
  * @since 1.0.0
@@ -89,15 +96,31 @@ public final class CooldownTracker {
         if (cooldownMillis <= 0) {
             return true;
         }
-        ConcurrentHashMap<String, Long> perPlayer =
-            expiresAt.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
         long now = clock.currentTimeMillis();
-        Long prev = perPlayer.get(subKey);
-        if (prev != null && prev > now) {
-            return false;
-        }
-        perPlayer.put(subKey, now + cooldownMillis);
-        return true;
+        boolean[] granted = new boolean[1];
+        // 單次原子決策，而且臨界區必須落在「該玩家的整張冷卻表」上，而不是
+        // 內層的單一 subKey：
+        //
+        // - 對內層 subKey 做 compute 只能擋住同一 subKey 的併發寫入，但
+        //   pruneExpired 會把整張內層 map 從外層摘掉；acquire 先取得內層 map
+        //   參考、prune 再摘掉、acquire 後寫入，就會把「有效冷卻」寫進一張
+        //   已經沒有人引用的孤兒 map（冷卻直接消失）。
+        // - 對外層 playerId 做 compute 讓「取得內層 map → 讀 prev → 寫新 expiry
+        //   → 決定放行」整段都在同一把 per-player 鎖內完成，prune 也用同一把鎖，
+        //   兩者就不可能交錯成遺失寫入。
+        expiresAt.compute(playerId, (uuid, per) -> {
+            ConcurrentHashMap<String, Long> table =
+                per != null ? per : new ConcurrentHashMap<>();
+            Long prev = table.get(subKey);
+            if (prev != null && prev > now) {
+                granted[0] = false;
+                return table;
+            }
+            table.put(subKey, now + cooldownMillis);
+            granted[0] = true;
+            return table;
+        });
+        return granted[0];
     }
 
     /**
@@ -139,6 +162,28 @@ public final class CooldownTracker {
      */
     public void clearAll() {
         expiresAt.clear();
+    }
+
+    /**
+     * 移除所有已過期的冷卻紀錄（含空的 per-player map）。
+     *
+     * <p>長期運行時大量一次性 key 會讓 {@link #trackedPlayerCount()} 與
+     * map 成長；呼叫方應在適當時機（例如 reload、定期維護）呼叫本方法。</p>
+     */
+    public void pruneExpired() {
+        long now = clock.currentTimeMillis();
+        // 逐玩家在「外層 playerId 的鎖」內清理，而不是先 forEach 再 remove：
+        // 刪除與 {@link #tryAcquire} 共用同一把鎖，acquire 就不可能取得一張
+        // 隨即被摘掉的內層 map 而把有效冷卻寫丟。
+        //
+        // computeIfPresent 回傳 null 代表移除這個 playerId，正好對應「清空後
+        // 不留空殼」的語意；同時避免長期運行留下大量空 per-player map。
+        for (UUID playerId : expiresAt.keySet()) {
+            expiresAt.computeIfPresent(playerId, (uuid, per) -> {
+                per.entrySet().removeIf(entry -> entry.getValue() <= now);
+                return per.isEmpty() ? null : per;
+            });
+        }
     }
 
     /**

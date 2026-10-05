@@ -26,7 +26,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * 測試全程使用 deterministic clock，禁止 sleep。</p>
  *
  * <h2>執行緒安全</h2>
- * <p>內部使用 {@link ConcurrentHashMap}，所有 public 方法 thread-safe。</p>
+ * <p>內部使用 {@link ConcurrentHashMap}，但臨界區一律落在<strong>外層的 per-player
+ * 槽位</strong>：{@link #start}、{@link #tryAcquire}、{@link #end} 與
+ * {@link #pruneExpired} 都對 {@code expiresAt.compute/computeIfPresent(playerId, ...)}
+ * 操作，四者共用同一把 per-player 鎖。</p>
+ *
+ * <p>這樣做而不是「先 {@code computeIfAbsent} 拿到內層 map、再對內層 key 寫入」：
+ * {@link #pruneExpired} 會在表清空時把整張內層 map 從外層摘掉；若取得 map 參考與寫入
+ * 之間沒有同一把鎖護著，寫入就會落在一張已經沒有人引用的孤兒 map 上 — 冷卻直接消失、
+ * 同一冷卻窗被放行多次。共用一把鎖之後，「取得表 → 讀既有過期時間 → 寫新過期時間 →
+ * 決定放行」不可能與清理交錯。</p>
+ *
+ * <p>同一 key 因此不會在同一冷卻窗被多個執行緒同時放行。</p>
  *
  * <h2>名稱變更</h2>
  * <p>以 {@link UUID} 為唯一索引 key；玩家更名（同 UUID 不同 name）不影響
@@ -83,9 +94,16 @@ public final class PlayerCooldownService {
             throw new IllegalArgumentException(
                 "durationMillis must be > 0, actual: " + durationMillis);
         }
-        ConcurrentHashMap<String, Long> perPlayer =
-            expiresAt.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
-        perPlayer.put(cooldownKey, clock.currentTimeMillis() + durationMillis);
+        long expiresAtMillis = clock.currentTimeMillis() + durationMillis;
+        // 「建立內層 map（必要時）→ 寫入過期時間」整段放在外層 playerId 的鎖內。
+        // 拆成 computeIfAbsent + put 兩步時，{@link #pruneExpired} 可以在兩步
+        // 之間把整張空 map 摘掉，讓新冷卻寫進沒有人引用的孤兒 map（冷卻直接消失）。
+        expiresAt.compute(playerId, (uuid, per) -> {
+            ConcurrentHashMap<String, Long> table =
+                per != null ? per : new ConcurrentHashMap<>();
+            table.put(cooldownKey, expiresAtMillis);
+            return table;
+        });
     }
 
     /**
@@ -109,15 +127,29 @@ public final class PlayerCooldownService {
         if (durationMillis <= 0) {
             return true;
         }
-        ConcurrentHashMap<String, Long> perPlayer =
-            expiresAt.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
         long now = clock.currentTimeMillis();
-        Long prev = perPlayer.get(cooldownKey);
-        if (prev != null && prev > now) {
-            return false;
-        }
-        perPlayer.put(cooldownKey, now + durationMillis);
-        return true;
+        boolean[] granted = new boolean[1];
+        // 單次原子決策，而且臨界區落在「該玩家的整張冷卻表」上：
+        //
+        // - 只對內層 cooldownKey 做 compute 擋不住 prune 把整張內層 map 摘掉；
+        //   acquire 先取得 map 參考、prune 再摘掉、acquire 後寫入，新冷卻就會寫進
+        //   已經沒有人引用的孤兒 map（冷卻直接消失，同一冷卻窗被放行多次）。
+        // - 對外層 playerId 做 compute 讓「取得 map → 讀 prev → 寫新 expiry →
+        //   決定放行」整段都在同一把 per-player 鎖內完成，prune 用同一把鎖，
+        //   兩者不可能交錯成遺失寫入。
+        expiresAt.compute(playerId, (uuid, per) -> {
+            ConcurrentHashMap<String, Long> table =
+                per != null ? per : new ConcurrentHashMap<>();
+            Long prev = table.get(cooldownKey);
+            if (prev != null && prev > now) {
+                granted[0] = false;
+                return table;
+            }
+            table.put(cooldownKey, now + durationMillis);
+            granted[0] = true;
+            return table;
+        });
+        return granted[0];
     }
 
     /**
@@ -150,10 +182,12 @@ public final class PlayerCooldownService {
     public void end(UUID playerId, String cooldownKey) {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(cooldownKey, "cooldownKey");
-        ConcurrentHashMap<String, Long> perPlayer = expiresAt.get(playerId);
-        if (perPlayer != null) {
-            perPlayer.remove(cooldownKey);
-        }
+        // 與 pruneExpired 共用外層鎖：刪除後的「這張表是否已空」由鎖內判定，
+        // prune 才不會在旁邊看見非空而留下一張永遠不再被引用的空殼。
+        expiresAt.computeIfPresent(playerId, (uuid, per) -> {
+            per.remove(cooldownKey);
+            return per;
+        });
     }
 
     /**
@@ -173,6 +207,26 @@ public final class PlayerCooldownService {
      */
     public void clearAll() {
         expiresAt.clear();
+    }
+
+    /**
+     * 移除所有已過期的冷卻紀錄（含空的 per-player map）。
+     *
+     * <p>長期運行時大量一次性 key 會讓 map 成長；呼叫方應在適當時機
+     * （例如 reload、定期維護）呼叫本方法。</p>
+     */
+    public void pruneExpired() {
+        long now = clock.currentTimeMillis();
+        // 逐玩家在「外層 playerId 的鎖」內清理：刪除與 {@link #start} /
+        // {@link #tryAcquire} 共用同一把鎖，寫入就不會寫進已被摘掉的孤兒 map。
+        // computeIfPresent 回傳 null 代表移除這個 playerId，讓長期運行不會留下
+        // 大量空殼 per-player map。
+        for (UUID playerId : expiresAt.keySet()) {
+            expiresAt.computeIfPresent(playerId, (uuid, per) -> {
+                per.entrySet().removeIf(entry -> entry.getValue() <= now);
+                return per.isEmpty() ? null : per;
+            });
+        }
     }
 
     /**
