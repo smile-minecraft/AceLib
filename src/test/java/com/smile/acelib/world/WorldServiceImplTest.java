@@ -12,11 +12,21 @@ import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import com.smile.acelib.platform.Platform;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -493,4 +503,250 @@ class WorldServiceImplTest {
     // keep compiler happy on unused imports in nested classes
     @SuppressWarnings("unused")
     private static void _unused() throws ExecutionException, InterruptedException {}
+
+    @Nested
+    @DisplayName("Effect / nearby error mapping")
+    class EffectAndNearbyMappingTests {
+
+        @Test
+        @DisplayName("playEffect 無實作時必須回明確錯誤，不能 successWithoutReference 假成功；任意字串皆 fail closed")
+        void playEffect_arbitraryKeys_neverSuccess() {
+            FakeBackend backend = new FakeBackend() {
+                @Override public WorldBackendResult<Void> playEffect(org.bukkit.Location location, String effectKey) {
+                    return WorldBackendResult.failed(WorldErrorCode.PLATFORM_UNSUPPORTED,
+                        "effect '" + effectKey + "' not implemented");
+                }
+            };
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null);
+            LocationSnapshot snapshot = LocationSnapshot.of(UUID.randomUUID(), 0, 64, 0);
+            for (String key : new String[] {"EXPLOSION", "VILLAGER_HAPPY", "随便", "x"}) {
+                EntityResult r = svc.playEffect(snapshot, key);
+                assertTrue(r.state() != WorldState.SUCCESS, "不可回成功: " + key);
+                assertEquals(WorldErrorCode.PLATFORM_UNSUPPORTED, r.errorCode());
+            }
+        }
+
+        @Test
+        @DisplayName("playEffect EFFECT_REJECTED 映為 REJECTED；其他 unknown code 不宣告 played")
+        void playEffect_errorMapping() {
+            FakeBackend backend = new FakeBackend() {
+                @Override public WorldBackendResult<Void> playEffect(org.bukkit.Location location, String effectKey) {
+                    return WorldBackendResult.failed(WorldErrorCode.EFFECT_REJECTED, "chunk gone");
+                }
+            };
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null);
+            LocationSnapshot snapshot = LocationSnapshot.of(UUID.randomUUID(), 0, 64, 0);
+            EntityResult r = svc.playEffect(snapshot, "EXPLOSION");
+            assertEquals(WorldState.REJECTED, r.state());
+            assertEquals(WorldErrorCode.EFFECT_REJECTED, r.errorCode());
+        }
+
+        @Test
+        @DisplayName("findNearby 內建 Folia 拒絕時轉譯為 REJECTED + 原錯誤碼，references 空")
+        void findNearby_backendRejected_translated() {
+            World mockWorld = Mockito.mock(World.class);
+            UUID wid = UUID.randomUUID();
+            when(mockWorld.getUID()).thenReturn(wid);
+            when(mockWorld.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
+            org.bukkit.Server mockServer = Mockito.mock(org.bukkit.Server.class);
+            when(mockServer.getName()).thenReturn("fake");
+            when(mockServer.getWorld(wid)).thenReturn(mockWorld);
+            BukkitWorldBackend builtin = new BukkitWorldBackend(mockServer, Platform.FOLIA);
+            WorldServiceImpl svc = new WorldServiceImpl(builtin, null);
+            // 服務以 snapshot 的 worldId 解析：讓 resolveWorld 回傳 mockWorld
+            // BukkitWorldBackend.resolveWorld 經由 server.getWorld，需先讓 server 認得 wid；
+            // 此處 snapshot 的 wid 即為 mockWorld 的 UID，透過 server mock 取得。
+            LocationSnapshot snapshot = LocationSnapshot.of(wid, 0, 64, 0);
+
+            NearbyQueryResult r = svc.findNearbyEntities(snapshot, 16.0, "ZOMBIE");
+            assertEquals(WorldState.REJECTED, r.state());
+            assertEquals(WorldErrorCode.CONTEXT_UNSAFE, r.errorCode());
+            assertTrue(r.references().isEmpty());
+
+            NearbyQueryResult p = svc.findNearbyPlayers(snapshot, 16.0);
+            assertEquals(WorldState.REJECTED, p.state());
+            assertEquals(WorldErrorCode.CONTEXT_UNSAFE, p.errorCode());
+            assertTrue(p.references().isEmpty());
+            verify(mockWorld, never()).getEntities();
+            verify(mockWorld, never()).getPlayers();
+            verify(mockWorld, never()).getNearbyEntities(any(Location.class), anyDouble(), anyDouble(), anyDouble());
+        }
+
+        @Test
+        @DisplayName("findNearby 內建回任意 error code 時直接保留（轉譯覆蓋任意字串）")
+        void findNearby_arbitraryBackendCode_preserved() {
+            BukkitWorldBackend builtin = Mockito.mock(BukkitWorldBackend.class);
+            org.bukkit.Server mockServer = Mockito.mock(org.bukkit.Server.class);
+            when(mockServer.getName()).thenReturn("fake");
+            when(builtin.server()).thenReturn(mockServer);
+            World mockWorld = Mockito.mock(World.class);
+            UUID wid = UUID.randomUUID();
+            when(mockWorld.getUID()).thenReturn(wid);
+            when(builtin.resolveWorld(wid)).thenReturn(mockWorld);
+            Location dummy = new Location(mockWorld, 0, 64, 0);
+            when(builtin.queryNearby(any(Location.class), anyDouble(), any(EntityType.class)))
+                .thenReturn(WorldBackendResult.failed("ACELIB-WORLD-999", "arbitrary"));
+            when(builtin.queryNearbyPlayers(any(Location.class), anyDouble()))
+                .thenReturn(WorldBackendResult.failed("ACELIB-WORLD-999", "arbitrary"));
+            WorldServiceImpl svc = new WorldServiceImpl(builtin, null);
+            LocationSnapshot snapshot = LocationSnapshot.of(wid, 0, 64, 0);
+
+            // 未登錄的代碼保守降級為 FAILED：不可被誤標成「安全拒絕」，
+            // 也不可回 SUCCESS 讓呼叫端以為真的查過。
+            NearbyQueryResult r = svc.findNearbyEntities(snapshot, 16.0, "ZOMBIE");
+            assertEquals(WorldState.FAILED, r.state());
+            assertEquals("ACELIB-WORLD-999", r.errorCode());
+            assertTrue(r.references().isEmpty());
+
+            NearbyQueryResult p = svc.findNearbyPlayers(snapshot, 16.0);
+            assertEquals(WorldState.FAILED, p.state());
+            assertEquals("ACELIB-WORLD-999", p.errorCode());
+        }
+
+        @Test
+        @DisplayName("playEffect 後端回未登錄代碼時為 FAILED 且不宣告已播放")
+        void playEffect_unknownCode_failsClosed() {
+            FakeBackend backend = new FakeBackend() {
+                @Override public WorldBackendResult<Void> playEffect(org.bukkit.Location location, String effectKey) {
+                    return WorldBackendResult.failed("ACELIB-WORLD-777", "boom");
+                }
+            };
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null);
+            LocationSnapshot snapshot = LocationSnapshot.of(UUID.randomUUID(), 0, 64, 0);
+
+            EntityResult r = svc.playEffect(snapshot, "EXPLOSION");
+
+            assertEquals(WorldState.FAILED, r.state());
+            assertEquals("ACELIB-WORLD-777", r.errorCode());
+        }
+
+        @Test
+        @DisplayName("playEffect 後端確實回 ok 才宣告成功（successWithoutReference 僅在真成功時）")
+        void playEffect_backendOk_isSuccess() {
+            FakeBackend backend = new FakeBackend(); // playEffect 回 ok
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null);
+            LocationSnapshot snapshot = LocationSnapshot.of(UUID.randomUUID(), 0, 64, 0);
+
+            EntityResult r = svc.playEffect(snapshot, "EXPLOSION");
+
+            assertEquals(WorldState.SUCCESS, r.state());
+        }
+    }
+
+    @Nested
+    @DisplayName("Legacy List 相容與內建分流")
+    class LegacyCompatTests {
+
+        private World mockWorldWith(UUID wid) {
+            World w = Mockito.mock(World.class);
+            when(w.getUID()).thenReturn(wid);
+            when(w.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
+            return w;
+        }
+
+        @Test
+        @DisplayName("legacy Paper 按原 List 委派並映射為 SUCCESS（不得宣稱已證 bounded）")
+        void legacy_paper_delegatesList() {
+            UUID wid = UUID.randomUUID();
+            World w = mockWorldWith(wid);
+            Entity zombie = Mockito.mock(Entity.class);
+            UUID eid = UUID.randomUUID();
+            when(zombie.getUniqueId()).thenReturn(eid);
+            when(zombie.getWorld()).thenReturn(w);
+            when(zombie.getType()).thenReturn(EntityType.ZOMBIE);
+            when(zombie.getLocation()).thenReturn(new Location(w, 1, 64, 0));
+            when(w.getNearbyEntities(any(Location.class), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(List.of(zombie));
+
+            org.bukkit.Server mockServer = Mockito.mock(org.bukkit.Server.class);
+            when(mockServer.getName()).thenReturn("fake");
+            when(mockServer.getWorld(wid)).thenReturn(w);
+            // 用內建 Paper 走完整服務管道，驗證 bounded 映射；legacy 委派語意由下一個測試覆蓋。
+            BukkitWorldBackend builtin = new BukkitWorldBackend(mockServer, Platform.PAPER);
+            WorldServiceImpl svc = new WorldServiceImpl(builtin, null, Platform.PAPER);
+            LocationSnapshot center = LocationSnapshot.of(wid, 0, 64, 0);
+
+            NearbyQueryResult r = svc.findNearbyEntities(center, 16.0, "ZOMBIE");
+            assertEquals(WorldState.SUCCESS, r.state());
+            assertEquals(1, r.references().size());
+            assertEquals(eid, r.references().get(0).entityId());
+        }
+
+        @Test
+        @DisplayName("legacy Paper 外部實作 List 直接委派（服務不攔截）")
+        void legacy_externalPaper_delegatesWithoutBoundedClaim() {
+            UUID wid = UUID.randomUUID();
+            World w = mockWorldWith(wid);
+            Entity zombie = Mockito.mock(Entity.class);
+            UUID eid = UUID.randomUUID();
+            when(zombie.getUniqueId()).thenReturn(eid);
+            when(zombie.getWorld()).thenReturn(w);
+            when(zombie.getType()).thenReturn(EntityType.ZOMBIE);
+            FakeBackend backend = new FakeBackend() {
+                @Override public World resolveWorld(UUID id) {
+                    return w;
+                }
+                @Override public List<Entity> findNearby(Location loc, double radius, EntityType type) {
+                    return List.of(zombie);
+                }
+                @Override public List<Player> findNearbyPlayers(Location loc, double radius) {
+                    return List.of();
+                }
+            };
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null, Platform.PAPER);
+            LocationSnapshot center = LocationSnapshot.of(wid, 0, 64, 0);
+
+            NearbyQueryResult r = svc.findNearbyEntities(center, 16.0, "ZOMBIE");
+            assertEquals(WorldState.SUCCESS, r.state());
+            assertEquals(1, r.references().size());
+            assertEquals(eid, r.references().get(0).entityId());
+        }
+
+        @Test
+        @DisplayName("legacy Folia 不呼叫未知實作，直接 CONTEXT_UNSAFE")
+        void legacy_folia_failClosedWithoutCalling() {
+            WorldBackend backend = Mockito.mock(WorldBackend.class);
+            org.bukkit.Server mockServer = Mockito.mock(org.bukkit.Server.class);
+            when(mockServer.getName()).thenReturn("fake");
+            when(backend.server()).thenReturn(mockServer);
+            UUID wid = UUID.randomUUID();
+            World w = mockWorldWith(wid);
+            when(backend.resolveWorld(wid)).thenReturn(w);
+            WorldServiceImpl svc = new WorldServiceImpl(backend, null, Platform.FOLIA);
+            LocationSnapshot center = LocationSnapshot.of(wid, 0, 64, 0);
+
+            NearbyQueryResult r = svc.findNearbyEntities(center, 16.0, "ZOMBIE");
+            assertEquals(WorldState.REJECTED, r.state());
+            assertEquals(WorldErrorCode.CONTEXT_UNSAFE, r.errorCode());
+            assertTrue(r.references().isEmpty());
+
+            NearbyQueryResult p = svc.findNearbyPlayers(center, 16.0);
+            assertEquals(WorldState.REJECTED, p.state());
+            assertEquals(WorldErrorCode.CONTEXT_UNSAFE, p.errorCode());
+
+            verify(backend, never()).findNearby(any(Location.class), anyDouble(), any(EntityType.class));
+            verify(backend, never()).findNearbyPlayers(any(Location.class), anyDouble());
+        }
+
+        @Test
+        @DisplayName("shutdown 下 legacy 與內建一律 SHUTDOWN（優先於平台分流）")
+        void legacy_shutdown_rejected() {
+            FakeBackend legacy = new FakeBackend();
+            WorldServiceImpl legacySvc = new WorldServiceImpl(legacy, null, Platform.FOLIA);
+            legacySvc.shutdown();
+            LocationSnapshot center = LocationSnapshot.of(UUID.randomUUID(), 0, 64, 0);
+            assertEquals(WorldErrorCode.SHUTDOWN,
+                legacySvc.findNearbyEntities(center, 16.0, "ZOMBIE").errorCode());
+            assertEquals(WorldErrorCode.SHUTDOWN,
+                legacySvc.findNearbyPlayers(center, 16.0).errorCode());
+
+            org.bukkit.Server mockServer = Mockito.mock(org.bukkit.Server.class);
+            when(mockServer.getName()).thenReturn("fake");
+            BukkitWorldBackend builtin = new BukkitWorldBackend(mockServer, Platform.PAPER);
+            WorldServiceImpl builtinSvc = new WorldServiceImpl(builtin, null, Platform.PAPER);
+            builtinSvc.shutdown();
+            assertEquals(WorldErrorCode.SHUTDOWN,
+                builtinSvc.findNearbyEntities(center, 16.0, "ZOMBIE").errorCode());
+        }
+    }
 }

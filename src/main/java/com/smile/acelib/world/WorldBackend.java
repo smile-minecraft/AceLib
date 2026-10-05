@@ -96,26 +96,51 @@ public interface WorldBackend {
      *
      * @param location  目標位置；不可為 null
      * @param effectKey 效果 key；不可為 null
-     * @return 成功回 ok（表示已接受播放請求）
+     * @return 成功回 ok（表示已接受播放請求）；未實作的效果必須回
+     *         {@link WorldErrorCode#PLATFORM_UNSUPPORTED}，不得宣告已播放
      */
     WorldBackendResult<Void> playEffect(Location location, String effectKey);
 
     /**
-     * 查詢指定位置 + 半徑 + type 的實體。
+     * 查詢指定位置 + 半徑 + type 的實體（legacy List SPI，維持二進位相容）。
+     *
+     * <p>候選來源必須是 owner-safe 的 bounded 範圍（例如 bounding-box 候選），
+     * 不得呼叫 {@code World#getEntities()} 做全世界掃描。Folia 上若無法證明跨 region
+     * 安全，內建實作不做任何掃描並回空清單（fail-closed）。</p>
+     *
+     * <p>直接 List 無法表達拒絕原因：world 不存在、半徑不合法、chunk 未載入或平台
+     * 不安全時一律回空清單。需要明確錯誤碼的呼叫端請走 {@link WorldService}
+     * 結構化結果管道，服務會經由內建 result 橋接保留原始錯誤碼。</p>
+     *
+     * <p>未知外部實作在 Paper 上按原 SPI 委派，呼叫端不得宣稱為已證 bounded；
+     * 在 Folia 上服務不會呼叫未知實作，直接回 {@code CONTEXT_UNSAFE}。</p>
      *
      * @param location 查詢中心；不可為 null
-     * @param radius   半徑（> 0）
+     * @param radius   半徑（> 0）；服務層不合法時拋 {@code INVALID_INPUT}，
+     *                 直接呼叫 backend 時不合法回空清單且不掃描
      * @param type     過濾的 EntityType；不可為 null
-     * @return 命中實體清單；world 不存在時為空清單
+     * @return 命中實體清單；world 不存在或無法安全查詢時為空清單
      */
     List<Entity> findNearby(Location location, double radius, EntityType type);
 
     /**
-     * 查詢指定位置 + 半徑內玩家。
+     * 查詢指定位置 + 半徑內玩家（legacy List SPI，維持二進位相容）。
+     *
+     * <p>候選來源必須是 owner-safe 的 bounded 範圍；不得呼叫 {@code World#getPlayers()}
+     * 或 {@code World#getEntities()} 做跨 region 掃描。Folia 上內建實作不做任何掃描
+     * 並回空清單（fail-closed）。</p>
+     *
+     * <p>直接 List 無法表達拒絕原因：world 不存在、半徑不合法、chunk 未載入或平台
+     * 不安全時一律回空清單。需要明確錯誤碼的呼叫端請走 {@link WorldService}
+     * 結構化結果管道。</p>
+     *
+     * <p>未知外部實作在 Paper 上按原 SPI 委派，呼叫端不得宣稱為已證 bounded；
+     * 在 Folia 上服務不會呼叫未知實作。</p>
      *
      * @param location 查詢中心；不可為 null
-     * @param radius   半徑（> 0）
-     * @return 命中玩家清單；world 不存在時為空清單
+     * @param radius   半徑（> 0）；服務層不合法時拋 {@code INVALID_INPUT}，
+     *                 直接呼叫 backend 時不合法回空清單且不掃描
+     * @return 命中玩家清單；world 不存在或無法安全查詢時為空清單
      */
     List<Player> findNearbyPlayers(Location location, double radius);
 

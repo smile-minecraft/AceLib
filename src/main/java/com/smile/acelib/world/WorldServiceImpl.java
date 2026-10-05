@@ -2,6 +2,8 @@ package com.smile.acelib.world;
 
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.platform.Platform;
+import com.smile.acelib.platform.PlatformDetector;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -47,19 +49,62 @@ public final class WorldServiceImpl implements WorldService {
 
     private final WorldBackend backend;
     private final DiagnosticsService diagnostics;
+    private final Platform platform;
     /** AtomicBoolean: started → shutting down 後改為 false。 */
     private final AtomicBoolean running = new AtomicBoolean(true);
     /** In-flight teleport handle 計數（shutdown 時等於 0 才算 fully drained）。 */
     private final AtomicInteger inFlightTeleports = new AtomicInteger(0);
 
     public WorldServiceImpl(WorldBackend backend, DiagnosticsService diagnostics) {
+        this(backend, diagnostics,
+            new PlatformDetector(WorldServiceImpl.class.getClassLoader()).detect());
+    }
+
+    /**
+     * 測試 seam：顯式指定平台，避免測試依賴 classpath 探測結果。
+     *
+     * <p>package-private，非公開 API；下游僅能使用雙參數公開建構子。</p>
+     */
+    WorldServiceImpl(WorldBackend backend, DiagnosticsService diagnostics, Platform platform) {
         this.backend = Objects.requireNonNull(backend, "backend");
         this.diagnostics = diagnostics; // 可為 null；tests 用
+        this.platform = Objects.requireNonNull(platform, "platform");
         if (diagnostics != null) {
             diagnostics.registerModuleState(MODULE_NAME,
                 com.smile.acelib.diagnostics.ModuleState.ready(MODULE_NAME,
                     "world service bound to " + backend.server().getName()));
         }
+    }
+
+    /**
+     * 把後端的失敗結果翻譯成對外 {@link WorldState}。
+     *
+     * <p>區分「請求被安全地拒絕」與「執行期失敗」：{@link WorldState#REJECTED}
+     * 代表請求在動手前就被擋下（輸入不合法、目標不可解析、平台或執行緒不安全、
+     * 功能尚未實作），呼叫端可據此修正後重試；{@link WorldState#FAILED} 代表已進入
+     * 執行期卻失敗。</p>
+     *
+     * <p>未列出的代碼一律視為 {@link WorldState#FAILED}（保守降級），因此後端新增
+     * 代碼時不會被誤標成「安全拒絕」。</p>
+     *
+     * @param errorCode 後端回傳的錯誤代碼
+     * @return REJECTED 或 FAILED
+     */
+    private static WorldState stateForBackendFailure(String errorCode) {
+        boolean rejected = WorldErrorCode.INVALID_INPUT.equals(errorCode)
+            || WorldErrorCode.WORLD_NOT_FOUND.equals(errorCode)
+            || WorldErrorCode.CHUNK_UNLOADED.equals(errorCode)
+            || WorldErrorCode.ENTITY_GONE.equals(errorCode)
+            || WorldErrorCode.PLAYER_OFFLINE.equals(errorCode)
+            || WorldErrorCode.CONTEXT_UNSAFE.equals(errorCode)
+            || WorldErrorCode.PLATFORM_UNSUPPORTED.equals(errorCode)
+            || WorldErrorCode.EFFECT_REJECTED.equals(errorCode)
+            || WorldErrorCode.TELEPORT_REJECTED.equals(errorCode)
+            || WorldErrorCode.NEARBY_QUERY_FAILED.equals(errorCode)
+            || WorldErrorCode.BLOCK_OPERATION_FAILED.equals(errorCode)
+            || WorldErrorCode.NOT_READY.equals(errorCode)
+            || WorldErrorCode.SHUTDOWN.equals(errorCode);
+        return rejected ? WorldState.REJECTED : WorldState.FAILED;
     }
 
     // -----------------------------------------------------------------
@@ -206,10 +251,10 @@ public final class WorldServiceImpl implements WorldService {
         }
         WorldBackendResult<Void> r = backend.playEffect(loc, effectKey);
         if (!r.isOk()) {
-            WorldState state = WorldErrorCode.EFFECT_REJECTED.equals(r.errorCode())
-                ? WorldState.REJECTED
-                : WorldState.FAILED;
-            return EntityResult.failure(state, r.errorCode(), r.detail(), location);
+            // 後端回失敗就照實回失敗：未實作的效果不得退化成 successWithoutReference
+            // 宣告已播放，否則呼叫端會以為效果真的播過。
+            return EntityResult.failure(
+                stateForBackendFailure(r.errorCode()), r.errorCode(), r.detail(), location);
         }
         return EntityResult.successWithoutReference(location);
     }
@@ -241,7 +286,35 @@ public final class WorldServiceImpl implements WorldService {
             return NearbyQueryResult.failure(WorldState.REJECTED, WorldErrorCode.INVALID_INPUT,
                 "unknown entity type key: " + entityTypeFilter, center);
         }
+        if (backend instanceof BukkitWorldBackend builtin) {
+            WorldBackendResult<List<Entity>> r = builtin.queryNearby(loc, radius, type);
+            if (!r.isOk()) {
+                // 後端拒絕（例如 Folia 無法證明 owner-safe）時保留原始錯誤碼，
+                // 不得以空清單假裝「查過且沒有命中」。
+                return NearbyQueryResult.failure(
+                    stateForBackendFailure(r.errorCode()), r.errorCode(), r.detail(), center);
+            }
+            List<EntityReference> refs = new ArrayList<>(r.value().size());
+            for (Entity e : r.value()) {
+                refs.add(EntityReference.of(e.getUniqueId(),
+                    e.getWorld().getUID(),
+                    e.getType().name()));
+            }
+            return NearbyQueryResult.success(center, refs);
+        }
+        // 未知外部實作：Folia 上未證 owner-safe，不得呼叫其 List 方法，直接拒絕。
+        if (platform == Platform.FOLIA) {
+            return NearbyQueryResult.failure(WorldState.REJECTED, WorldErrorCode.CONTEXT_UNSAFE,
+                "findNearby cannot prove owner-safe region ownership on Folia;"
+                    + " legacy backend not called",
+                center);
+        }
+        // Paper 上按原 List SPI 委派；呼叫端不得宣稱為已證 bounded。
         List<Entity> hits = backend.findNearby(loc, radius, type);
+        if (hits == null) {
+            return NearbyQueryResult.failure(WorldState.FAILED, WorldErrorCode.NEARBY_QUERY_FAILED,
+                "legacy backend returned null list", center);
+        }
         List<EntityReference> refs = new ArrayList<>(hits.size());
         for (Entity e : hits) {
             refs.add(EntityReference.of(e.getUniqueId(),
@@ -264,7 +337,31 @@ public final class WorldServiceImpl implements WorldService {
             return NearbyQueryResult.failure(WorldState.REJECTED, WorldErrorCode.WORLD_NOT_FOUND,
                 "world not found: " + center.worldIdString(), center);
         }
+        if (backend instanceof BukkitWorldBackend builtin) {
+            WorldBackendResult<List<Player>> r = builtin.queryNearbyPlayers(loc, radius);
+            if (!r.isOk()) {
+                return NearbyQueryResult.failure(
+                    stateForBackendFailure(r.errorCode()), r.errorCode(), r.detail(), center);
+            }
+            List<EntityReference> refs = new ArrayList<>(r.value().size());
+            for (Player p : r.value()) {
+                refs.add(EntityReference.of(p.getUniqueId(),
+                    p.getWorld().getUID(),
+                    p.getType().name()));
+            }
+            return NearbyQueryResult.success(center, refs);
+        }
+        if (platform == Platform.FOLIA) {
+            return NearbyQueryResult.failure(WorldState.REJECTED, WorldErrorCode.CONTEXT_UNSAFE,
+                "findNearbyPlayers cannot prove owner-safe region ownership on Folia;"
+                    + " legacy backend not called",
+                center);
+        }
         List<Player> hits = backend.findNearbyPlayers(loc, radius);
+        if (hits == null) {
+            return NearbyQueryResult.failure(WorldState.FAILED, WorldErrorCode.NEARBY_QUERY_FAILED,
+                "legacy backend returned null list", center);
+        }
         List<EntityReference> refs = new ArrayList<>(hits.size());
         for (Player p : hits) {
             refs.add(EntityReference.of(p.getUniqueId(),

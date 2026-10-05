@@ -19,6 +19,9 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import com.smile.acelib.platform.Platform;
+import com.smile.acelib.platform.PlatformDetector;
+
 /**
  * 預設的 {@link WorldBackend} 實作：直接呼叫 Bukkit/Paper API（Internal）。
  *
@@ -39,14 +42,42 @@ import org.bukkit.plugin.Plugin;
 public final class BukkitWorldBackend implements WorldBackend {
 
     private final Server server;
+    private final Platform platform;
 
     /**
-     * 建立 backend 實作。
+     * 建立 backend 實作（平台以 classpath 偵測）。
      *
      * @param server 供解析用的 Bukkit {@link Server}；不可為 null
      */
     public BukkitWorldBackend(Server server) {
+        this(server, new PlatformDetector(BukkitWorldBackend.class.getClassLoader()).detect());
+    }
+
+    /**
+     * 建立 backend 實作（顯式指定平台，測試 seam）。
+     *
+     * <p>維持 package-private：僅同 package 的服務與測試經此指定平台；
+     * 外部呼叫端一律經由公開的單參數建構子建立。</p>
+     *
+     * @param server   供解析用的 Bukkit {@link Server}；不可為 null
+     * @param platform 執行平台；不可為 null
+     */
+    BukkitWorldBackend(Server server, Platform platform) {
         this.server = Objects.requireNonNull(server, "server");
+        this.platform = Objects.requireNonNull(platform, "platform");
+    }
+
+    /**
+     * 查詢半徑邊界判定。
+     *
+     * <p>SPI 契約宣告半徑必須為正數；在此集中把關，避免 0 或負數被當成
+     * 「合法但命中空集合」而回 ok，讓呼叫端誤以為查詢成功執行過。</p>
+     *
+     * @param radius 查詢半徑
+     * @return 有限且大於 0 時為 true
+     */
+    private static boolean isValidRadius(double radius) {
+        return radius > 0 && !Double.isNaN(radius) && !Double.isInfinite(radius);
     }
 
     @Override
@@ -172,49 +203,117 @@ public final class BukkitWorldBackend implements WorldBackend {
             return WorldBackendResult.failed(WorldErrorCode.CHUNK_UNLOADED,
                 "chunk not loaded at " + location.getBlockX() + "," + location.getBlockZ());
         }
-        // 簡易實作：用 Entity#playEffect 或 World#strikeLightning 之類太複雜；
-        // 此處僅驗證 effectKey 非空、chunk 已載入 — 完成語意為「已接受播放請求」
-        // （實際效果由 caller 透過 spigot/paper 資源包決定）。
-        // Production 環境下可改成 Effect 列舉 mapping；v0.3.0 採保守實作。
-        return WorldBackendResult.ok(null, "played effect " + effectKey + " at " + location);
+        // 效果執行尚未真實實作；不得回 ok 宣告已播放，必須明確拒絕，
+        // 讓 caller 能區分「已播放」與「功能不存在」。
+        return WorldBackendResult.failed(WorldErrorCode.PLATFORM_UNSUPPORTED,
+            "effect '" + effectKey + "' is not implemented on this backend; cannot confirm playback");
+    }
+
+    /**
+     * 內建 bounded 查詢橋接（package-private，非公開 SPI）。
+     *
+     * <p>承載明確錯誤碼的查詢路徑：半徑不合法、world 不存在、Folia 無法證明
+     * owner-safe、chunk 未載入時回 failed；Paper 上以 bounding-box 候選 +
+     * 球形距離 + 類型篩選回 ok。服務層經由此橋接保留原始錯誤碼，而非經由
+     * 會把拒絕坍縮成空清單的 legacy List 方法。</p>
+     *
+     * <p>不新增公開 API：呼叫端僅限同 package 的 {@link WorldServiceImpl}；
+     * 外部未知實作不得依賴此方法。</p>
+     */
+    WorldBackendResult<List<Entity>> queryNearby(Location location, double radius, EntityType type) {
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(type, "type");
+        if (!isValidRadius(radius)) {
+            return WorldBackendResult.failed(WorldErrorCode.INVALID_INPUT,
+                "radius must be > 0 (was " + radius + ")");
+        }
+        World world = location.getWorld();
+        if (world == null) {
+            return WorldBackendResult.failed(WorldErrorCode.WORLD_NOT_FOUND,
+                "world not found at location=" + location);
+        }
+        if (platform == Platform.FOLIA) {
+            // Folia 無法在沒有 region owner 保證下做跨 region 掃描；
+            // 明確拒絕，而非呼叫 getNearbyEntities / getEntities 猜測安全性。
+            return WorldBackendResult.failed(WorldErrorCode.CONTEXT_UNSAFE,
+                "findNearby cannot prove owner-safe region ownership on Folia");
+        }
+        if (!world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
+            return WorldBackendResult.failed(WorldErrorCode.CHUNK_UNLOADED,
+                "chunk not loaded at " + location.getBlockX() + "," + location.getBlockZ());
+        }
+        List<Entity> hits = new ArrayList<>();
+        double r2 = radius * radius;
+        // bounding-box 候選：不掃全世界；球形距離 + 類型在此層濾掉誤差。
+        for (Entity e : world.getNearbyEntities(location, radius, radius, radius)) {
+            if (e.getType() != type) {
+                continue;
+            }
+            // getLocation() 每次呼叫都會配置新物件，先取一次同時用於世界與距離比對。
+            Location entityLocation = e.getLocation();
+            if (entityLocation.getWorld() == world
+                    && entityLocation.distanceSquared(location) <= r2) {
+                hits.add(e);
+            }
+        }
+        return WorldBackendResult.ok(hits, "found " + hits.size() + " " + type + " within " + radius);
+    }
+
+    /**
+     * 內建 bounded 玩家查詢橋接（package-private，非公開 SPI）。
+     *
+     * <p>語意同 {@link #queryNearby}：Folia 無 owner 保證時拒絕且不掃描；
+     * Paper 上以 bounded 候選篩 Player + 球形距離。</p>
+     */
+    WorldBackendResult<List<Player>> queryNearbyPlayers(Location location, double radius) {
+        Objects.requireNonNull(location, "location");
+        if (!isValidRadius(radius)) {
+            return WorldBackendResult.failed(WorldErrorCode.INVALID_INPUT,
+                "radius must be > 0 (was " + radius + ")");
+        }
+        World world = location.getWorld();
+        if (world == null) {
+            return WorldBackendResult.failed(WorldErrorCode.WORLD_NOT_FOUND,
+                "world not found at location=" + location);
+        }
+        if (platform == Platform.FOLIA) {
+            return WorldBackendResult.failed(WorldErrorCode.CONTEXT_UNSAFE,
+                "findNearbyPlayers cannot prove owner-safe region ownership on Folia");
+        }
+        if (!world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
+            return WorldBackendResult.failed(WorldErrorCode.CHUNK_UNLOADED,
+                "chunk not loaded at " + location.getBlockX() + "," + location.getBlockZ());
+        }
+        List<Player> hits = new ArrayList<>();
+        double r2 = radius * radius;
+        for (Entity e : world.getNearbyEntities(location, radius, radius, radius)) {
+            if (!(e instanceof Player p)) {
+                continue;
+            }
+            Location entityLocation = e.getLocation();
+            if (entityLocation.getWorld() == world
+                    && entityLocation.distanceSquared(location) <= r2) {
+                hits.add(p);
+            }
+        }
+        return WorldBackendResult.ok(hits, "found " + hits.size() + " players within " + radius);
     }
 
     @Override
     public List<Entity> findNearby(Location location, double radius, EntityType type) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(type, "type");
-        World world = location.getWorld();
-        if (world == null) {
-            return List.of();
-        }
-        List<Entity> hits = new ArrayList<>();
-        double r2 = radius * radius;
-        for (Entity e : world.getEntities()) {
-            if (e.getType() != type) {
-                continue;
-            }
-            if (e.getLocation().distanceSquared(location) <= r2) {
-                hits.add(e);
-            }
-        }
-        return hits;
+        // legacy List 無法表達拒絕：把橋接的失敗坍縮成空清單（fail-closed）。
+        // 橋接內已保證失敗時不掃描；需要錯誤碼的呼叫端請走 WorldService 結構化管道。
+        WorldBackendResult<List<Entity>> r = queryNearby(location, radius, type);
+        return r.isOk() ? r.value() : List.of();
     }
 
     @Override
     public List<Player> findNearbyPlayers(Location location, double radius) {
         Objects.requireNonNull(location, "location");
-        World world = location.getWorld();
-        if (world == null) {
-            return List.of();
-        }
-        List<Player> hits = new ArrayList<>();
-        double r2 = radius * radius;
-        for (Player p : world.getPlayers()) {
-            if (p.getLocation().distanceSquared(location) <= r2) {
-                hits.add(p);
-            }
-        }
-        return hits;
+        WorldBackendResult<List<Player>> r = queryNearbyPlayers(location, radius);
+        return r.isOk() ? r.value() : List.of();
     }
 
     @Override
