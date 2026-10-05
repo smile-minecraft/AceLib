@@ -136,8 +136,8 @@ AceLib 要讓下游 plugin 少寫重複的程式碼，也更容易寫對。規�
 - [x] 延遲為 0 的任務會執行。
 - [x] reload 之後，線上玩家離線和重登都沒有玩家資料錯誤。
 - [x] 未載入 chunk 的位置排程被拒絕並記 `ACELIB-SCHED-004`，事後 chunk 仍未載入。
-- [ ] reload 之後 GUI 仍可點擊。
-- [ ] reload 之後不留舊任務。
+- [x] reload 之後 GUI 仍可點擊。
+- [x] reload 之後不留舊任務。
 
 #### Paper
 
