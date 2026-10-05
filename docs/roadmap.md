@@ -154,6 +154,7 @@ AceLib 要讓下游 plugin 少寫重複的程式碼，也更容易寫對。規�
 - [ ] 實機確認全部勾選。
 - [ ] `docsCheck` 和相容性檢查通過。
 - [ ] CHANGELOG 已寫入這一版的修正。
+- [ ] JitPack 能建置這一版，下游可以從 JitPack 取得。
 
 ## AceLib 1.4.0 新功能
 
