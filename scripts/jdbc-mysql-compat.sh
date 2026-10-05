@@ -7,7 +7,7 @@
 # 舊庫（latin1 + 舊 DDL 預建表）驗證舊資料載入與升級遷移，
 # 同時擷取 SHOW CREATE TABLE 與版本輸出存檔。
 #
-# 設計紀律（比照 scripts/smoke-server.sh）：
+# 設計紀律：
 #   - 容器一律臨時（--rm，結束即清理；trap 保證 stop），不變更 host 服務。
 #   - JDBC driver 預設由呼叫端提供（MYSQL_DRIVER_JAR / MARIADB_DRIVER_JAR）；
 #     只有顯式傳 --download 才從 Maven Central 拉固定版本。

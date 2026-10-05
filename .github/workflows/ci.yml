@@ -61,7 +61,7 @@ jobs:
   #     一致性、無 bundled server API、無 optional eager linkage、API surface 存在）
   #   - publication 與 build（verifyPublication + jar）
   #   - 各 lane exact resolved versions（compatibilityMatrix 輸出到 log）
-  # 真實 Paper/Folia 26.1.2/26.2 runtime smoke 由 compatibility-nightly.yml 承擔，
+  # 真實 Paper/Folia 伺服器上的執行期驗證在 Docker 管理的測試環境執行，
   # 本 job 不啟動任何 server（不依賴真實 Bedrock / 共享 server / 外部 secret）。
   compatibility:
     name: Compatibility matrix gate (Adventure 4/5 + artifact)

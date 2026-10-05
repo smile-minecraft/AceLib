@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>驗證 root Gradle 聚合 docsCheck 的宣告與依賴，以及 CI workflow 是否顯式執行
  * docsCheck 並上傳 HTML Javadoc artifact。本測試以靜態檔案掃描為主（與
- * {@code SmokeScriptTest} / {@code PublicationConsistencyTest} 同風格），
+ * {@code PublicationConsistencyTest} 同風格），
  * 不啟動 Gradle；真正的執行行為由 CI 與 docsCheck 的 task graph 驗證。</p>
  *
  * <p>本測試不依賴 Bukkit / MockBukkit，純讀取 repo 檔案。</p>

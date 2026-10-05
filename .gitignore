@@ -16,7 +16,7 @@ cache/
 libraries/
 versions/
 
-# 本機測試服 runtime 與隔離測試 jar（smoke-server.sh / 相容性測試自動產生）
+# 本機測試服 runtime 與隔離測試 jar（相容性測試自動產生）
 .folia-run/
 
 # IDE

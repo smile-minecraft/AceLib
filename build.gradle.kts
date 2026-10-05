@@ -316,8 +316,8 @@ val docsCheck by tasks.registering {
 // 把 Adventure 4/5 isolated tests、API gates、publication 與 build 聚合成單一
 // 文件化入口 compatibilityCheck；並由 compatibilityMatrix 輸出各 lane 的
 // exact resolved versions。PR CI 以此作為 binary / unit / artifact gate；
-// server runtime matrix（Paper/Folia 26.1.2/26.2）由 compatibility-nightly.yml
-// 承擔，本 task 僅建立該 workflow，未實際執行（見該檔案頂端註解）。
+// 真實 Paper/Folia 伺服器上的執行期驗證在 Docker 管理的測試環境執行，
+// 不在本 repo 的 Gradle 或 CI 內。
 //
 // fail-closed：compatibilityMatrix 在關鍵 lane 解析不到具體版本時拋出，
 // 確保「零測試 / 錯誤 classpath / 未解析」都會讓 gate 失敗。
