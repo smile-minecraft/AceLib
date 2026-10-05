@@ -10,7 +10,6 @@ import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.junit.jupiter.api.AfterEach;
@@ -176,18 +175,19 @@ class SafeSchedulerErrorTest {
     @Test
     @DisplayName("runAtLocation 對未載入 chunk → 記錄 SCHED-004")
     void runAtLocation_unloadedChunk_recordsSched004() {
-        // MockBukkit 的 WorldMock 會自動載入 chunk；用 Mockito mock world + chunk
-        // 來精準模擬「chunk 未載入」情境。
-        Chunk mockChunk = Mockito.mock(Chunk.class);
-        Mockito.when(mockChunk.isLoaded()).thenReturn(false);
         World mockWorld = Mockito.mock(World.class);
-        Mockito.when(mockWorld.getChunkAt(Mockito.any(Location.class))).thenReturn(mockChunk);
+        Mockito.when(mockWorld.isChunkLoaded(
+                Mockito.anyInt(), Mockito.anyInt())).thenReturn(false);
 
         Location loc = new Location(mockWorld, 100.0, 64.0, 100.0);
         ScheduledTask t = scheduler.runAtLocation(loc, () -> {});
         assertTrue(t.isCancelled());
         assertTrue(scheduler.getRecorder().contains("ACELIB-SCHED-004"),
             "未載入 chunk 必須記錄 SCHED-004");
+        Mockito.verify(mockWorld, Mockito.never())
+            .getChunkAt(Mockito.any(Location.class));
+        Mockito.verify(mockWorld, Mockito.never())
+            .getChunkAt(Mockito.anyInt(), Mockito.anyInt());
     }
 
     // -----------------------------------------------------------------

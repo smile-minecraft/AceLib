@@ -5,7 +5,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
-import org.bukkit.scheduler.BukkitTask;
 
 /**
  * Paper / Bukkit 全域 scheduler backend（Internal）。
@@ -25,23 +24,28 @@ final class PaperSchedulerBackend implements SchedulerBackend {
     }
 
     @Override
-    public BukkitTask dispatch(TaskType type,
-                               Runnable wrapped,
-                               Player player,
-                               Object entityOrLoc,
-                               long delayTicks,
-                               long periodTicks,
-                               boolean async) {
+    public PlatformTaskHandle dispatch(TaskType type,
+                                       Runnable wrapped,
+                                       Runnable retired,
+                                       Player player,
+                                       Object entityOrLoc,
+                                       long delayTicks,
+                                       long periodTicks,
+                                       boolean async) {
+        // Paper 沒有 entity 退役語意：BukkitTask 只會執行或被取消，
+        // 因此 retired 回呼不會被呼叫，忽略即可。
         BukkitScheduler scheduler = Bukkit.getScheduler();
         if (async) {
-            return scheduler.runTaskAsynchronously(plugin, wrapped);
+            return new BukkitPlatformTaskHandle(scheduler.runTaskAsynchronously(plugin, wrapped));
         }
         if (periodTicks > 0L) {
-            return scheduler.runTaskTimer(plugin, wrapped, delayTicks, periodTicks);
+            return new BukkitPlatformTaskHandle(
+                scheduler.runTaskTimer(plugin, wrapped, delayTicks, periodTicks));
         }
         if (delayTicks > 0L) {
-            return scheduler.runTaskLater(plugin, wrapped, delayTicks);
+            return new BukkitPlatformTaskHandle(
+                scheduler.runTaskLater(plugin, wrapped, delayTicks));
         }
-        return scheduler.runTask(plugin, wrapped);
+        return new BukkitPlatformTaskHandle(scheduler.runTask(plugin, wrapped));
     }
 }

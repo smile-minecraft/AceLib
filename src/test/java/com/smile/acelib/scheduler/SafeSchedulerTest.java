@@ -268,12 +268,30 @@ class SafeSchedulerTest {
     @DisplayName("runAtLocation: 已載入 chunk 應成功派送")
     void runAtLocation_loadedChunk_succeeds() {
         org.mockbukkit.mockbukkit.world.WorldMock world = server.addSimpleWorld("flat");
+        // 顯式載入：runAtLocation 只讀 isChunkLoaded，不會替呼叫端載入 chunk，
+        // 因此「chunk 已載入」這個前提必須由測試自己建立。
+        world.loadChunk(0, 0);
         org.bukkit.Location loc = new org.bukkit.Location(world, 0.0, 64.0, 0.0);
         AtomicInteger counter = new AtomicInteger(0);
         ScheduledTask task = scheduler.runAtLocation(loc, counter::incrementAndGet);
         assertNotNull(task);
         assertEquals(TaskType.LOCATION, task.getType());
         assertFalse(task.isCancelled());
+    }
+
+    @Test
+    @DisplayName("runAtLocation: chunk 未載入必須 fail-closed 記錄 SCHED-004，且不載入 chunk")
+    void runAtLocation_unloadedChunk_failsClosed() {
+        org.mockbukkit.mockbukkit.world.WorldMock world = server.addSimpleWorld("barren");
+        org.bukkit.Location loc = new org.bukkit.Location(world, 8000.0, 64.0, 8000.0);
+        int loadedBefore = world.getLoadedChunks().length;
+        AtomicInteger counter = new AtomicInteger(0);
+        ScheduledTask task = scheduler.runAtLocation(loc, counter::incrementAndGet);
+        assertTrue(task.isCancelled(), "chunk 未載入必須回 cancelled task");
+        assertTrue(scheduler.getRecorder().contains("ACELIB-SCHED-004"),
+            "未載入 chunk 必須記錄 SCHED-004");
+        assertEquals(loadedBefore, world.getLoadedChunks().length,
+            "檢查 chunk 是否載入不得產生載入副作用");
     }
 
     @Test

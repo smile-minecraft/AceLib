@@ -10,7 +10,6 @@ import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -118,9 +117,9 @@ class SchedulerBackendSelectionTest {
     void backendDispatchFailure_failClosed() {
         SchedulerBackend failing = new SchedulerBackend() {
             @Override
-            public BukkitTask dispatch(TaskType type, Runnable wrapped, Player player,
-                                        Object entityOrLoc, long delayTicks, long periodTicks,
-                                        boolean async) throws Exception {
+            public PlatformTaskHandle dispatch(TaskType type, Runnable wrapped, Runnable retired,
+                                               Player player, Object entityOrLoc, long delayTicks,
+                                               long periodTicks, boolean async) throws Exception {
                 throw new IllegalStateException("simulated backend failure");
             }
         };
@@ -182,6 +181,8 @@ class SchedulerBackendSelectionTest {
         assertTrue(e.get(), "entity 必須透過 backend 執行");
 
         var world = server.addSimpleWorld("flat");
+        // runAtLocation 只讀 isChunkLoaded，不會替呼叫端載入 chunk；前提由測試建立。
+        world.loadChunk(0, 0);
         var loc = new org.bukkit.Location(world, 0.0, 64.0, 0.0);
         AtomicBoolean lo = new AtomicBoolean();
         scheduler.runAtLocation(loc, () -> lo.set(true));

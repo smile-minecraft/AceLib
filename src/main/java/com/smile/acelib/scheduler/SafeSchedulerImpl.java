@@ -2,21 +2,21 @@ package com.smile.acelib.scheduler;
 
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
 
 /**
  * {@link SafeScheduler} 的標準實作（Internal）。
@@ -47,20 +47,35 @@ import org.bukkit.scheduler.BukkitTask;
  *
  * <h2>backend 選擇策略</h2>
  * <p>runtime-specific 派送已抽離至 package-private {@link SchedulerBackend}：
- * {@link FoliaSchedulerBackend}（regionized，reflection 呼叫
+ * {@link FoliaSchedulerBackend}（regionized，直接呼叫
  * {@code io.papermc.paper.threadedregions.scheduler.*}）與
  * {@link PaperSchedulerBackend}（全域 {@code BukkitScheduler}）。backend 選擇
  * 只依 {@link PlatformCapability} profile（{@code regionScheduling()} → Folia、
  * {@code globalScheduler()} → Paper、兩者皆無 → 無 backend），<strong>不</strong>
- * 做版本字串 switch。當 classpath 不含 Folia API（典型 MockBukkit 環境）時，
- * {@link FoliaSchedulerBackend} 拋 {@link IllegalStateException}，由本類別統一以
- * {@code ACELIB-SCHED-005} 記錄並回傳 no-op task（fail-closed，絕不退回 unsafe
- * 的 global scheduler）。</p>
+ * 做版本字串 switch。當目前平台無法提供對應的排程 API（例如以 Folia capability
+ * 執行但 API 不存在）時，{@link SchedulerBackend#dispatch} 會拋出例外，由本類別
+ * 統一以 {@code ACELIB-SCHED-005} 記錄並回傳 no-op task（fail-closed，絕不退回
+ * unsafe 的 global scheduler）。</p>
+ *
+ * <h2>任務追蹤生命週期</h2>
+ * <p>{@link #tracked} 只包含「仍有可能執行或正在執行」的任務：</p>
+ * <ul>
+ *   <li>一次性任務（global / async / later / player / entity / location）在
+ *       runnable 執行結束後解除追蹤；</li>
+ *   <li>Folia entity 任務在實體退役（retired）時解除追蹤，因為此時 runnable
+ *       永遠不會執行；</li>
+ *   <li>任何任務被 {@code cancel()} 或 {@link #cancelAll()} 取消後解除追蹤；</li>
+ *   <li>週期任務（timer）在重複執行期間維持被追蹤，直到被取消。</li>
+ * </ul>
+ * <p>這讓長時間運行的 scheduler 不會累積已完成任務，且 {@link #cancelAll()} 的
+ * 掃描成本維持在「活著任務數」而非「歷史派送總數」。</p>
  *
  * <h2>執行緒安全</h2>
  * <p>所有 {@code public} 方法皆可在多 region 並行環境下使用。
  * {@link #tracked} 使用 {@link ConcurrentHashMap#newKeySet()}；
- * {@link #disabled} 為 {@code volatile}。</p>
+ * {@link #disabled} 為 {@code volatile}。任務解除追蹤透過
+ * {@link Set#remove(Object)}（冪等）達成，並以
+ * {@code finished.compareAndSet} 避免重複收尾。</p>
  *
  * @see SafeScheduler
  * @since 1.0.0
@@ -83,7 +98,6 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private final SchedulerBackend backend;
     private final TaskErrorRecorder recorder;
     private final Set<ScheduledTask> tracked = ConcurrentHashMap.newKeySet();
-    private final AtomicLong fallbackTick = new AtomicLong(0L);
     private volatile boolean disabled = false;
     /**
      * 錯誤紀錄 sink。
@@ -220,26 +234,56 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     @Override
     public ScheduledTask runAtLocation(Location location, Runnable runnable) {
         Objects.requireNonNull(location, "location");
-        Chunk chunk = location.getChunk();
-        if (chunk == null || !chunk.isLoaded()) {
+        if (!isChunkLoaded(location)) {
             recordAndNotify(TaskErrorRecord.cancelled(
                 TaskType.LOCATION, ERR_CHUNK_UNAVAILABLE,
-                "chunk not loaded (world=" + safeWorld(location) + ")"));
+                "chunk not loaded (world=" + safeWorld(location) + ", x=" + location.getBlockX()
+                    + ", z=" + location.getBlockZ() + ")"));
             return new NoOpScheduledTask(plugin, TaskType.LOCATION);
         }
         return dispatch(TaskType.LOCATION, runnable, null, location, 0L, 0L, false);
     }
 
+    /**
+     * 檢查 location 所在 chunk 是否已載入，且<strong>不</strong>產生載入副作用。
+     *
+     * <p>不可用 {@code Location#getChunk()} / {@code World#getChunkAt(...)} 做為
+     * 檢查：兩者都會在 chunk 未載入時把 chunk 載入（或生成）進世界。排程前
+     * 順手載入 chunk 會改變世界狀態、佔用記憶體，且讓「chunk 未載入」的
+     * fail-closed 分支永遠不會被走到。{@link World#isChunkLoaded(int, int)} 只讀
+     * 既有狀態，是唯一正確的檢查方式。</p>
+     *
+     * @param location 目標位置
+     * @return chunk 已載入為 true；world 為 null 或 API 拋錯時保守回 false
+     */
+    private static boolean isChunkLoaded(Location location) {
+        try {
+            World world = location.getWorld();
+            return world != null
+                && world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4);
+        } catch (Throwable t) {
+            // 檢查本身失敗時保守視為未載入，交由呼叫端記錄 SCHED-004。
+            return false;
+        }
+    }
+
     @Override
     public void cancelAll() {
-        for (ScheduledTask t : tracked) {
+        // 快照後逐一取消，不可再以 tracked.clear() 收尾：dispatch 可能正好在
+        // 迭代與 clear 之間把新任務登記進 tracked，clear 會把尚未取消的任務
+        // 直接移除，讓底層任務繼續執行卻不再被追蹤。逐一 cancel 讓每個任務自行
+        // 經由 tracked.remove 解除追蹤；快照之後才登記的新任務屬於新派送，
+        // 留在 tracked 繼續存活，不可一併清除。
+        // 外層 try/catch 保留：即使某個任務的 cancel 拋出，也不能讓其他任務
+        // 留在排程器裡繼續執行（plugin disable 情境特別重要）。
+        List<ScheduledTask> snapshot = new ArrayList<>(tracked);
+        for (ScheduledTask t : snapshot) {
             try {
                 t.cancel();
-            } catch (Throwable ignore) {
-                // 取消失敗不應影響其他任務；cancel 必須冪等
+            } catch (Throwable t2) {
+                LOGGER.log(Level.FINE, "cancelAll: task cancel failed: " + safeMessage(t2), t2);
             }
         }
-        tracked.clear();
     }
 
     @Override
@@ -365,7 +409,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
      * @param player       玩家目標（PLAYER / PLAYER_LATER）；其他型別為 null
      * @param entityOrLoc  實體或位置目標（ENTITY / LOCATION）；其他型別為 null
      * @param delayTicks   延遲 tick（runLater / runTimer / runForPlayerLater）
-     * @param periodTicks  週期間隔（runTimer）
+     * @param periodTicks  週期間隔（runTimer）；&gt;0 表示週期任務
      * @param async        是否走 async pool
      */
     private ScheduledTask dispatch(TaskType type,
@@ -384,7 +428,6 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         }
 
         long creationTick = currentTick();
-        Runnable wrapped = () -> wrap(type, runnable);
 
         // backend 選擇在建構時依 capability profile 完成；null 表示
         // regionScheduling 與 globalScheduler 皆不支援（UNKNOWN）。
@@ -395,14 +438,66 @@ public final class SafeSchedulerImpl implements SafeScheduler {
             return new NoOpScheduledTask(plugin, type);
         }
 
+        // 一次性任務與週期任務的收尾條件不同：一次性任務 runnable 跑完就結束，
+        // 週期任務要持續被追蹤直到被取消。兩者的解除追蹤都收斂到
+        // BukkitScheduledTask.finish()，由 cancel()、一次性執行結束與
+        // Folia entity 退役三條路徑觸發。
+        BukkitScheduledTask scheduled = new BukkitScheduledTask(
+            plugin, type, creationTick, tracked, periodTicks > 0L);
+        Runnable wrapped = () -> {
+            if (disabled || scheduled.isCancelRequested()) {
+                scheduled.finish();
+                return;
+            }
+            wrap(type, runnable);
+            scheduled.finish();
+        };
+        // 先登記再派送：backend.dispatch 可能阻塞（或被 latch 測試刻意擋住），
+        // disable / cancelAll 可能正好插入這段空窗。先登記讓並行的 cancelAll
+        // 能經由 cancelRequested 看到飛行中的任務；派送返回後再以 disabled /
+        // cancelRequested 補一次取消，確保晚返回的真實句柄最終一定被取消。
+        tracked.add(scheduled);
+
         try {
-            BukkitTask task = backend.dispatch(
-                type, wrapped, player, entityOrLoc, delayTicks, periodTicks, async);
-            ScheduledTask scheduled = new BukkitScheduledTask(plugin, type, task, creationTick);
-            tracked.add(scheduled);
+            PlatformTaskHandle handle = backend.dispatch(
+                type, wrapped, scheduled::finish,
+                player, entityOrLoc, delayTicks, periodTicks, async);
+            if (handle == null) {
+                tracked.remove(scheduled);
+                if (type == TaskType.ENTITY || type == TaskType.PLAYER
+                    || type == TaskType.PLAYER_LATER) {
+                    recordAndNotify(TaskErrorRecord.cancelled(
+                        type, ERR_ENTITY_INVALID,
+                        "entity retired before dispatch (backend returned null)"));
+                } else {
+                    recordAndNotify(TaskErrorRecord.threw(
+                        type, ERR_PLATFORM_UNSUPPORTED,
+                        "dispatch returned null handle",
+                        new IllegalStateException("null handle")));
+                }
+                return new NoOpScheduledTask(plugin, type);
+            }
+            scheduled.attach(handle);
+            if (disabled || scheduled.isCancelRequested()) {
+                scheduled.cancel();
+            } else if (scheduled.hasFinished()) {
+                // backend 可能在其 dispatch 內部就同步執行了 runnable（例如測試用的
+                // scheduler stub，或 delay=0 的 region runnable）。此時 finish() 早於
+                // 登記發生，先前的 tracked.remove() 沒作用，任務會被登記成已完成卻仍
+                // 存活。只在「確實已完成」時補一次解除追蹤；尚未執行的任務必須留在
+                // tracked，否則 cancelAll / plugin disable 取消不到它。
+                tracked.remove(scheduled);
+            }
             return scheduled;
+        } catch (EntityRetiredException retired) {
+            tracked.remove(scheduled);
+            recordAndNotify(TaskErrorRecord.cancelled(
+                type, ERR_ENTITY_INVALID,
+                "entity retired before dispatch: " + safeMessage(retired)));
+            return new NoOpScheduledTask(plugin, type);
         } catch (Throwable t) {
-            // backend 派發失敗（Folia API 不存在、IllegalStateException、Refl 錯誤等）
+            tracked.remove(scheduled);
+            // backend 派發失敗（Folia API 不可用、不支援的組合、底層拋例外等）
             // fail-closed：記錄 SCHED-005 並回 no-op task，絕不退回 unsafe scheduler。
             recordAndNotify(TaskErrorRecord.threw(
                 type, ERR_PLATFORM_UNSUPPORTED,
@@ -495,35 +590,122 @@ public final class SafeSchedulerImpl implements SafeScheduler {
 
     /**
      * 真實的 Paper / Folia task 包裝。
+     *
+     * <p>持有底層 {@link PlatformTaskHandle}，使 {@link #cancel()}、
+     * {@code cancelAll()} 與 plugin disable 都能真正作用到底層任務。同時負責
+     * 解除追蹤：一次性任務執行結束、Folia entity 退役、或被取消時，
+     * {@link #finish()} 會把自己從 {@code tracked} 移除。</p>
      */
     static final class BukkitScheduledTask implements ScheduledTask {
         private final JavaPlugin plugin;
         private final TaskType type;
-        private final BukkitTask task;
         private final long creationTick;
+        private final Set<ScheduledTask> tracked;
+        private final boolean repeating;
+        private final AtomicBoolean finished = new AtomicBoolean(false);
+        /**
+         * 是否曾被呼叫 {@link #cancel()}。
+         *
+         * <p>狀態查詢失敗時唯一的可信依據：它是「我們確實下過取消指令」的事實，
+         * 不是對平台狀態的推測。</p>
+         */
+        private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
+        private volatile PlatformTaskHandle handle;
 
-        BukkitScheduledTask(JavaPlugin plugin, TaskType type, BukkitTask task, long creationTick) {
+        BukkitScheduledTask(JavaPlugin plugin, TaskType type, long creationTick,
+                            Set<ScheduledTask> tracked, boolean repeating) {
             this.plugin = Objects.requireNonNull(plugin, "plugin");
             this.type = Objects.requireNonNull(type, "type");
-            this.task = Objects.requireNonNull(task, "task");
             this.creationTick = creationTick;
+            this.tracked = Objects.requireNonNull(tracked, "tracked");
+            this.repeating = repeating;
         }
 
-        @Override
-        public void cancel() {
-            try {
-                task.cancel();
-            } catch (Throwable ignore) {
-                // cancel 必須冪等
+        /**
+         * 綁定底層句柄。
+         *
+         * <p>句柄必須在 dispatch 成功後才存在，但解除追蹤的時機可能早於
+         * dispatch 回傳（例如 backend 在 dispatch 內同步執行了 runnable），
+         * 因此把兩者拆成「先建立 task → 後綁定句柄」。</p>
+         */
+        void attach(PlatformTaskHandle handle) {
+            this.handle = Objects.requireNonNull(handle, "handle");
+        }
+
+        /**
+         * 本任務是否已完成收尾（一次性任務已執行結束或已被取消）。
+         *
+         * <p>供 dispatch 在「backend 於 dispatch 內部就同步執行 runnable」時，
+         * 判斷解除追蹤是否已先於登記發生。週期任務永遠回 false：它必須持續
+         * 被追蹤到被取消為止。</p>
+         */
+        boolean hasFinished() {
+            return !repeating && finished.get();
+        }
+
+        /**
+         * 是否曾被要求取消（飛行中任務的可見取消訊號）。
+         *
+         * <p>供 dispatch 在 backend 阻塞期間被 {@link #cancel()} 或
+         * {@link SafeSchedulerImpl#onPluginDisable()} 插入時，於句柄晚返回後
+         * 補一次底層取消；亦供已排入的回呼在停用後直接跳過使用者程式，避免
+         * 停用後仍產生效果。
+         */
+        boolean isCancelRequested() {
+            return cancelRequested.get();
+        }
+
+        /**
+         * 解除追蹤（冪等）。
+         *
+         * <p>只在一次性任務呼叫；週期任務必須持續被追蹤，否則 disable 時
+         * 無法取消還在跑的重複任務。{@code finished} 讓重複呼叫（例如取消後
+         * 又收到執行結束通知）不重複做事。</p>
+         */
+        void finish() {
+            if (repeating) {
+                return;
+            }
+            if (finished.compareAndSet(false, true)) {
+                tracked.remove(this);
             }
         }
 
         @Override
+        public void cancel() {
+            cancelRequested.set(true);
+            PlatformTaskHandle current = handle;
+            if (current != null) {
+                try {
+                    current.cancel();
+                } catch (Throwable t) {
+                    // cancel 必須冪等、不影響其他任務，但失敗不可完全無聲：
+                    // 底層任務可能仍在執行，記錄下來供診斷追查。
+                    LOGGER.log(Level.FINE,
+                        "task cancel failed (type=" + type + "): " + safeMessage(t), t);
+                }
+            }
+            finished.set(true);
+            tracked.remove(this);
+        }
+
+        @Override
         public boolean isCancelled() {
+            PlatformTaskHandle current = handle;
+            if (current == null) {
+                // dispatch 尚未完成（理論上不會對外暴露）時，以本地收尾狀態為準。
+                return finished.get() || cancelRequested.get();
+            }
             try {
-                return task.isCancelled();
+                return current.isCancelled() || cancelRequested.get();
             } catch (Throwable t) {
-                return true;
+                // 狀態查詢失敗不代表已取消：isCancelled() 是上層判定「派送被接受」
+                // 或「被拒絕」的依據（見 SafeSchedulerPlayerContextExecutor），把查詢
+                // 失敗當成已取消會讓成功派送被誤判為拒絕。此時只回報我們確實做過的
+                // 事：是否曾被要求取消。
+                LOGGER.log(Level.FINE,
+                    "task state query failed (type=" + type + "): " + safeMessage(t), t);
+                return cancelRequested.get();
             }
         }
 
@@ -582,11 +764,5 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         public long getCreationTick() {
             return creationTick;
         }
-    }
-
-    // 隱藏一個 reference 給編譯器，避免 LOGGER 被標記為 unused
-    @SuppressWarnings("unused")
-    private void logFine(String msg) {
-        LOGGER.log(Level.FINE, msg);
     }
 }
