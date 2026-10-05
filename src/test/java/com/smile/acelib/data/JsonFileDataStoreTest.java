@@ -556,6 +556,12 @@ class JsonFileDataStoreTest {
             @Override public void writeString(Path path, String content) throws IOException {
                 throw new IOException("injected write failure");
             }
+            @Override public void sync(Path path) throws IOException {
+                try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
+                        path, java.nio.file.StandardOpenOption.WRITE)) {
+                    channel.force(true);
+                }
+            }
             @Override public void move(Path source, Path target) throws IOException {
                 throw new AssertionError("write 失敗後不應走到 move");
             }
@@ -611,6 +617,12 @@ class JsonFileDataStoreTest {
             }
             @Override public void writeString(Path path, String content) throws IOException {
                 Files.writeString(path, content, StandardCharsets.UTF_8);
+            }
+            @Override public void sync(Path path) throws IOException {
+                try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
+                        path, java.nio.file.StandardOpenOption.WRITE)) {
+                    channel.force(true);
+                }
             }
             @Override public void move(Path source, Path target) throws IOException {
                 throw new IOException("injected move failure");
@@ -910,6 +922,152 @@ class JsonFileDataStoreTest {
             }
         };
         assertSame(store, store.registerMigration(m));
+    }
+
+    // -----------------------------------------------------------------
+    // temp 落盤（fsync）：write→sync→move
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("原子寫入：暫存檔在 move 之前先落盤（write→sync→move）")
+    void atomicWrite_syncsTempBeforeMove() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+
+        java.util.List<String> order = new java.util.ArrayList<>();
+        JsonFileDataStore.FileOps recordingOps = new JsonFileDataStore.FileOps() {
+            @Override public Path createTempFile(Path dir, String prefix, String suffix)
+                    throws IOException {
+                return Files.createTempFile(dir, prefix, suffix);
+            }
+            @Override public void writeString(Path path, String content) throws IOException {
+                order.add("write");
+                Files.writeString(path, content, StandardCharsets.UTF_8);
+            }
+            @Override public void sync(Path path) throws IOException {
+                order.add("sync");
+            }
+            @Override public void move(Path source, Path target) throws IOException {
+                order.add("move");
+                Files.move(source, target,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            @Override public boolean deleteIfExists(Path path) throws IOException {
+                return Files.deleteIfExists(path);
+            }
+        };
+
+        MemoryRecord root = (MemoryRecord) store.root();
+        store.writeAtomicFrom(root, recordingOps);
+        assertEquals(java.util.List.of("write", "sync", "move"), order,
+            "暫存檔必須在 move 之前先落盤，否則斷電可能留下內容不全的目標檔");
+        store.close();
+    }
+
+    @Test
+    @DisplayName("sync 失敗：不做 move、清理 temp、拋 ACELIB-DATA-001 且保留原始 cause")
+    void atomicWrite_syncFailure_noMoveAndCleansTemp() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+        String before = Files.readString(filePath, StandardCharsets.UTF_8);
+
+        java.util.concurrent.atomic.AtomicReference<Path> createdTmp =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean moved =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+        JsonFileDataStore.FileOps failingOps = new JsonFileDataStore.FileOps() {
+            @Override public Path createTempFile(Path dir, String prefix, String suffix)
+                    throws IOException {
+                Path tmp = Files.createTempFile(dir, prefix, suffix);
+                createdTmp.set(tmp);
+                return tmp;
+            }
+            @Override public void writeString(Path path, String content) throws IOException {
+                Files.writeString(path, content, StandardCharsets.UTF_8);
+            }
+            @Override public void sync(Path path) throws IOException {
+                throw new IOException("injected sync failure");
+            }
+            @Override public void move(Path source, Path target) throws IOException {
+                moved.set(true);
+                throw new AssertionError("sync 失敗後不應走到 move");
+            }
+            @Override public boolean deleteIfExists(Path path) throws IOException {
+                return Files.deleteIfExists(path);
+            }
+        };
+
+        MemoryRecord root = (MemoryRecord) store.root();
+        DataStoreException ex = assertThrows(
+            DataStoreException.class, () -> store.writeAtomicFrom(root, failingOps));
+        assertEquals("ACELIB-DATA-001", ex.getCode());
+        assertNotNull(ex.getCause());
+        assertTrue(ex.getCause().getMessage().contains("injected sync failure"),
+            "原始落盤錯誤不得被掩蓋，實際 cause=" + ex.getCause());
+        assertFalse(moved.get(), "sync 失敗後不得 move");
+        assertFalse(Files.exists(createdTmp.get()), "sync 失敗必須清理 temp");
+        assertEquals(before, Files.readString(filePath, StandardCharsets.UTF_8),
+            "落盤失敗時舊檔不得被修改");
+        store.close();
+    }
+
+    @Test
+    @DisplayName("sync 失敗且清理失敗：原始錯誤保留且清理失敗為 suppressed")
+    void atomicWrite_syncFailure_cleanupFailure_suppressed() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+        String before = Files.readString(filePath, StandardCharsets.UTF_8);
+
+        java.util.concurrent.atomic.AtomicReference<Path> createdTmp =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        JsonFileDataStore.FileOps failingOps = new JsonFileDataStore.FileOps() {
+            @Override public Path createTempFile(Path dir, String prefix, String suffix)
+                    throws IOException {
+                Path tmp = Files.createTempFile(dir, prefix, suffix);
+                createdTmp.set(tmp);
+                return tmp;
+            }
+            @Override public void writeString(Path path, String content) throws IOException {
+                Files.writeString(path, content, StandardCharsets.UTF_8);
+            }
+            @Override public void sync(Path path) throws IOException {
+                throw new IOException("injected sync failure");
+            }
+            @Override public void move(Path source, Path target) throws IOException {
+                throw new AssertionError("sync 失敗後不應走到 move");
+            }
+            @Override public boolean deleteIfExists(Path path) throws IOException {
+                throw new IOException("injected cleanup failure");
+            }
+        };
+
+        MemoryRecord root = (MemoryRecord) store.root();
+        DataStoreException ex = assertThrows(
+            DataStoreException.class, () -> store.writeAtomicFrom(root, failingOps));
+        assertEquals("ACELIB-DATA-001", ex.getCode());
+        assertNotNull(ex.getCause());
+        assertTrue(ex.getCause().getMessage().contains("injected sync failure"),
+            "原始落盤錯誤不得被掩蓋，實際 cause=" + ex.getCause());
+        assertEquals(1, ex.getSuppressed().length,
+            "清理失敗必須以 suppressed 留痕，不得靜默吞掉");
+        assertTrue(ex.getSuppressed()[0].getMessage().contains("injected cleanup failure"));
+        assertEquals(before, Files.readString(filePath, StandardCharsets.UTF_8),
+            "落盤失敗時舊檔不得被修改");
+
+        Path leaked = createdTmp.get();
+        if (leaked != null) {
+            try {
+                Files.deleteIfExists(leaked);
+            } catch (IOException ignore) {
+                // best effort
+            }
+        }
+        store.close();
     }
 
     // -----------------------------------------------------------------

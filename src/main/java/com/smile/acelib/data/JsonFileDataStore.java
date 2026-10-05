@@ -1,11 +1,13 @@
 package com.smile.acelib.data;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -30,9 +32,10 @@ import java.util.concurrent.Executor;
  * <h2>原子寫入流程</h2>
  * <ol>
  *   <li>將新內容寫入 {@code <file>.tmp}（與目標檔案同目錄）</li>
+ *   <li>對 temp 做 fsync（強制落盤），確保斷電後目標檔內容完整</li>
  *   <li>呼叫 {@code Files.move(tmp, target, ATOMIC_MOVE)}；
  *       若底層檔案系統不支援，自動降級為 {@code REPLACE_EXISTING}</li>
- *   <li>若寫入 temp 或 move 失敗，刪除 temp + 保留原檔；
+ *   <li>若寫入 temp、落盤或 move 失敗，刪除 temp + 保留原檔；
  *       清理本身失敗時以 {@code suppressed} 留痕，不掩蓋原始寫入錯誤</li>
  * </ol>
  *
@@ -291,6 +294,12 @@ public final class JsonFileDataStore implements DataStore {
 
         void writeString(Path path, String content) throws IOException;
 
+        /**
+         * 把暫存檔內容強制落盤（fsync），必須在 {@link #move} 之前呼叫；
+         * 否則斷電時目標檔可能只有部分內容。
+         */
+        void sync(Path path) throws IOException;
+
         void move(Path source, Path target) throws IOException;
 
         boolean deleteIfExists(Path path) throws IOException;
@@ -312,6 +321,13 @@ public final class JsonFileDataStore implements DataStore {
         @Override
         public void writeString(Path path, String content) throws IOException {
             Files.writeString(path, content, StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void sync(Path path) throws IOException {
+            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
         }
 
         @Override
@@ -362,6 +378,17 @@ public final class JsonFileDataStore implements DataStore {
         } catch (IOException ex) {
             DataStoreException failure = new DataStoreException("ACELIB-DATA-001",
                 "failed to write temp file for " + targetPath, ex);
+            deleteQuietly(tmp, failure, ops);
+            throw failure;
+        }
+
+        // 3. 暫存檔落盤後才搬移：不斷電保證 temp 內容已進穩定儲存，
+        // move 之後目標檔即為完整內容。落盤失敗比照寫入失敗處理。
+        try {
+            ops.sync(tmp);
+        } catch (IOException ex) {
+            DataStoreException failure = new DataStoreException("ACELIB-DATA-001",
+                "failed to sync temp file for " + targetPath, ex);
             deleteQuietly(tmp, failure, ops);
             throw failure;
         }
