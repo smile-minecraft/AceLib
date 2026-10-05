@@ -202,10 +202,11 @@ class JdbcDataStoreTest {
         dataSource.database.insert("acelib_data_kv", "test", "oldKey", "\"oldValue\"");
 
         // FailingDataSource 只在 init 完成後才拒絕新 connection：
-        // init() 內部需要 2 個 connection（migration transaction + post-init read），
-        // 所以必須允許前 N 次連線成功，否則連 init 都跑不起來就無法測 save rollback。
+        // init() 內部只需要 1 個 connection（建表 + 讀取 + 遷移 + 寫回 + commit
+        // 都在同一連線；root 視圖由剛提交的同一份資料建立，不再開第二連線）。
+        // 所以允許首次連線成功，之後拒絕，才能驗證「save 失敗時資料保留」語意。
         JdbcDataStore store = new JdbcDataStore(
-            "test", new FailingDataSource(dataSource, 2), SchemaVersion.V1_0, codec);
+            "test", new FailingDataSource(dataSource, 1), SchemaVersion.V1_0, codec);
         store.init();
         store.root().set("oldKey", "newValue");
         DataStoreException ex = assertThrows(DataStoreException.class, store::save);
@@ -458,8 +459,8 @@ class JdbcDataStoreTest {
      *
      * <p>前 {@code allowedConnections} 次連線委派給 delegate（共享 database）；
      * 超過則拋 {@link java.sql.SQLException}。設計原因：
-     * {@link JdbcDataStore#init()} 內部需要多個 connection（migration transaction + post-init read）；
-     * 若一律拒絕，連 init 都跑不起來，無法驗證「save 失敗時資料保留」語意。</p>
+     * {@link JdbcDataStore#init()} 只用一個 connection；若一律拒絕，
+     * 連 init 都跑不起來，無法驗證「save 失敗時資料保留」語意。</p>
      */
     private static final class FailingDataSource implements javax.sql.DataSource {
         private final InMemoryDataSource delegate;
