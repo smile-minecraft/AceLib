@@ -204,4 +204,124 @@ class MigrationChainTest {
             }
         };
     }
+
+    @Test
+    @DisplayName("巢狀 set 後失敗：readView 不被污染且 commit 不執行")
+    void migrate_nestedSetThenThrow_doesNotPolluteReadView() {
+        Map<String, Object> inner = new LinkedHashMap<>();
+        inner.put("balance", 100);
+        inner.put("name", "alice");
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("user", inner);
+        MemoryRecord readView = new MemoryRecord("", view);
+
+        DataMigration bad = new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(1, 1); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().set("user.balance", 999);
+                throw new RuntimeException("boom");
+            }
+        };
+        MigrationChain chain = new MigrationChain().add(bad);
+        AtomicBoolean committed = new AtomicBoolean(false);
+        MigrationResult r = chain.migrateTracked(new SchemaVersion(1, 0),
+            new SchemaVersion(1, 1), readView, finalView -> committed.set(true));
+        assertFalse(r.success());
+        assertFalse(committed.get(), "失敗時 commit 不應觸發");
+        assertEquals(100, readView.get("user.balance"));
+        assertEquals("alice", readView.get("user.name"));
+    }
+
+    @Test
+    @DisplayName("巢狀 remove 後失敗：readView 不被污染且 commit 不執行")
+    void migrate_nestedRemoveThenThrow_doesNotPolluteReadView() {
+        Map<String, Object> inner = new LinkedHashMap<>();
+        inner.put("balance", 100);
+        inner.put("name", "alice");
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("user", inner);
+        MemoryRecord readView = new MemoryRecord("", view);
+
+        DataMigration bad = new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(1, 1); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().remove("user.name");
+                throw new RuntimeException("boom");
+            }
+        };
+        MigrationChain chain = new MigrationChain().add(bad);
+        AtomicBoolean committed = new AtomicBoolean(false);
+        MigrationResult r = chain.migrateTracked(new SchemaVersion(1, 0),
+            new SchemaVersion(1, 1), readView, finalView -> committed.set(true));
+        assertFalse(r.success());
+        assertFalse(committed.get(), "失敗時 commit 不應觸發");
+        assertTrue(readView.has("user.name"));
+        assertEquals("alice", readView.get("user.name"));
+        assertEquals(100, readView.get("user.balance"));
+    }
+
+    @Test
+    @DisplayName("跨步巢狀修改後失敗：首步成功也不污染 readView")
+    void migrate_crossStepNestedMutationThenFailure_preservesOriginal() {
+        Map<String, Object> inner = new LinkedHashMap<>();
+        inner.put("balance", 100);
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("user", inner);
+        MemoryRecord readView = new MemoryRecord("", view);
+
+        DataMigration step1 = new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(1, 1); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().set("user.balance", 200);
+            }
+        };
+        DataMigration step2 = new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 1); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(1, 2); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().set("user.balance", 999);
+                throw new RuntimeException("boom at step2");
+            }
+        };
+        MigrationChain chain = new MigrationChain().add(step1).add(step2);
+        AtomicBoolean committed = new AtomicBoolean(false);
+        MigrationResult r = chain.migrateTracked(new SchemaVersion(1, 0),
+            new SchemaVersion(1, 2), readView, finalView -> committed.set(true));
+        assertFalse(r.success());
+        assertFalse(committed.get(), "跨步失敗時 commit 不應觸發");
+        assertEquals(100, readView.get("user.balance"));
+    }
+
+    @Test
+    @DisplayName("巢狀 List 修改後失敗：readView List 不被污染且型別不變")
+    void migrate_nestedListMutationThenThrow_doesNotPollute() {
+        MemoryRecord readView = new MemoryRecord();
+        readView.set("nums", new java.util.ArrayList<>(java.util.List.of(1, 2, 3)));
+        readView.set("user.age", 30);
+
+        DataMigration bad = new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(1, 1); }
+            @Override @SuppressWarnings("unchecked")
+            public void migrate(DataMigrationContext ctx) {
+                Object listObj = ctx.write().get("nums");
+                ((java.util.List<Object>) listObj).add(4);
+                ctx.write().set("user.age", 999);
+                throw new RuntimeException("boom");
+            }
+        };
+        MigrationChain chain = new MigrationChain().add(bad);
+        AtomicBoolean committed = new AtomicBoolean(false);
+        MigrationResult r = chain.migrateTracked(new SchemaVersion(1, 0),
+            new SchemaVersion(1, 1), readView, finalView -> committed.set(true));
+        assertFalse(r.success());
+        assertFalse(committed.get(), "失敗時 commit 不應觸發");
+        assertEquals(java.util.List.of(1, 2, 3), readView.get("nums"));
+        assertEquals(30, readView.get("user.age"));
+        assertTrue(readView.get("user.age") instanceof Integer,
+            "隔離不得改變合法值型別，實際=" + readView.get("user.age").getClass());
+    }
 }

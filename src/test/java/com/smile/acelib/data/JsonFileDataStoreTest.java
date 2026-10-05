@@ -3,6 +3,8 @@ package com.smile.acelib.data;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -327,6 +329,318 @@ class JsonFileDataStoreTest {
         assertFalse(afterRetry.contains("\"_version\":\"1.0\""),
             "舊版 _version 不應殘留,實際:" + afterRetry);
 
+        store.close();
+    }
+
+    @Test
+    @DisplayName("delete-key migration：init 後 root 與磁碟都不殘留舊鍵")
+    void migration_deleteKey_rootAndFileConsistent() throws IOException {
+        Files.writeString(filePath,
+            "{\"_version\":\"1.0\",\"oldKey\":\"x\",\"keep\":1}\n",
+            StandardCharsets.UTF_8);
+
+        JsonFileDataStore store = new JsonFileDataStore(
+            "test", filePath, new SchemaVersion(2, 0), codec);
+        store.registerMigration(new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(2, 0); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().remove("oldKey");
+                ctx.write().set("newKey", "y");
+            }
+        });
+        store.init();
+
+        // in-memory root 不得殘留舊鍵
+        assertNull(store.root().get("oldKey"), "root 不應殘留舊鍵");
+        assertFalse(store.root().has("oldKey"));
+        assertEquals("y", store.root().getString("newKey", null));
+        assertEquals(1, store.root().getInt("keep", 0));
+
+        // 磁碟落盤也不得殘留舊鍵，且與 root 一致
+        String persisted = Files.readString(filePath, StandardCharsets.UTF_8);
+        assertFalse(persisted.contains("oldKey"),
+            "落盤檔案不應殘留舊鍵，實際：" + persisted);
+        assertTrue(persisted.contains("\"newKey\":\"y\""),
+            "落盤檔案應有新鍵，實際：" + persisted);
+        assertTrue(persisted.contains("\"_version\":\"2.0\""),
+            "落盤檔案版本應已升級，實際：" + persisted);
+        store.close();
+    }
+
+    @Test
+    @DisplayName("巢狀 delete-key migration：root 與磁碟都移除巢狀舊鍵")
+    void migration_deleteNestedKey_rootAndFileConsistent() throws IOException {
+        Files.writeString(filePath,
+            "{\"_version\":\"1.0\",\"user\":{\"legacy\":\"x\",\"name\":\"a\"}}\n",
+            StandardCharsets.UTF_8);
+
+        JsonFileDataStore store = new JsonFileDataStore(
+            "test", filePath, new SchemaVersion(2, 0), codec);
+        store.registerMigration(new DataMigration() {
+            @Override public SchemaVersion fromVersion() { return new SchemaVersion(1, 0); }
+            @Override public SchemaVersion toVersion() { return new SchemaVersion(2, 0); }
+            @Override public void migrate(DataMigrationContext ctx) {
+                ctx.write().remove("user.legacy");
+            }
+        });
+        store.init();
+
+        assertNull(store.root().get("user.legacy"));
+        assertEquals("a", store.root().getString("user.name", null));
+        String persisted = Files.readString(filePath, StandardCharsets.UTF_8);
+        assertFalse(persisted.contains("legacy"),
+            "落盤檔案不應殘留巢狀舊鍵，實際：" + persisted);
+        store.close();
+    }
+
+    @Test
+    @DisplayName("含 JSON null 載入：save/close 不拋 NPE，重開後結果可預期")
+    void nullValues_saveCloseReopen_noNpe() throws IOException {
+        Files.writeString(filePath,
+            "{\"_version\":\"1.0\",\"nick\":null,\"u\":{\"age\":null,\"name\":\"a\"}}\n",
+            StandardCharsets.UTF_8);
+
+        JsonFileDataStore store = newStore();
+        store.init();
+        // has/get 對 null 的約定：視為不存在、get 回 null
+        assertFalse(store.root().has("nick"));
+        assertNull(store.root().get("nick"));
+        // snapshot（save/close 內部會用）不得拋 NPE
+        assertDoesNotThrow(store::save);
+        assertDoesNotThrow(store::close);
+
+        // 重新載入：null 策略為保留 JSON null（has 視為不存在、get 回 null、落盤仍為 null）
+        JsonFileDataStore reader = newStore();
+        reader.init();
+        assertNull(reader.root().get("nick"));
+        assertNull(reader.root().get("u.age"));
+        assertEquals("a", reader.root().getString("u.name", null));
+        reader.close();
+
+        String persisted = Files.readString(filePath, StandardCharsets.UTF_8);
+        assertTrue(persisted.contains("\"nick\":null"),
+            "null 策略為保留 JSON null 落盤，實際：" + persisted);
+    }
+
+    @Test
+    @DisplayName("close 寫入失敗：不崩潰且錯誤分類可透過 logger 觀察")
+    void close_writeFailure_isLoggedWithCode() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+
+        // 攔截 AceLib logger
+        java.util.logging.Logger log = java.util.logging.Logger.getLogger("AceLib");
+        java.util.List<java.util.logging.LogRecord> captured = new java.util.ArrayList<>();
+        java.util.logging.Handler handler = new java.util.logging.Handler() {
+            @Override public void publish(java.util.logging.LogRecord r) { captured.add(r); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        log.addHandler(handler);
+        try {
+            // 把資料檔案的 parent 改成唯讀，讓 close 的 save 階段失敗
+            Set<PosixFilePermission> readOnly =
+                EnumSet.of(PosixFilePermission.OWNER_READ,
+                           PosixFilePermission.OWNER_EXECUTE);
+            Files.setPosixFilePermissions(tempDir, readOnly);
+            try {
+                assertDoesNotThrow(store::close, "close 不得因寫入失敗崩潰");
+                assertTrue(store.isClosed());
+            } finally {
+                Set<PosixFilePermission> writable = EnumSet.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE,
+                    PosixFilePermission.OWNER_EXECUTE);
+                Files.setPosixFilePermissions(tempDir, writable);
+            }
+        } finally {
+            log.removeHandler(handler);
+        }
+
+        boolean logged = captured.stream().anyMatch(r ->
+            r.getMessage() != null && r.getMessage().contains("ACELIB-DATA-001"));
+        assertTrue(logged,
+            "close 寫入失敗必須以 ACELIB-DATA-001 分類記錄，captured=" + captured.size());
+    }
+
+    @Test
+    @DisplayName("temp 寫入階段失敗：不留孤兒 tmp 檔且錯誤分類為 ACELIB-DATA-001")
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void atomicWrite_tempStageFailure_cleansOrphan() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+
+        Set<PosixFilePermission> readOnly =
+            EnumSet.of(PosixFilePermission.OWNER_READ,
+                       PosixFilePermission.OWNER_EXECUTE);
+        Files.setPosixFilePermissions(tempDir, readOnly);
+        try {
+            DataStoreException ex = assertThrows(DataStoreException.class, store::save);
+            assertEquals("ACELIB-DATA-001", ex.getCode());
+        } finally {
+            Set<PosixFilePermission> writable = EnumSet.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE);
+            Files.setPosixFilePermissions(tempDir, writable);
+        }
+
+        try (var stream = Files.list(tempDir)) {
+            long orphans = stream
+                .filter(p -> p.getFileName().toString().startsWith("acelib-")
+                    && p.getFileName().toString().endsWith(".tmp"))
+                .count();
+            assertEquals(0, orphans, "temp 階段失敗不得留孤兒 tmp 檔");
+        }
+        store.close();
+    }
+
+    @Test
+    @DisplayName("move 失敗：清理 temp 孤兒檔")
+    void atomicWrite_moveFailure_cleansOrphan() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+
+        // 把目標檔案換成「非空目錄」，讓後續 move 必然失敗
+        Files.delete(filePath);
+        Files.createDirectory(filePath);
+        Files.writeString(filePath.resolve("occupied"), "x", StandardCharsets.UTF_8);
+
+        try {
+            DataStoreException ex = assertThrows(DataStoreException.class, store::save);
+            assertEquals("ACELIB-DATA-001", ex.getCode());
+        } finally {
+            // 還原，避免影響其他斷言的清理
+            try (var stream = Files.list(filePath)) {
+                stream.forEach(p -> {
+                    try { Files.delete(p); } catch (IOException ignore) { }
+                });
+            }
+            Files.deleteIfExists(filePath);
+        }
+
+        try (var stream = Files.list(tempDir)) {
+            long orphans = stream
+                .filter(p -> p.getFileName().toString().startsWith("acelib-")
+                    && p.getFileName().toString().endsWith(".tmp"))
+                .count();
+            assertEquals(0, orphans, "move 失敗不得留孤兒 tmp 檔");
+        }
+    }
+
+    @Test
+    @DisplayName("temp 寫入失敗且清理失敗：原始錯誤保留且清理失敗為 suppressed，舊檔不變")
+    void atomicWrite_writeFailure_cleanupFailure_suppressedAndPreservesFile() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+        String before = Files.readString(filePath, StandardCharsets.UTF_8);
+
+        java.util.concurrent.atomic.AtomicReference<Path> createdTmp =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        JsonFileDataStore.FileOps failingOps = new JsonFileDataStore.FileOps() {
+            @Override public Path createTempFile(Path dir, String prefix, String suffix)
+                    throws IOException {
+                Path tmp = Files.createTempFile(dir, prefix, suffix);
+                createdTmp.set(tmp);
+                return tmp;
+            }
+            @Override public void writeString(Path path, String content) throws IOException {
+                throw new IOException("injected write failure");
+            }
+            @Override public void move(Path source, Path target) throws IOException {
+                throw new AssertionError("write 失敗後不應走到 move");
+            }
+            @Override public boolean deleteIfExists(Path path) throws IOException {
+                throw new IOException("injected cleanup failure");
+            }
+        };
+
+        MemoryRecord root = (MemoryRecord) store.root();
+        DataStoreException ex = org.junit.jupiter.api.Assertions.assertThrows(
+            DataStoreException.class, () -> store.writeAtomicFrom(root, failingOps));
+        assertEquals("ACELIB-DATA-001", ex.getCode());
+        assertNotNull(ex.getCause());
+        assertTrue(ex.getCause().getMessage().contains("injected write failure"),
+            "原始寫入錯誤不得被掩蓋，實際 cause=" + ex.getCause());
+        assertEquals(1, ex.getSuppressed().length,
+            "清理失敗必須以 suppressed 留痕，不得靜默吞掉");
+        assertTrue(ex.getSuppressed()[0].getMessage().contains("injected cleanup failure"));
+
+        // 舊檔必須完整保留
+        assertEquals(before, Files.readString(filePath, StandardCharsets.UTF_8),
+            "寫入失敗時舊檔不得被修改");
+
+        // 測試注入讓清理失敗，temp 會殘留：手動清掉避免污染其他測試
+        Path leaked = createdTmp.get();
+        if (leaked != null) {
+            try {
+                Files.deleteIfExists(leaked);
+            } catch (IOException ignore) {
+                // best effort
+            }
+        }
+        store.close();
+    }
+
+    @Test
+    @DisplayName("move 失敗且清理失敗：原始錯誤保留且清理失敗為 suppressed")
+    void atomicWrite_moveFailure_cleanupFailure_suppressed() throws IOException {
+        JsonFileDataStore store = newStore();
+        store.init();
+        store.root().set("k", "v");
+        store.save();
+        String before = Files.readString(filePath, StandardCharsets.UTF_8);
+
+        java.util.concurrent.atomic.AtomicReference<Path> createdTmp =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        JsonFileDataStore.FileOps failingOps = new JsonFileDataStore.FileOps() {
+            @Override public Path createTempFile(Path dir, String prefix, String suffix)
+                    throws IOException {
+                Path tmp = Files.createTempFile(dir, prefix, suffix);
+                createdTmp.set(tmp);
+                return tmp;
+            }
+            @Override public void writeString(Path path, String content) throws IOException {
+                Files.writeString(path, content, StandardCharsets.UTF_8);
+            }
+            @Override public void move(Path source, Path target) throws IOException {
+                throw new IOException("injected move failure");
+            }
+            @Override public boolean deleteIfExists(Path path) throws IOException {
+                throw new IOException("injected cleanup failure");
+            }
+        };
+
+        MemoryRecord root = (MemoryRecord) store.root();
+        DataStoreException ex = org.junit.jupiter.api.Assertions.assertThrows(
+            DataStoreException.class, () -> store.writeAtomicFrom(root, failingOps));
+        assertEquals("ACELIB-DATA-001", ex.getCode());
+        assertNotNull(ex.getCause());
+        assertTrue(ex.getCause().getMessage().contains("injected move failure"),
+            "原始搬移錯誤不得被掩蓋，實際 cause=" + ex.getCause());
+        assertEquals(1, ex.getSuppressed().length,
+            "清理失敗必須以 suppressed 留痕，不得靜默吞掉");
+        assertTrue(ex.getSuppressed()[0].getMessage().contains("injected cleanup failure"));
+        assertEquals(before, Files.readString(filePath, StandardCharsets.UTF_8),
+            "搬移失敗時舊檔不得被修改");
+
+        Path leaked = createdTmp.get();
+        if (leaked != null) {
+            try {
+                Files.deleteIfExists(leaked);
+            } catch (IOException ignore) {
+                // best effort
+            }
+        }
         store.close();
     }
 

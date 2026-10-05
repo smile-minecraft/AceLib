@@ -159,6 +159,23 @@ class MemoryRecordTest {
     }
 
     @Test
+    @DisplayName("getRecord null/blank path 拋 ACELIB-DATA-003")
+    void getRecord_nullOrBlank_throwsData003() {
+        MemoryRecord r = new MemoryRecord();
+        r.set("user.balance", 100);
+        Record sentinel = new MemoryRecord();
+        DataStoreException nullEx = assertThrows(DataStoreException.class,
+            () -> r.getRecord(null, sentinel));
+        assertEquals("ACELIB-DATA-003", nullEx.getCode());
+        DataStoreException emptyEx = assertThrows(DataStoreException.class,
+            () -> r.getRecord("", sentinel));
+        assertEquals("ACELIB-DATA-003", emptyEx.getCode());
+        DataStoreException blankEx = assertThrows(DataStoreException.class,
+            () -> r.getRecord("   ", sentinel));
+        assertEquals("ACELIB-DATA-003", blankEx.getCode());
+    }
+
+    @Test
     @DisplayName("remove 回傳 true / false 對應實際移除行為")
     void remove_returnsActualRemoval() {
         MemoryRecord r = new MemoryRecord();
@@ -166,6 +183,75 @@ class MemoryRecordTest {
         assertTrue(r.remove("k"));
         assertFalse(r.has("k"));
         assertFalse(r.remove("k"));
+    }
+
+    @Test
+    @DisplayName("巢狀純量兩層 remove 後 has/get 正確")
+    void remove_twoLevelNested_scalar() {
+        MemoryRecord r = new MemoryRecord();
+        r.set("user.balance", 100);
+        r.set("user.name", "alice");
+
+        assertTrue(r.remove("user.balance"));
+        assertFalse(r.has("user.balance"));
+        assertNull(r.get("user.balance"));
+        // 同層其他 key 不受影響
+        assertEquals("alice", r.get("user.name"));
+    }
+
+    @Test
+    @DisplayName("巢狀純量三層 remove 後 has/get 正確")
+    void remove_threeLevelNested_scalar() {
+        MemoryRecord r = new MemoryRecord();
+        r.set("a.b.c", 1);
+        r.set("a.b.d", 2);
+
+        assertTrue(r.remove("a.b.c"));
+        assertFalse(r.has("a.b.c"));
+        assertNull(r.get("a.b.c"));
+        assertEquals(2, r.get("a.b.d"));
+    }
+
+    @Test
+    @DisplayName("葉節點為 Map 的 remove")
+    void remove_mapLeaf() {
+        MemoryRecord r = new MemoryRecord();
+        r.set("users.alice", Map.of("age", 30));
+        r.set("users.bob", Map.of("age", 25));
+
+        assertTrue(r.remove("users.alice"));
+        assertFalse(r.has("users.alice"));
+        assertNull(r.get("users.alice"));
+        assertTrue(r.has("users.bob"));
+    }
+
+    @Test
+    @DisplayName("不存在路徑的 remove 回 false（單段／兩層／中間缺層）")
+    void remove_missingPaths_returnFalse() {
+        MemoryRecord r = new MemoryRecord();
+        r.set("a.b", 1);
+
+        assertFalse(r.remove("missing"));
+        assertFalse(r.remove("a.missing"));
+        assertFalse(r.remove("missing.deep.path"));
+        // 實際存在的 key 不可被「不存在 remove」波及
+        assertTrue(r.has("a.b"));
+    }
+
+    @Test
+    @DisplayName("含 null 值的 record：snapshot 不拋 NPE 且保留 null 條目")
+    void snapshot_withNullValues_doesNotThrow() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("nick", null);
+        m.put("ok", 1);
+        MemoryRecord r = new MemoryRecord("", m);
+
+        Map<String, Object> snap = r.snapshot();
+        assertTrue(snap.containsKey("nick"));
+        assertNull(snap.get("nick"));
+        assertEquals(1, snap.get("ok"));
+        assertThrows(UnsupportedOperationException.class,
+            () -> snap.put("x", 1), "snapshot 必須維持不可變");
     }
 
     @Test

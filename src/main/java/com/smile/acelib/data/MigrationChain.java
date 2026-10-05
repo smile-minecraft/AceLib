@@ -20,6 +20,17 @@ import java.util.Objects;
  *       失敗時不觸發磁碟 IO；對 {@link JdbcDataStore} 而言：使用 transaction + rollback</li>
  * </ul>
  *
+ * <h2>寫入視圖隔離</h2>
+ * <p>每步的 {@code writeView} 都是「到目前為止最新狀態」的隔離拷貝：
+ * {@link MemoryRecord} 遞迴重建巢狀 {@code Map}/{@code List}
+ * （不經 JSON 序列化，不改變合法值型別），migration 對巢狀節點的
+ * {@code set}/{@code remove} 只影響該步寫入區，失敗時連同之前已套用步驟
+ * 一起丟棄，呼叫端持有的 {@code readView} 維持原值。
+ * 第三方 {@link Record} 實作依其自身 {@link Record#copy()} 約定隔離，
+ * 不可無條件視為深拷貝。公開 {@link Record#copy()} 的淺拷貝語意不變，
+ * 隔離只在此鏈內部局部執行；生產路徑（{@link JsonFileDataStore}、
+ * {@link JdbcDataStore}）一律傳入 {@link MemoryRecord}，因此享有深拷貝隔離。</p>
+ *
  * @since 1.0.0
  */
 public final class MigrationChain {
@@ -99,7 +110,7 @@ public final class MigrationChain {
                 continue;
             }
             try {
-                Record writeView = currentView.copy();
+                Record writeView = isolatedCopy(currentView);
                 DataMigrationContext ctx = new DataMigrationContext(currentView, writeView);
                 m.migrate(ctx);
                 currentView = writeView;
@@ -173,5 +184,21 @@ public final class MigrationChain {
         List<DataMigration> copy = new ArrayList<>(migrations);
         copy.sort((a, b) -> a.fromVersion().compareTo(b.fromVersion()));
         return copy;
+    }
+
+    /**
+     * 建立與目前視圖隔離的寫入視圖。
+     *
+     * <p>{@link MemoryRecord} 走深拷貝隔離（巢狀容器遞迴重建）；
+     * 非 {@link MemoryRecord} 的陌生 {@link Record} 實作無法在不改變值型別的
+     * 前提下安全深拷貝，退回 {@link Record#copy()} 並沿用其既有語意。
+     * 生產路徑（{@link JsonFileDataStore}、{@link JdbcDataStore}）一律傳入
+     * {@link MemoryRecord}，因此不受此限制影響。</p>
+     */
+    private static Record isolatedCopy(Record currentView) {
+        if (currentView instanceof MemoryRecord memory) {
+            return memory.copyIsolated();
+        }
+        return currentView.copy();
     }
 }

@@ -1,5 +1,6 @@
 package com.smile.acelib.data;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -16,6 +17,10 @@ import java.util.Set;
  *   <li>所有 {@code getXxx} 對缺失 path 回傳對應 default，不丟例外</li>
  *   <li>所有 {@code set} 對 null path 拋 {@link DataStoreException}（{@code ACELIB-DATA-003}）</li>
  *   <li>型別不符時回傳 default，不丟例外（避免 migration 期間因單一欄位崩潰）</li>
+ *   <li>null 值條目保留：{@code has} 視為不存在、{@code get} 回 null、
+ *       {@code set(path, null)} 等同移除、{@code snapshot} 保留並由
+ *       {@link JsonCodec} 以 JSON {@code null} 落盤；不支援的型別拋
+ *       {@code ACELIB-DATA-006}</li>
  * </ul>
  *
  * @since 1.0.0
@@ -51,16 +56,75 @@ public final class MemoryRecord implements Record {
     /**
      * 取得底層 map 的不可變快照（僅供診斷／序列化使用；外部請勿修改）。
      *
+     * <p>null 策略：底層 map 中的 null 值條目會保留於快照（{@link JsonCodec}
+     * 以 JSON {@code null} 落盤），不因 {@code Map.copyOf} 而拋 NPE；
+     * {@link #has(String)}／{@link #get(String)} 對該條目視為不存在／null。</p>
+     *
      * @return 不可變的 {@link Map}
      */
     public Map<String, Object> snapshot() {
-        return Map.copyOf(data);
+        // 不用 Map.copyOf：其不接受 null 值，會對含 JSON null 的 record 拋 NPE
+        return Collections.unmodifiableMap(new LinkedHashMap<>(data));
     }
 
     @Override
     public Record copy() {
         Map<String, Object> copied = new LinkedHashMap<>(data);
         return new MemoryRecord(key, copied);
+    }
+
+    /**
+     * 深拷貝隔離視圖（僅供 {@link MigrationChain} 在單步內局部使用）。
+     *
+     * <p>與公開 {@link #copy()} 的淺拷貝不同：此方法遞迴複製巢狀
+     * {@code Map}/{@code List} 結構，讓 migration 對巢狀節點的
+     * {@code set}/{@code remove} 只影響寫入視圖，不污染讀取視圖。
+     * 基本型別（{@link String}、{@link Number}、{@link Boolean}）與
+     * {@code null} 為不可變，直接共用參考；容器一律重建為可變的
+     * {@link LinkedHashMap}／{@link java.util.ArrayList}，不經 JSON
+     * 序列化，因此不會改變合法值的實際型別（例如 {@link Integer} 不會
+     * 變成 {@link Long}）。</p>
+     *
+     * @return 與本視圖資料相同但巢狀容器已隔離的新視圖
+     */
+    MemoryRecord copyIsolated() {
+        return new MemoryRecord(key, deepCopyMap(data));
+    }
+
+    private static Map<String, Object> deepCopyMap(Map<String, Object> source) {
+        Map<String, Object> copy = new LinkedHashMap<>(source.size() + 1);
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            copy.put(entry.getKey(), deepCopyValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    private static java.util.List<Object> deepCopyList(java.util.List<?> source) {
+        java.util.List<Object> copy = new java.util.ArrayList<>(source.size() + 1);
+        for (Object item : source) {
+            copy.add(deepCopyValue(item));
+        }
+        return copy;
+    }
+
+    private static Object deepCopyValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            return value;
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>(map.size() + 1);
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                copy.put((String) entry.getKey(), deepCopyValue(entry.getValue()));
+            }
+            return copy;
+        }
+        if (value instanceof java.util.List<?> list) {
+            return deepCopyList(list);
+        }
+        return value;
     }
 
     /**
@@ -136,15 +200,7 @@ public final class MemoryRecord implements Record {
         if (pr.value == null) {
             return false;
         }
-        if (pr.parent == null) {
-            data.remove(pr.leaf);
-        } else {
-            Map<String, Object> parentMap = asMap(pr.parent.get(pr.leaf));
-            if (parentMap != null) {
-                parentMap.remove(pr.leaf);
-            }
-        }
-        return true;
+        return pr.parent.remove(pr.leaf) != null;
     }
 
     @Override
@@ -220,6 +276,7 @@ public final class MemoryRecord implements Record {
 
     @Override
     public Record getRecord(String path, Record defaultValue) {
+        requireValidPath(path);
         PathResult pr = resolvePathSegments(path);
         if (pr.value instanceof Map<?, ?> map) {
             @SuppressWarnings("unchecked")
@@ -272,7 +329,11 @@ public final class MemoryRecord implements Record {
     // -----------------------------------------------------------------
 
     /**
-     * 走訪 path，回傳對應的值與其父節點 map（root 視圖時 parent = null）。
+     * 走訪 path，回傳對應的值與其「直接父層」map。
+     *
+     * <p>{@code parent} 恆為包含最終段 key 的那層 map（單段路徑時為根視圖的
+     * {@code data}），讓 {@link #remove(String)} 能直接對父層操作。
+     * 中間段缺失或型別非 Map 時，value 為 null、parent 為最後成功取得的那層。</p>
      *
      * @param path 點分隔路徑
      * @return 走訪結果
@@ -280,44 +341,22 @@ public final class MemoryRecord implements Record {
     private PathResult resolvePathSegments(String path) {
         String[] parts = path.split("\\.");
         Map<String, Object> current = data;
-        Map<String, Object> parent = null;
-        Object value = null;
         for (int i = 0; i < parts.length; i++) {
             String segment = parts[i];
-            value = current == null ? null : current.get(segment);
             if (i == parts.length - 1) {
-                return new PathResult(parent, segment, value);
+                return new PathResult(current, segment, current.get(segment));
             }
+            Object value = current.get(segment);
             if (value instanceof Map<?, ?> map) {
-                parent = current;
                 @SuppressWarnings("unchecked")
                 Map<String, Object> typed = (Map<String, Object>) map;
                 current = typed;
             } else {
                 // 路徑中段不是 map：視為不存在
-                return new PathResult(parent, segment, null);
+                return new PathResult(current, segment, null);
             }
         }
-        return new PathResult(null, "", null);
-    }
-
-    /**
-     * 確保 {@code parent[leaf]} 是一個 {@code Map<String, Object>}，必要時建立空 map。
-     */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> ensureMap(Map<String, Object> parent, String leaf) {
-        Object existing = parent.get(leaf);
-        if (existing instanceof Map<?, ?> map) {
-            return (Map<String, Object>) map;
-        }
-        LinkedHashMap<String, Object> fresh = new LinkedHashMap<>();
-        parent.put(leaf, fresh);
-        return fresh;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> asMap(Object value) {
-        return value instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
+        return new PathResult(data, "", null);
     }
 
     private static void requireValidPath(String path) {

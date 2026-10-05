@@ -161,6 +161,7 @@ public interface Record {
      * @param path         點分隔路徑
      * @param defaultValue 預設值；可為 null
      * @return 對應子視圖或預設值
+     * @throws DataStoreException 當 {@code path} 為 null/空白（{@code ACELIB-DATA-003}）
      */
     Record getRecord(String path, Record defaultValue);
 

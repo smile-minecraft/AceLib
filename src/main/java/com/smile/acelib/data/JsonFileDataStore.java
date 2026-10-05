@@ -32,7 +32,8 @@ import java.util.concurrent.Executor;
  *   <li>將新內容寫入 {@code <file>.tmp}（與目標檔案同目錄）</li>
  *   <li>呼叫 {@code Files.move(tmp, target, ATOMIC_MOVE)}；
  *       若底層檔案系統不支援，自動降級為 {@code REPLACE_EXISTING}</li>
- *   <li>若寫入 temp 或 move 失敗，刪除 temp + 保留原檔</li>
+ *   <li>若寫入 temp 或 move 失敗，刪除 temp + 保留原檔；
+ *       清理本身失敗時以 {@code suppressed} 留痕，不掩蓋原始寫入錯誤</li>
  * </ol>
  *
  * <h2>執行緒模型</h2>
@@ -159,7 +160,12 @@ public final class JsonFileDataStore implements DataStore {
             MemoryRecord snapshot = new MemoryRecord("", new LinkedHashMap<>(loaded));
             MigrationResult result = migrationChain.migrateTracked(
                 onDiskVersion, currentVersion, snapshot,
-                finalState -> loaded.putAll(((MemoryRecord) finalState).snapshot()));
+                finalState -> {
+                    // 以 migration 後的最終狀態整體取代既有資料：
+                    // 只 putAll 會讓 migration 刪除的鍵殘留（復活）。
+                    loaded.clear();
+                    loaded.putAll(((MemoryRecord) finalState).snapshot());
+                });
             if (!result.success()) {
                 throw new DataStoreException("ACELIB-DATA-004",
                     "migration failed: " + result.errorMessage(),
@@ -242,8 +248,14 @@ public final class JsonFileDataStore implements DataStore {
         if (initialized) {
             try {
                 writeAtomicFrom(rootView);
-            } catch (RuntimeException ignore) {
-                // close 內部不丟例外：disable 流程不應崩潰
+            } catch (RuntimeException ex) {
+                // close 內部不丟例外：disable 流程不應崩潰；但錯誤分類必須可觀察，
+                // 否則資料遺失毫無紀錄。保留 ACELIB-DATA-xxx 代碼於訊息中。
+                java.util.logging.Logger.getLogger("AceLib").log(
+                    java.util.logging.Level.WARNING,
+                    "JsonFileDataStore '" + name + "' close 時持久化失敗："
+                        + (ex instanceof DataStoreException dse ? dse.getCode() : "ACELIB-DATA-001")
+                        + " - " + ex.getMessage(), ex);
             }
         }
         closed = true;
@@ -263,6 +275,62 @@ public final class JsonFileDataStore implements DataStore {
     }
 
     private void writeAtomicFrom(MemoryRecord source) {
+        writeAtomicFrom(source, FileOps.defaultOps());
+    }
+
+    /**
+     * 檔案操作接縫（測試注入用，不對外暴露）。
+     *
+     * <p>正式環境一律走 {@link FileOps#defaultOps()}（直接委派 {@code Files}）。
+     * 測試需要讓「temp 建出來之後的寫入／搬移」失敗時，才經由多載傳入假實作；
+     * 不可用「建不出 temp」來冒充「寫 temp 失敗」，兩者的清理路徑不同。</p>
+     */
+    interface FileOps {
+
+        Path createTempFile(Path dir, String prefix, String suffix) throws IOException;
+
+        void writeString(Path path, String content) throws IOException;
+
+        void move(Path source, Path target) throws IOException;
+
+        boolean deleteIfExists(Path path) throws IOException;
+
+        static FileOps defaultOps() {
+            return DefaultFileOps.INSTANCE;
+        }
+    }
+
+    private static final class DefaultFileOps implements FileOps {
+
+        private static final DefaultFileOps INSTANCE = new DefaultFileOps();
+
+        @Override
+        public Path createTempFile(Path dir, String prefix, String suffix) throws IOException {
+            return Files.createTempFile(dir, prefix, suffix);
+        }
+
+        @Override
+        public void writeString(Path path, String content) throws IOException {
+            Files.writeString(path, content, StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void move(Path source, Path target) throws IOException {
+            try {
+                Files.move(source, target, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+
+        @Override
+        public boolean deleteIfExists(Path path) throws IOException {
+            return Files.deleteIfExists(path);
+        }
+    }
+
+    void writeAtomicFrom(MemoryRecord source, FileOps ops) {
         // 1. 序列化來源視圖為 JSON
         Map<String, Object> snapshot = new LinkedHashMap<>(source.snapshot());
         snapshot.put("_version", codec.encodeVersion(currentVersion));
@@ -279,33 +347,46 @@ public final class JsonFileDataStore implements DataStore {
             }
         }
 
-        // 3. 寫入 temp 檔
-        Path tmp;
+        // temp 建出來之後的每一步都可能留下孤兒檔：寫入與搬移各自負責清理，
+        // 不共用同一個 catch，否則會把「建不出 temp」和「寫壞 temp」混成同一條路。
+        final Path tmp;
         try {
-            tmp = Files.createTempFile(parent, "acelib-", ".tmp");
-            Files.writeString(tmp, text, StandardCharsets.UTF_8);
+            tmp = ops.createTempFile(parent, "acelib-", ".tmp");
         } catch (IOException ex) {
             throw new DataStoreException("ACELIB-DATA-001",
                 "failed to write temp file for " + targetPath, ex);
         }
 
-        // 4. Atomic move（若不支援，降級為 replace）
         try {
-            try {
-                Files.move(tmp, targetPath, StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException ex) {
-                Files.move(tmp, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            }
+            ops.writeString(tmp, text);
+        } catch (IOException ex) {
+            DataStoreException failure = new DataStoreException("ACELIB-DATA-001",
+                "failed to write temp file for " + targetPath, ex);
+            deleteQuietly(tmp, failure, ops);
+            throw failure;
+        }
+
+        // 4. Atomic move（若不支援，降級為 replace 由 DefaultFileOps 處理）
+        try {
+            ops.move(tmp, targetPath);
         } catch (IOException ex) {
             // 5. 失敗時清理 temp
-            try {
-                Files.deleteIfExists(tmp);
-            } catch (IOException ignore) {
-                // best effort
-            }
-            throw new DataStoreException("ACELIB-DATA-001",
+            DataStoreException failure = new DataStoreException("ACELIB-DATA-001",
                 "failed to move temp file to " + targetPath, ex);
+            deleteQuietly(tmp, failure, ops);
+            throw failure;
+        }
+    }
+
+    /**
+     * 盡力清掉 temp 孤兒檔；清不掉時把清理失敗掛到原始錯誤的 {@code suppressed}，
+     * 讓維運仍能從例外鏈查到兩邊的原因，而不是靜靜吞掉其中一邊。
+     */
+    private static void deleteQuietly(Path tmp, DataStoreException failure, FileOps ops) {
+        try {
+            ops.deleteIfExists(tmp);
+        } catch (IOException cleanup) {
+            failure.addSuppressed(cleanup);
         }
     }
 }
