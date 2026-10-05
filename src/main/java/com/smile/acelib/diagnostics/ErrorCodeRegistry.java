@@ -72,11 +72,15 @@ public final class ErrorCodeRegistry {
             "設定檔版本遷移失敗"));
         m.put("ACELIB-CFG-005", new ErrorCodeInfo(ErrorCategory.CONFIG,
             "必填欄位缺失"));
+        m.put("ACELIB-CFG-006", new ErrorCodeInfo(ErrorCategory.CONFIG,
+            "磁碟上的設定版本比當前版本新，已拒絕降版覆寫"));
         // LANG
         m.put("ACELIB-LANG-001", new ErrorCodeInfo(ErrorCategory.LANGUAGE,
             "訊息 key 缺失"));
         m.put("ACELIB-LANG-002", new ErrorCodeInfo(ErrorCategory.LANGUAGE,
             "語言檔格式錯誤"));
+        m.put("ACELIB-LANG-003", new ErrorCodeInfo(ErrorCategory.LANGUAGE,
+            "語言檔不存在"));
         // PLAT
         m.put("ACELIB-PLAT-001", new ErrorCodeInfo(ErrorCategory.PLATFORM,
             "無法識別的伺服器實作"));

@@ -180,6 +180,26 @@ class ErrorCodeRegistryTest {
             assertThrows(NullPointerException.class,
                 () -> ErrorCodeRegistry.lookup(null));
         }
+
+        @Test
+        @DisplayName("T8：CFG-006（拒絕降版覆寫）已登錄且歸類為 CONFIG")
+        void lookupCfg006_registeredAsConfig() {
+            ErrorCodeInfo info = ErrorCodeRegistry.lookup("ACELIB-CFG-006");
+            assertNotNull(info, "ACELIB-CFG-006 必須登錄，否則 load/reload 拒絕降版的診斷查不到分類");
+            assertSame(ErrorCategory.CONFIG, info.category());
+            assertSame(ErrorCategory.CONFIG,
+                ErrorCodeRegistry.categorize("ACELIB-CFG-006"));
+        }
+
+        @Test
+        @DisplayName("T8：LANG-003（語言檔不存在）已登錄且歸類為 LANGUAGE")
+        void lookupLang003_registeredAsLanguage() {
+            ErrorCodeInfo info = ErrorCodeRegistry.lookup("ACELIB-LANG-003");
+            assertNotNull(info, "ACELIB-LANG-003 必須登錄，否則語系缺檔的診斷查不到分類");
+            assertSame(ErrorCategory.LANGUAGE, info.category());
+            assertSame(ErrorCategory.LANGUAGE,
+                ErrorCodeRegistry.categorize("ACELIB-LANG-003"));
+        }
     }
 
     @Nested

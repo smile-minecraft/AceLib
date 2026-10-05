@@ -5,8 +5,9 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -21,8 +22,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * <h2>錯誤代碼</h2>
  * <ul>
- *   <li>{@code ACELIB-LANG-001}：訊息 key 缺失（記錄 warning，不中斷）</li>
- *   <li>{@code ACELIB-LANG-002}：語言檔格式錯誤</li>
+ *   <li>{@code ACELIB-LANG-001}：訊息 key 缺失（記錄 warning，不中斷；同一載入週期只記一次）</li>
+ *   <li>{@code ACELIB-LANG-002}：語言檔格式錯誤或無法寫入</li>
+ *   <li>{@code ACELIB-LANG-003}：語言檔不存在（記錄 warning 並負向快取）</li>
  * </ul>
  *
  * <h2>設計原則</h2>
@@ -32,6 +34,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>支援變數替換（{@code {player}} → {@code "smile"}）；
  *       變數缺失時保留原 {@code {var}} 字串，不中斷運行</li>
  *   <li>首次啟動無對應 locale 檔案時自動生成空檔，方便管理員填入翻譯</li>
+ *   <li>「檔案不存在」與「檔案解析損壞」都可查：前者記 LANG-003，後者記 LANG-002 並附錯誤</li>
+ *   <li>兩者都會負向快取，避免熱路徑反覆 stat 或重複解析壞檔；
+ *       {@link #reload()} 會清空快取，讓修好的檔案立刻生效</li>
+ *   <li>缺鍵 warning 在同一次載入週期內去重；{@code reload} 後重新記錄</li>
  * </ul>
  *
  * @since 1.0.0
@@ -49,8 +55,20 @@ public final class LangManager {
     /**
      * per-locale 檔案快取（與全域 current state 隔離）。
      * 供 {@link #get(Locale, String)} 依特定 locale 讀取，不切換全域 current。
+     *
+     * <p>{@link Optional#empty()} 同時充當負向快取：檔案不存在或解析損壞時記住這個結果，
+     * 不在每次查詢時重複 stat 或重複解析壞檔。</p>
      */
-    private final Map<Locale, YamlConfiguration> localeCache = new ConcurrentHashMap<>();
+    private final Map<Locale, Optional<YamlConfiguration>> localeCache = new ConcurrentHashMap<>();
+
+    /**
+     * 本次載入週期內已記錄過的缺鍵（{@code locale + "|" + key}）。
+     *
+     * <p>訊息查詢常在熱路徑上重複呼叫同一個 key；不去重的話每查一次就噴一行 warning，
+     * 真正的問題反而被洗掉。由 {@link #load(Locale)} 在成功載入時清空，
+     * 因此管理者換檔、reload 之後仍會再看到一次。</p>
+     */
+    private final Set<String> reportedMissingKeys = ConcurrentHashMap.newKeySet();
 
     /**
      * 主要建構子。
@@ -108,12 +126,14 @@ public final class LangManager {
      * <p>若請求 locale 檔案不存在，fallback 到 {@link #defaultLocale} 並更新
      * {@link #getCurrentLocale()}。</p>
      *
+     * <p>全部步驟成功後才提交狀態：{@code current}、{@code currentLocale}、per-locale
+     * 快取與缺鍵去重記錄都維持原樣直到讀檔完成。因此 {@link #reload()} 失敗時，
+     * 還能用的舊訊息與快取不會因為「太早清快取」而跟著消失。</p>
+     *
      * @param locale 欲載入的 locale；不可為 null
      */
     public void load(Locale locale) {
         Objects.requireNonNull(locale, "locale");
-        // 重新載入會改變磁碟內容，先清空 per-locale 快取，避免讀到舊檔。
-        localeCache.clear();
         Locale target = locale;
         File file = resolveFile(target);
 
@@ -132,8 +152,14 @@ public final class LangManager {
             writeEmptyLanguageFile(file, target);
         }
 
-        this.current = loadFromDisk(file);
+        YamlConfiguration loaded = loadFromDisk(file);
+
+        // 讀檔成功才提交：失敗時保持既有 current / currentLocale / 快取 / 去重記錄，
+        // 避免失敗的 reload 順手把還能用的狀態清掉。
+        this.current = loaded;
         this.currentLocale = target;
+        this.localeCache.clear();
+        this.reportedMissingKeys.clear();
         this.ready = true;
     }
 
@@ -222,17 +248,11 @@ public final class LangManager {
     }
 
     private Optional<String> readFromLocale(Locale locale, String key) {
-        YamlConfiguration cfg = localeCache.get(locale);
-        if (cfg == null) {
-            cfg = loadLocaleFile(locale);
-            if (cfg != null) {
-                localeCache.put(locale, cfg);
-            }
-        }
-        if (cfg == null) {
+        Optional<YamlConfiguration> state = localeCache.computeIfAbsent(locale, this::loadLocaleFile);
+        if (state.isEmpty()) {
             return Optional.empty();
         }
-        Object raw = cfg.get(key);
+        Object raw = state.get().get(key);
         if (raw == null) {
             return Optional.empty();
         }
@@ -242,17 +262,34 @@ public final class LangManager {
     /**
      * 從磁碟載入指定 locale 的語言檔（不寫入全域 current state）。
      *
-     * @return 載入成功的 {@link YamlConfiguration}；若檔案不存在或格式錯誤則回傳 null
+     * <p>回傳值就是負向快取的內容：{@link Optional#empty()} 代表「這個 locale 目前讀不到」，
+     * 包含兩種可區分的原因，都在此處記錄一次：</p>
+     * <ul>
+     *   <li>檔案不存在 → {@code ACELIB-LANG-003}</li>
+     *   <li>檔案存在但解析損壞 → {@code ACELIB-LANG-002}，附帶解析錯誤</li>
+     * </ul>
+     *
+     * <p>兩者都進快取，避免每次查詢都重新 stat 或重新解析壞檔；只有
+     * {@link #load(Locale)}／{@link #reload()} 會清空快取，讓管理者修好檔案後
+     * 不必重開伺服器就能讀到。</p>
+     *
+     * @return 載入成功的內容；檔案不存在或格式錯誤時回傳 {@link Optional#empty()}
      */
-    private YamlConfiguration loadLocaleFile(Locale locale) {
+    private Optional<YamlConfiguration> loadLocaleFile(Locale locale) {
         File file = resolveFile(locale);
         if (!file.exists()) {
-            return null;
+            safeLogger().log(Level.WARNING,
+                "[ACELIB-LANG-003] language file for locale {0} not found: {1}",
+                new Object[]{locale, file.getAbsolutePath()});
+            return Optional.empty();
         }
         try {
-            return loadFromDisk(file);
-        } catch (ConfigException e) {
-            return null;
+            return Optional.of(loadFromDisk(file));
+        } catch (ConfigException ex) {
+            safeLogger().log(Level.WARNING,
+                "[{0}] language file cannot be parsed: {1}（{2}）",
+                new Object[]{ex.getCode(), file.getAbsolutePath(), ex.getMessage()});
+            return Optional.empty();
         }
     }
 
@@ -315,21 +352,13 @@ public final class LangManager {
     }
 
     /**
-     * 寫入空的語言檔（含版本註解）。
+     * 寫入空的語言檔（含版本註解）；temp + atomic move，失敗保留原檔。
      */
     private static void writeEmptyLanguageFile(File file, Locale locale) {
         YamlConfiguration cfg = new YamlConfiguration();
         cfg.set("language.name", locale.getDisplayName(locale));
         cfg.set("language.code", localeToFileName(locale).replace(".yml", ""));
-        try {
-            cfg.save(file);
-        } catch (IOException ex) {
-            throw new ConfigException(
-                "ACELIB-LANG-002",
-                "無法寫入語言檔：" + file.getAbsolutePath() + "（" + ex.getMessage() + "）",
-                ex
-            );
-        }
+        YamlFileWriter.writeAtomically(cfg, file.toPath(), "ACELIB-LANG-002", "語言檔");
     }
 
     /**
@@ -364,19 +393,30 @@ public final class LangManager {
 
     /**
      * 記錄訊息 key 缺失的警告（ACELIB-LANG-001）。
+     *
+     * <p>同一個載入週期內，同一個 {@code locale + key} 只記一次；
+     * {@link #load(Locale)} 成功時清空去重記錄，所以 reload 後仍會再記一次。</p>
      */
     private void logMissingKey(String key) {
-        safeLogger().log(Level.WARNING,
-            "[ACELIB-LANG-001] message key missing: {0} (locale={1})",
-            new Object[]{key, currentLocale});
+        // 先取一次 locale：去重鍵與訊息內容必須用同一個 locale，
+        // 否則 reload 併發時可能記到「A locale 的去重、B locale 的訊息」。
+        Locale locale = currentLocale;
+        if (reportedMissingKeys.add(locale + "|" + key)) {
+            safeLogger().log(Level.WARNING,
+                "[ACELIB-LANG-001] message key missing: {0} (locale={1})",
+                new Object[]{key, locale});
+        }
     }
 
     /**
      * 記錄 locale fallback 警告。
+     *
+     * <p>用 {@code ACELIB-LANG-003}（語言檔不存在）而不是 {@code ACELIB-LANG-002}
+     * （格式錯誤），讓「找不到檔」和「檔案壞掉」在 log 上可以區分。</p>
      */
     private void logFallbackWarning(Locale requested) {
         safeLogger().log(Level.WARNING,
-            "[ACELIB-LANG-002] language file for locale {0} not found, falling back to {1}",
+            "[ACELIB-LANG-003] language file for locale {0} not found, falling back to {1}",
             new Object[]{requested, defaultLocale});
     }
 
