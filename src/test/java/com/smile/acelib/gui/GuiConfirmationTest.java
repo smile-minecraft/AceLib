@@ -8,7 +8,14 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -289,6 +296,74 @@ class GuiConfirmationTest {
         GuiResult again = service.confirm(uuid, generation, confirmation.actionToken());
         assertEquals(GuiState.REJECTED, again.state());
         assertEquals(GuiErrorCode.ACTION_ALREADY_RESOLVED, again.errorCode());
+    }
+
+    // -----------------------------------------------------------------
+    // callback 與鎖
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("callback 執行期間不持有 action 監視器：掛起時 cancel 不被阻塞")
+    void confirm_callbackDoesNotHoldMonitor() throws Exception {
+        long generation = openSession();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        GuiConfirmation confirmation = createConfirmation(generation, "act", () -> {
+            entered.countDown();
+            try {
+                if (!release.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("callback 等待釋放逾時");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        AtomicReference<Throwable> confirmFailure = new AtomicReference<>();
+        Thread confirmThread = new Thread(() -> {
+            try {
+                GuiResult result = service.confirm(uuid, generation,
+                    confirmation.actionToken());
+                if (result.state() != GuiState.SUCCESS) {
+                    confirmFailure.compareAndSet(null, new IllegalStateException(
+                        "confirm 應回 SUCCESS，實際=" + result.state()));
+                }
+            } catch (Throwable t) {
+                confirmFailure.compareAndSet(null, t);
+            }
+        });
+        confirmThread.start();
+        assertTrue(entered.await(10, TimeUnit.SECONDS),
+            "callback 必須先進入掛起狀態");
+
+        // callback 仍掛起時，cancel 必須能立即完成並回 ACTION_ALREADY_RESOLVED，
+        // 不可因 action 監視器被 callback 持有而阻塞。
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<GuiResult> pending = executor.submit(() ->
+                service.cancel(uuid, generation, confirmation.actionToken()));
+            GuiResult cancelResult;
+            try {
+                cancelResult = pending.get(5, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                pending.cancel(true);
+                fail("cancel 被 callback 阻塞超過 5 秒："
+                    + "callback 仍在 action 監視器內執行");
+                return;
+            }
+            assertEquals(GuiState.REJECTED, cancelResult.state(),
+                "已 CONFIRMED 的 action 再 cancel 必須被拒絕");
+            assertEquals(GuiErrorCode.ACTION_ALREADY_RESOLVED,
+                cancelResult.errorCode());
+        } finally {
+            release.countDown();
+            confirmThread.join(10_000);
+            executor.shutdownNow();
+        }
+        if (confirmFailure.get() != null) {
+            throw new AssertionError("confirm 執行緒異常",
+                confirmFailure.get());
+        }
     }
 
     // -----------------------------------------------------------------

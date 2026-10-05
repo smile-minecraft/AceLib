@@ -526,6 +526,8 @@ final class GuiServiceImpl implements GuiService {
                 "expected generation=" + action.generation
                     + " but got " + generation);
         }
+        final Runnable callback;
+        final GuiSession confirmedSession;
         synchronized (action) {
             if (action.state != GuiConfirmation.State.PENDING) {
                 return GuiResult.rejected(GuiErrorCode.ACTION_ALREADY_RESOLVED,
@@ -533,22 +535,28 @@ final class GuiServiceImpl implements GuiService {
                         + "), token=" + actionToken);
             }
             action.state = GuiConfirmation.State.CONFIRMED;
-            try {
-                action.callback.run();
-            } catch (Throwable t) {
-                action.failureDetail = t.getMessage();
-                LOGGER.log(Level.WARNING,
-                    "GuiService: confirmation callback failed for actionId={0}, "
-                        + "token={1}: {2}",
-                    new Object[] { action.actionId, actionToken, t.getMessage() });
-                return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
-                    "confirmation callback failed for actionId=" + action.actionId
-                        + ": " + t.getMessage());
-            }
+            callback = action.callback;
+            confirmedSession = action.session;
+        }
+        // 狀態轉換完成、離開鎖之後才執行 callback：callback 進行中不得
+        // 持有 action 的監視器，否則並行 confirm/cancel 會被 callback 阻塞。
+        // 恰好執行一次仍由鎖內的狀態轉換保證 — 只有搶到 PENDING→CONFIRMED
+        // 的執行緒會走到這裡。
+        try {
+            callback.run();
+        } catch (Throwable t) {
+            action.failureDetail = t.getMessage();
+            LOGGER.log(Level.WARNING,
+                "GuiService: confirmation callback failed for actionId={0}, "
+                    + "token={1}: {2}",
+                new Object[] { action.actionId, actionToken, t.getMessage() });
+            return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "confirmation callback failed for actionId=" + action.actionId
+                    + ": " + t.getMessage());
         }
         // 解析後保留 entry（state 已非 PENDING）以便重複 confirm/cancel 回
         // ACTION_ALREADY_RESOLVED；session 結束或 shutdown 時統一清理。
-        return GuiResult.success(action.session);
+        return GuiResult.success(confirmedSession);
     }
 
     @Override
@@ -808,7 +816,8 @@ final class GuiServiceImpl implements GuiService {
      *
      * <p>不可變欄位記錄綁定資訊；{@link #state} 為唯一可變欄位，僅在
      * {@code synchronized(action)} 區塊內由 confirm/cancel 轉換，確保 callback
-     * 恰好執行一次。本物件不持有 {@code Player} reference。</p>
+     * 恰好執行一次。callback 本身在狀態轉換完成、離開鎖之後才執行，
+     * 不得在持有監視器的狀態下運行。本物件不持有 {@code Player} reference。</p>
      */
     private static final class PendingAction {
         final UUID playerUuid;
