@@ -1,13 +1,13 @@
 # AceLib v1 API Surface
 
-本文件定義 AceLib v1.0 公開 API 的分類契約：Supported（v1 承諾相容）、SPI（供 adapter / backend / extension 實作者）、Internal（不允許下游依賴）。
+本文件列出 AceLib 公開 API 的分類：Supported（給下游 plugin 使用）、SPI（供 adapter / backend / extension 實作者）、Internal（不允許下游依賴）。分類說明每個型別是給誰用的，不代表相容性保證；公開 API 在版本之間可能變更，變更記錄在 [CHANGELOG.md](../../CHANGELOG.md)。
 
 > 本文件由 api-surface.json 單一來源產生，兩者必須一致；一致性由 ApiSurfaceContractTest 驗證。
 
 ## 分類政策
 
-- Supported：v1.0 起承諾 source/binary compatibility。
-- SPI：供 adapter / backend / extension 實作者使用；文件須寫明實作者責任與相容性承諾。
+- Supported：給下游 plugin 使用的公開 API；版本之間可能變更，變更記錄在 CHANGELOG。
+- SPI：供 adapter / backend / extension 實作者使用；文件須寫明實作者責任。
 - Internal：不允許下游直接依賴；v1.0 前若維持 public 必須在 allowlist 記錄 retention 理由，收斂為 package-private 屬相容性 break 需先經 review。
 
 ## 統計
@@ -23,7 +23,7 @@
 
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
-| `com.smile.acelib.AceLibApi` | class | Supported | 對外 API facade；v1 承諾 source/binary 相容，是下游取得各 service 的入口。 |  | AceLibPlugin 建構；消費者經 v1 的 AceLibProvider 取得。 |
+| `com.smile.acelib.AceLibApi` | class | Supported | 對外 API facade，是下游取得各 service 的入口。 |  | AceLibPlugin 建構；消費者經 v1 的 AceLibProvider 取得。 |
 | `com.smile.acelib.AceLibPlugin` | class | Internal | Bukkit plugin main class，因 plugin.yml 要求必須 public；非穩定消費者契約，穩定入口由 v1 的 AceLibProvider 提供。 | plugin.yml main class 必須 public（Bukkit framework 反射要求）；v1 穩定入口由 AceLibProvider 提供，本類不屬消費者契約。 | Bukkit server；AceLibApi 接收其 lifecycle callback。 |
 | `com.smile.acelib.AceLibVersion` | class | Supported | 對外版本常數 VERSION，與 plugin.yml / build 一致；v1 契約一部分。 |  | AceLibApi.uninitialized；DiagnosticsService。 |
 
@@ -33,7 +33,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.bedrock.BedrockErrorCodes` | class | Supported | 基岩服務錯誤代碼常數（ACELIB-BED-*）；與 ErrorCodeRegistry/error-codes.md 同步。 |  | BedrockService facade 與 unavailable impl。 |
 | `com.smile.acelib.bedrock.BedrockPlayerInfo` | record | Supported | 基岩玩家資訊值型別（裝置/輸入/語言/連結；nested DeviceOs/InputMode/LinkState 列舉）；上游未知列舉值映射 UNKNOWN。 |  | BedrockService.getPlayerInfo；Floodgate typed seam 映射。 |
-| `com.smile.acelib.bedrock.BedrockService` | interface | Supported | 基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；v1 承諾相容，缺席環境以 absent lookup 零影響。 |  | AceLibApi.getBedrockService；消費者查詢基岩玩家。 |
+| `com.smile.acelib.bedrock.BedrockService` | interface | Supported | 基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；缺席環境以 absent lookup 零影響。 |  | AceLibApi.getBedrockService；消費者查詢基岩玩家。 |
 
 ### com.smile.acelib.command
 
@@ -45,12 +45,12 @@
 | `com.smile.acelib.command.BukkitSender` | class | Internal | Sender 的 Bukkit 內部實作；消費者應使用 Sender 抽象。 | v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。 | 指令 dispatch。 |
 | `com.smile.acelib.command.CatalogMeta` | record | Supported | 指令目錄發布元資料值型別（分類、圖示、需確認子指令）；v1 穩定。 |  | CommandCatalog.publish；消費者發布指令描述。 |
 | `com.smile.acelib.command.CatalogResult` | enum | Supported | 指令目錄發布結果列舉；v1 凍結常數順序。 |  | CommandCatalog.publish。 |
-| `com.smile.acelib.command.CommandCatalog` | interface | Supported | 指令目錄服務介面，只存指令描述、不註冊不執行；v1 承諾相容。 |  | 消費者發布指令描述；說明頁產生器讀取快照。 |
+| `com.smile.acelib.command.CommandCatalog` | interface | Supported | 指令目錄服務介面，只存指令描述、不註冊不執行。 |  | 消費者發布指令描述；說明頁產生器讀取快照。 |
 | `com.smile.acelib.command.CommandContext` | class | Supported | 傳遞給 SubCommand 的執行上下文（指令、參數、sender）；指令擴充契約的一部分，v1 穩定。 |  | SubCommand.execute。 |
 | `com.smile.acelib.command.CommandDoc` | record | Supported | 指令純描述投影值型別（不含 handler／completer／插件實例）；v1 穩定。 |  | CommandCatalog.publish／snapshot；說明頁產生器。 |
 | `com.smile.acelib.command.CommandErrorKind` | enum | Supported | 指令錯誤分類列舉，出現在 CommandException 與回覆語意中；v1 凍結常數順序。 |  | CommandException；BukkitReplySink。 |
 | `com.smile.acelib.command.CommandException` | class | Supported | 指令層級例外，消費者在 SubCommand 中可拋出；v1 契約。 |  | SubCommand；CommandRegistry。 |
-| `com.smile.acelib.command.CommandRegistry` | interface | Supported | 指令註冊服務介面，消費者用來註冊 SubCommand；v1 承諾相容。 |  | AceLibPlugin；消費者。 |
+| `com.smile.acelib.command.CommandRegistry` | interface | Supported | 指令註冊服務介面，消費者用來註冊 SubCommand。 |  | AceLibPlugin；消費者。 |
 | `com.smile.acelib.command.CommandRegistryImpl` | class | Internal | CommandRegistry 的內部實作；非消費者 API。 | AceLibPlugin 跨 package 建構並於 onDisable 呼叫 onPluginDisable；v1 前保留 public。 | AceLibPlugin。 |
 | `com.smile.acelib.command.CommandSpec` | class | Supported | 指令規格值型別（名稱、權限、描述）；註冊時使用；v1 穩定。 |  | CommandRegistry.register。 |
 | `com.smile.acelib.command.CooldownTracker` | class | Supported | 指令冷卻追蹤工具類，供 SubCommandSpec 使用；public 穩定工具。 |  | SubCommandSpec；CommandRegistryImpl。 |
@@ -95,7 +95,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.data.DataMigration` | interface | SPI | 消費者實作的資料遷移介面（extension point）；寫明冪等與 rollback 責任。 |  | DataStore 遷移執行器；消費者實作。 |
 | `com.smile.acelib.data.DataMigrationContext` | class | Supported | 資料遷移上下文（read/write view）；遷移過程使用；v1 穩定。 |  | DataMigration.migrate。 |
-| `com.smile.acelib.data.DataStore` | interface | Supported | 資料儲存服務介面；v1 承諾相容。 |  | PlayerDataService；消費者。 |
+| `com.smile.acelib.data.DataStore` | interface | Supported | 資料儲存服務介面。 |  | PlayerDataService；消費者。 |
 | `com.smile.acelib.data.DataStoreException` | class | Supported | 資料儲存例外；v1 契約。 |  | DataStore 實作；PlayerDataService。 |
 | `com.smile.acelib.data.JdbcDataStore` | class | Internal | DataStore 的 JDBC 內部實作；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 組裝 DataStore；v1 前保留 public。 | AceLibPlugin 組裝。 |
 | `com.smile.acelib.data.JsonCodec` | interface | SPI | 消費者實作的 JSON 編解碼介面（extension point）；寫明 round-trip 白名單責任。 |  | JsonFileDataStore；消費者實作。 |
@@ -135,7 +135,7 @@
 | `com.smile.acelib.event.EventRegistration` | record | Supported | 事件註冊結果值型別；v1 穩定。 |  | SafeEventRegistry。 |
 | `com.smile.acelib.event.ListenerPolicy` | enum | Supported | 事件監聽策略列舉（Folia 約束）；v1 凍結常數順序。 |  | SafeEventListener；SafeEventRegistry。 |
 | `com.smile.acelib.event.SafeEventListener` | interface | SPI | 消費者實作的 Folia-safe 事件監聽介面（extension point）；寫明 identity/thread 責任。 |  | SafeEventRegistry.register；消費者實作。 |
-| `com.smile.acelib.event.SafeEventRegistry` | interface | Supported | 事件註冊服務介面；v1 承諾相容。 |  | AceLibEvents；消費者。 |
+| `com.smile.acelib.event.SafeEventRegistry` | interface | Supported | 事件註冊服務介面。 |  | AceLibEvents；消費者。 |
 | `com.smile.acelib.event.SafeEventRegistryImpl` | class | Internal | SafeEventRegistry 的內部實作；非消費者 API。 | v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。 | AceLibEvents。 |
 
 ### com.smile.acelib.external
@@ -143,7 +143,7 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.external.ExternalIntegrationErrorCodes` | class | Supported | 外部整合錯誤碼常數表；v1 穩定。 |  | ExternalIntegrationService；IntegrationRegistry。 |
-| `com.smile.acelib.external.ExternalIntegrationService` | interface | Supported | 外部整合查詢服務介面；v1 承諾相容。 |  | AceLibApi；消費者。 |
+| `com.smile.acelib.external.ExternalIntegrationService` | interface | Supported | 外部整合查詢服務介面。 |  | AceLibApi；消費者。 |
 | `com.smile.acelib.external.ExternalIntegrationServiceImpl` | class | Internal | ExternalIntegrationService 的內部實作；非消費者 API。 | AceLibPlugin 跨 package 建構並取 toModuleState() 註冊 diagnostics；v1 前保留 public。 | AceLibPlugin。 |
 | `com.smile.acelib.external.ExternalPluginProbe` | class | Supported | 外部插件探測工具（classpath/版本）；v1 穩定。 |  | IntegrationRegistry；IntegrationAdapter。 |
 | `com.smile.acelib.external.FloodgateIntegrationAdapter` | class | Internal | Floodgate reflection-only 探測 adapter 與 typed provider seam 持有者；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 建構並讀取 typed lookup（playerLookup）；v1 前保留 public，下游不得依賴。 | AceLibPlugin.bindExternalService 註冊；bindBedrockService 讀取 lookup。 |
@@ -178,7 +178,7 @@
 | `com.smile.acelib.gui.GuiErrorCode` | class | Supported | GUI 錯誤碼常數表；v1 穩定。 |  | GuiService；GuiResult。 |
 | `com.smile.acelib.gui.GuiPage` | class | Supported | GUI 分頁結果值型別；v1 穩定。 |  | GuiService；GuiResult。 |
 | `com.smile.acelib.gui.GuiResult` | class | Supported | GUI 操作結果值型別（accepted/success/rejected/failed）；v1 穩定。 |  | GuiService；GuiSession。 |
-| `com.smile.acelib.gui.GuiService` | interface | Supported | GUI 服務介面；v1 承諾相容。 |  | AceLibApi；消費者。 |
+| `com.smile.acelib.gui.GuiService` | interface | Supported | GUI 服務介面。 |  | AceLibApi；消費者。 |
 | `com.smile.acelib.gui.GuiSession` | class | Supported | GUI 會話值型別；v1 穩定。 |  | GuiService；GuiResult；GuiArgument。 |
 | `com.smile.acelib.gui.GuiState` | enum | Supported | GUI 狀態列舉；v1 凍結常數順序（只能追加）。 |  | GuiResult；GuiSession。 |
 
@@ -228,7 +228,7 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.scheduler.AceLibScheduler` | class | Supported | 排程器工廠（create/bind/boundTo）；v1 穩定入口。 |  | AceLibPlugin；消費者。 |
-| `com.smile.acelib.scheduler.SafeScheduler` | interface | Supported | Folia-safe 排程服務介面；v1 承諾相容。 |  | AceLibScheduler；消費者。 |
+| `com.smile.acelib.scheduler.SafeScheduler` | interface | Supported | Folia-safe 排程服務介面。 |  | AceLibScheduler；消費者。 |
 | `com.smile.acelib.scheduler.SafeSchedulerImpl` | class | Internal | SafeScheduler 的內部實作；非消費者 API。 | SafeExecutor（context）、DiagnosticsService（diagnostics）與 AceLibPlugin 跨 package 依賴型別與 getRecorder/bindScheduler；v1 前保留 public。 | AceLibScheduler。 |
 | `com.smile.acelib.scheduler.ScheduledTask` | interface | Supported | 排程任務控制介面（cancel/isCancelled）；v1 穩定。 |  | SafeScheduler；SafeExecutor。 |
 | `com.smile.acelib.scheduler.TaskErrorRecord` | record | Supported | 排程錯誤記錄值型別；v1 穩定。 |  | TaskErrorRecorder；SafeScheduler。 |
@@ -250,7 +250,7 @@
 | `com.smile.acelib.world.WorldBackendResult` | class | Supported | world 後端結果值型別（WorldBackend 回傳）；v1 穩定。 |  | WorldBackend；WorldServiceImpl。 |
 | `com.smile.acelib.world.WorldErrorCode` | class | Supported | world 錯誤碼常數表；v1 穩定。 |  | WorldService；WorldResult。 |
 | `com.smile.acelib.world.WorldResult` | class | Supported | world 操作結果基類值型別；v1 穩定。 |  | WorldService；WorldBackendResult。 |
-| `com.smile.acelib.world.WorldService` | interface | Supported | world 操作服務介面；v1 承諾相容。 |  | AceLibApi；消費者。 |
+| `com.smile.acelib.world.WorldService` | interface | Supported | world 操作服務介面。 |  | AceLibApi；消費者。 |
 | `com.smile.acelib.world.WorldServiceImpl` | class | Internal | WorldService 的內部實作；非消費者 API。 | AceLibPlugin 與 AceLibApi 跨 package 建構/型別依賴；v1 前保留 public。 | AceLibPlugin。 |
 | `com.smile.acelib.world.WorldServiceUnavailableImpl` | class | Internal | WorldService 的不可用 facade 內部實作（NOT_READY/SHUTDOWN）；非消費者 API。 | AceLibApi（com.smile.acelib）跨 package 建構 NOT_READY/SHUTDOWN facade；v1 前保留 public。 | AceLibApi（uninitialized/shutDown）。 |
 | `com.smile.acelib.world.WorldState` | enum | Supported | world 操作狀態列舉；v1 凍結常數順序。 |  | WorldResult；BlockResult 等。 |

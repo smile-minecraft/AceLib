@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "description": "AceLib v1 public API surface contract: Supported / SPI / Internal classification.",
+  "description": "AceLib public API surface: Supported / SPI / Internal classification.",
   "policy": {
-    "Supported": "v1.0 起承諾 source/binary compatibility。",
-    "SPI": "供 adapter / backend / extension 實作者使用；寫明實作者責任與相容性承諾。",
+    "Supported": "給下游 plugin 使用的公開 API；版本之間可能變更，變更記錄在 CHANGELOG。",
+    "SPI": "供 adapter / backend / extension 實作者使用；寫明實作者責任。",
     "Internal": "不允許下游直接依賴；v1.0 前應收斂為 package-private 或移入 internal package。"
   },
   "types": [
@@ -13,7 +13,7 @@
       "simpleName": "AceLibApi",
       "kind": "class",
       "classification": "Supported",
-      "reason": "對外 API facade；v1 承諾 source/binary 相容，是下游取得各 service 的入口。",
+      "reason": "對外 API facade，是下游取得各 service 的入口。",
       "mainCallers": "AceLibPlugin 建構；消費者經 v1 的 AceLibProvider 取得。"
     },
     {
@@ -59,7 +59,7 @@
       "simpleName": "BedrockService",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；v1 承諾相容，缺席環境以 absent lookup 零影響。",
+      "reason": "基岩版玩家服務 facade（isBedrockPlayer/getPlayerInfo/forms）；缺席環境以 absent lookup 零影響。",
       "mainCallers": "AceLibApi.getBedrockService；消費者查詢基岩玩家。"
     },
     {
@@ -126,7 +126,7 @@
       "simpleName": "CommandCatalog",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "指令目錄服務介面，只存指令描述、不註冊不執行；v1 承諾相容。",
+      "reason": "指令目錄服務介面，只存指令描述、不註冊不執行。",
       "mainCallers": "消費者發布指令描述；說明頁產生器讀取快照。"
     },
     {
@@ -171,7 +171,7 @@
       "simpleName": "CommandRegistry",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "指令註冊服務介面，消費者用來註冊 SubCommand；v1 承諾相容。",
+      "reason": "指令註冊服務介面，消費者用來註冊 SubCommand。",
       "mainCallers": "AceLibPlugin；消費者。"
     },
     {
@@ -442,7 +442,7 @@
       "simpleName": "DataStore",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "資料儲存服務介面；v1 承諾相容。",
+      "reason": "資料儲存服務介面。",
       "mainCallers": "PlayerDataService；消費者。"
     },
     {
@@ -716,7 +716,7 @@
       "simpleName": "SafeEventRegistry",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "事件註冊服務介面；v1 承諾相容。",
+      "reason": "事件註冊服務介面。",
       "mainCallers": "AceLibEvents；消費者。"
     },
     {
@@ -744,7 +744,7 @@
       "simpleName": "ExternalIntegrationService",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "外部整合查詢服務介面；v1 承諾相容。",
+      "reason": "外部整合查詢服務介面。",
       "mainCallers": "AceLibApi；消費者。"
     },
     {
@@ -974,7 +974,7 @@
       "simpleName": "GuiService",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "GUI 服務介面；v1 承諾相容。",
+      "reason": "GUI 服務介面。",
       "mainCallers": "AceLibApi；消費者。"
     },
     {
@@ -1199,7 +1199,7 @@
       "simpleName": "SafeScheduler",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "Folia-safe 排程服務介面；v1 承諾相容。",
+      "reason": "Folia-safe 排程服務介面。",
       "mainCallers": "AceLibScheduler；消費者。"
     },
     {
@@ -1354,7 +1354,7 @@
       "simpleName": "WorldService",
       "kind": "interface",
       "classification": "Supported",
-      "reason": "world 操作服務介面；v1 承諾相容。",
+      "reason": "world 操作服務介面。",
       "mainCallers": "AceLibApi；消費者。"
     },
     {

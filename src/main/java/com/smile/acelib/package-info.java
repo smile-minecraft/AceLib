@@ -28,11 +28,11 @@
  *       disable 後為 false（shutdown facade），呼叫端使用前必須檢查。</li>
  * </ul>
  *
- * <h2>相容性承諾</h2>
- * <p>本套件為 v1 對外契約的一部分：public 型別（{@link com.smile.acelib.AceLibApi}、
+ * <h2>相容性</h2>
+ * <p>本套件的 public 型別（{@link com.smile.acelib.AceLibApi}、
  * {@link com.smile.acelib.AceLibVersion}、{@link com.smile.acelib.AceLibApi.AceLibProvider}）
- * 的簽章與語意在 v1 穩定版本內不破壞性變更；{@link com.smile.acelib.AceLibPlugin} 為
- * Internal，不提供相容性承諾。</p>
+ * 是給下游使用的入口；簽章與語意在版本之間可能變更，變更記錄在 CHANGELOG。
+ * {@link com.smile.acelib.AceLibPlugin} 為 Internal，下游不應依賴。</p>
  *
  * @since 1.0.0
  */

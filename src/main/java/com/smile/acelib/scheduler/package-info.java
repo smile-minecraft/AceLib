@@ -31,9 +31,9 @@
  * <p>所有 public 方法皆可在 Folia 多 region 並行環境下安全使用；
  * 錯誤紀錄器內部為 thread-safe。</p>
  *
- * <h2>相容性承諾</h2>
- * <p>本套件（不含 Internal 的 {@code SafeSchedulerImpl}）為 v1 對外契約的一部分；
- * 簽章與語意在 v1 穩定版本內不破壞性變更。</p>
+ * <h2>相容性</h2>
+ * <p>本套件（不含 Internal 的 {@code SafeSchedulerImpl}）是給下游使用的；
+ * 簽章與語意在版本之間可能變更，變更記錄在 CHANGELOG。</p>
  *
  * @since 1.0.0
  */
