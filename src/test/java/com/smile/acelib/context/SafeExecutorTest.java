@@ -2,7 +2,10 @@ package com.smile.acelib.context;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,7 +16,15 @@ import com.smile.acelib.scheduler.SafeScheduler;
 import com.smile.acelib.scheduler.SafeSchedulerImpl;
 import com.smile.acelib.scheduler.ScheduledTask;
 import com.smile.acelib.scheduler.TaskErrorRecorder;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -264,5 +275,258 @@ class SafeExecutorTest {
         } finally {
             DebugMode.setEnabled(prev);
         }
+    }
+
+    // -----------------------------------------------------------------
+    // 共享 scheduler（與 plugin 生命週期一致）
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("共享：兩次派送累積進 plugin 共享 scheduler 的 recorder（同一 instance）")
+    void shared_twoDispatches_accumulateInPluginScheduler() {
+        SafeSchedulerImpl shared = plugin.getSchedulerForDiagnostics();
+        assertNotNull(shared, "onEnable 後 plugin 應持有共享 scheduler");
+        int before = shared.getRecorder().getErrorCount();
+
+        org.mockbukkit.mockbukkit.entity.PlayerMock first = server.addPlayer();
+        first.disconnect();
+        org.mockbukkit.mockbukkit.entity.PlayerMock second = server.addPlayer();
+        second.disconnect();
+        SafeExecutor.executeOnRegion(
+            plugin, Platform.PAPER,
+            PlatformCapability.forPlatform(Platform.PAPER),
+            first,
+            () -> {}
+        );
+        SafeExecutor.executeOnRegion(
+            plugin, Platform.PAPER,
+            PlatformCapability.forPlatform(Platform.PAPER),
+            second,
+            () -> {}
+        );
+
+        assertEquals(before + 2, shared.getRecorder().getErrorCount(),
+            "兩次派送應累積進同一個共享 scheduler，而不是每次自建實例");
+        assertTrue(shared.getRecorder().contains("ACELIB-SCHED-002"));
+    }
+
+    @Test
+    @DisplayName("共享：併發派送累積進同一個共享 scheduler")
+    void shared_concurrentDispatches_accumulateInPluginScheduler() throws Exception {
+        SafeSchedulerImpl shared = plugin.getSchedulerForDiagnostics();
+        assertNotNull(shared);
+        int threads = 16;
+        List<org.mockbukkit.mockbukkit.entity.PlayerMock> players = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer();
+            player.disconnect();
+            players.add(player);
+        }
+        int before = shared.getRecorder().getErrorCount();
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        try {
+            for (org.mockbukkit.mockbukkit.entity.PlayerMock player
+                    : players) {
+                futures.add(pool.submit(() -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                    SafeExecutor.executeOnRegion(
+                        plugin, Platform.PAPER,
+                        PlatformCapability.forPlatform(Platform.PAPER),
+                        player,
+                        () -> {}
+                    );
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertEquals(before + threads, shared.getRecorder().getErrorCount(),
+            "併發派送應全部累積進同一個共享 scheduler");
+    }
+
+    @Test
+    @DisplayName("停用：plugin disable 後派送回 cancelled no-op，不執行且記 SCHED-006")
+    void disabledPlugin_dispatchReturnsCancelledNoOp() throws Exception {
+        plugin.onDisable();
+        assertTrue(plugin.getSchedulerForDiagnostics().isDisabled());
+
+        AtomicBoolean ran = new AtomicBoolean(false);
+        ScheduledTask task = SafeExecutor.executeAsync(
+            plugin, Platform.PAPER,
+            PlatformCapability.forPlatform(Platform.PAPER),
+            OperationType.READ_ONLY,
+            () -> ran.set(true)
+        );
+        assertNotNull(task);
+        assertTrue(task.isCancelled(), "disable 後應回 cancelled no-op");
+        // 給舊行為（若仍自建可派送實例）一個 settle 機會
+        Thread.sleep(300);
+        assertEquals(false, ran.get(), "disable 後 runnable 不可執行");
+        assertTrue(plugin.getSchedulerForDiagnostics().getRecorder()
+            .contains("ACELIB-SCHED-006"), "應留下 ACELIB-SCHED-006 紀錄");
+    }
+
+    @Test
+    @DisplayName("診斷：經 SafeExecutor 的錯誤會進 DiagnosticsService sink")
+    void diagnosticsSink_receivesSafeExecutorErrors() {
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer();
+        player.disconnect();
+        SafeExecutor.executeOnRegion(
+            plugin, Platform.PAPER,
+            PlatformCapability.forPlatform(Platform.PAPER),
+            player,
+            () -> {}
+        );
+
+        var snapshot = plugin.getDiagnosticsService().buildSnapshot();
+        assertTrue(snapshot.recentErrors().stream()
+                .anyMatch(line -> line.code().equals("ACELIB-SCHED-002")),
+            "SafeExecutor 派送的 SCHED-002 應出現在 diagnostics 快照");
+    }
+
+    @Test
+    @DisplayName("非 AceLibPlugin：已停用 plugin 的派送回 cancelled 且不執行")
+    void nonAceLibPlugin_disabledPlugin_dispatchCancelled() throws Exception {
+        JavaPlugin other = org.mockito.Mockito.mock(JavaPlugin.class);
+        // Mockito 預設 boolean 回 false，等同已停用；此處顯式寫出語意
+        org.mockito.Mockito.when(other.isEnabled()).thenReturn(false);
+
+        AtomicBoolean ran = new AtomicBoolean(false);
+        ScheduledTask task = SafeExecutor.executeAsync(
+            other, Platform.PAPER,
+            PlatformCapability.forPlatform(Platform.PAPER),
+            OperationType.READ_ONLY,
+            () -> ran.set(true)
+        );
+        assertNotNull(task);
+        assertTrue(task.isCancelled(), "非 AceLib 停用 plugin 應回 cancelled");
+        Thread.sleep(300);
+        assertEquals(false, ran.get(), "停用 plugin 的 runnable 不可執行");
+    }
+
+    // -----------------------------------------------------------------
+    // 共享身份與邊界（package-private resolver）
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("身份：AceLibPlugin 解析一律回傳 canonical 共享實例")
+    void resolveScheduler_aceLibPlugin_returnsCanonical() {
+        PlatformCapability capability = PlatformCapability.forPlatform(Platform.PAPER);
+        assertSame(plugin.getSchedulerForDiagnostics(),
+            SafeExecutor.resolveScheduler(plugin, Platform.PAPER, capability));
+        assertSame(plugin.getSchedulerForDiagnostics(),
+            SafeExecutor.resolveScheduler(plugin, Platform.PAPER, capability));
+    }
+
+    @Test
+    @DisplayName("身份：併發解析取到同一實例")
+    void resolveScheduler_concurrent_sameInstance() throws Exception {
+        PlatformCapability capability = PlatformCapability.forPlatform(Platform.PAPER);
+        int threads = 16;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<SafeSchedulerImpl>> futures = new ArrayList<>();
+        try {
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                    return SafeExecutor.resolveScheduler(
+                        plugin, Platform.PAPER, capability);
+                }));
+            }
+            start.countDown();
+            SafeSchedulerImpl first = futures.get(0).get(10, TimeUnit.SECONDS);
+            assertNotNull(first);
+            for (Future<SafeSchedulerImpl> future : futures) {
+                assertSame(first, future.get(10, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("非 AceLibPlugin：啟用共用、停用同實例 SCHED-006、重啟重建")
+    void resolveScheduler_nonAceLib_lifecycle() {
+        PlatformCapability capability = PlatformCapability.forPlatform(Platform.PAPER);
+        JavaPlugin other = org.mockito.Mockito.mock(JavaPlugin.class);
+        org.mockito.Mockito.when(other.isEnabled()).thenReturn(true);
+
+        SafeSchedulerImpl first =
+            SafeExecutor.resolveScheduler(other, Platform.PAPER, capability);
+        assertNotNull(first);
+        assertFalse(first.isDisabled());
+        assertSame(first,
+            SafeExecutor.resolveScheduler(other, Platform.PAPER, capability));
+
+        // 停用：同一快取實例轉 disabled，派送記 SCHED-006
+        org.mockito.Mockito.when(other.isEnabled()).thenReturn(false);
+        assertSame(first,
+            SafeExecutor.resolveScheduler(other, Platform.PAPER, capability));
+        assertTrue(first.isDisabled());
+        AtomicBoolean ran = new AtomicBoolean(false);
+        ScheduledTask task = SafeExecutor.executeAsync(
+            other, Platform.PAPER, capability, OperationType.READ_ONLY,
+            () -> ran.set(true));
+        assertTrue(task.isCancelled());
+        assertEquals(false, ran.get());
+        assertTrue(first.getRecorder().contains("ACELIB-SCHED-006"));
+
+        // 重啟：舊快取已 disabled，必須重建而不殘留舊狀態
+        org.mockito.Mockito.when(other.isEnabled()).thenReturn(true);
+        SafeExecutor.resolveScheduler(other, Platform.PAPER, capability);
+        SafeSchedulerImpl rebuilt =
+            SafeExecutor.resolveScheduler(other, Platform.PAPER, capability);
+        // 注意：第一次重建呼叫回傳 fresh（未 disabled），第二次仍取到它
+        assertFalse(rebuilt.isDisabled());
+        assertSame(rebuilt,
+            SafeExecutor.resolveScheduler(other, Platform.PAPER, capability));
+    }
+
+    @Test
+    @DisplayName("邊界：profile 更換時重建快取實例")
+    void resolveScheduler_profileMismatch_rebuilds() {
+        JavaPlugin other = org.mockito.Mockito.mock(JavaPlugin.class);
+        org.mockito.Mockito.when(other.isEnabled()).thenReturn(true);
+
+        SafeSchedulerImpl paper = SafeExecutor.resolveScheduler(
+            other, Platform.PAPER, PlatformCapability.forPlatform(Platform.PAPER));
+        SafeSchedulerImpl unknown = SafeExecutor.resolveScheduler(
+            other, Platform.UNKNOWN, PlatformCapability.forPlatform(Platform.UNKNOWN));
+        assertNotSame(paper, unknown);
+        // 同 profile 再次解析仍取到同一實例
+        assertSame(unknown, SafeExecutor.resolveScheduler(
+            other, Platform.UNKNOWN, PlatformCapability.forPlatform(Platform.UNKNOWN)));
+    }
+
+    @Test
+    @DisplayName("邊界：resolveScheduler null 參數拋 NPE")
+    void resolveScheduler_nullArgs_throwNpe() {
+        PlatformCapability capability = PlatformCapability.forPlatform(Platform.PAPER);
+        assertThrows(NullPointerException.class, () ->
+            SafeExecutor.resolveScheduler(null, Platform.PAPER, capability));
+        assertThrows(NullPointerException.class, () ->
+            SafeExecutor.resolveScheduler(plugin, null, capability));
+        assertThrows(NullPointerException.class, () ->
+            SafeExecutor.resolveScheduler(plugin, Platform.PAPER, null));
     }
 }

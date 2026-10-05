@@ -1,11 +1,17 @@
 package com.smile.acelib.context;
 
+import com.smile.acelib.AceLibPlugin;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.scheduler.SafeScheduler;
+import com.smile.acelib.scheduler.SafeSchedulerImpl;
 import com.smile.acelib.scheduler.ScheduledTask;
 import com.smile.acelib.scheduler.TaskType;
+import java.lang.ref.WeakReference;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Location;
@@ -59,6 +65,18 @@ public final class SafeExecutor {
         // utility class
     }
 
+    /**
+     * 非 AceLibPlugin owner 的共享 scheduler 快取。
+     *
+     * <p>key 與 value 皆為弱引用：plugin 被卸載後 entry 隨 key 回收；且
+     * cached scheduler 本身持有 plugin 強引用，若 value 再強引用 scheduler，
+     * key 經由 value 被間接續命、entry 永遠不會被清除，因此 value 只持有
+     * {@link WeakReference}。所有存取都經由 {@link #SHARED_CACHE} 上的同步區塊，
+     * 保證併發派送取到同一 instance。</p>
+     */
+    private static final Map<JavaPlugin, WeakReference<SafeSchedulerImpl>> SHARED_CACHE =
+        Collections.synchronizedMap(new WeakHashMap<>());
+
     // -----------------------------------------------------------------
     // executeAsync
     // -----------------------------------------------------------------
@@ -96,7 +114,7 @@ public final class SafeExecutor {
 
         // 規則 1：READ_ONLY 永遠允許
         if (op == OperationType.READ_ONLY) {
-            return getOrCreateScheduler(plugin, platform, capability).runAsync(runnable);
+            return resolveScheduler(plugin, platform, capability).runAsync(runnable);
         }
 
         // 規則 2：UNKNOWN 平台對 mutate 一律拒絕
@@ -161,7 +179,7 @@ public final class SafeExecutor {
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(runnable, "runnable");
-        SafeScheduler scheduler = getOrCreateScheduler(plugin, platform, capability);
+        SafeScheduler scheduler = resolveScheduler(plugin, platform, capability);
         ScheduledTask task = scheduler.runForPlayer(player, runnable);
         // 若 scheduler 因為玩家離線/平台不支援回傳 cancelled no-op，記錄對應 code
         annotateIfCancelled(task, platform, op, "player=" + safePlayerName(player));
@@ -212,7 +230,7 @@ public final class SafeExecutor {
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(entity, "entity");
         Objects.requireNonNull(runnable, "runnable");
-        SafeScheduler scheduler = getOrCreateScheduler(plugin, platform, capability);
+        SafeScheduler scheduler = resolveScheduler(plugin, platform, capability);
         ScheduledTask task = scheduler.runForEntity(entity, runnable);
         annotateIfCancelled(task, platform, op, "entity=" + entity.getType());
         return task;
@@ -262,7 +280,7 @@ public final class SafeExecutor {
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(runnable, "runnable");
-        SafeScheduler scheduler = getOrCreateScheduler(plugin, platform, capability);
+        SafeScheduler scheduler = resolveScheduler(plugin, platform, capability);
         ScheduledTask task = scheduler.runAtLocation(location, runnable);
         annotateIfCancelled(task, platform, op,
             "world=" + (location.getWorld() != null ? location.getWorld().getName() : "?"));
@@ -274,13 +292,98 @@ public final class SafeExecutor {
     // -----------------------------------------------------------------
 
     /**
-     * 建立對應的 SafeScheduler。此 helper 不持有 scheduler 狀態 — 每次呼叫
-     * new instance，dispatcher 內部使用弱一致的 recorder。
+     * 解析呼叫端應使用的 scheduler（共享，不自建永生實例）。
+     *
+     * <ul>
+     *   <li>{@link AceLibPlugin} owner：一律回傳 plugin 擁有的共享 scheduler
+     *      （{@code getSchedulerForDiagnostics()}）。disable 後同一 reference
+     *       已是 disabled，後續派送自然回 cancelled no-op 並記
+     *       {@code ACELIB-SCHED-006}；診斷 sink 與 tracked 計數與
+     *       plugin 的 scheduler 完全一致。onEnable 前尚無綁定（回傳 null）
+     *       時才退回弱引用快取，onEnable 後自動改走 canonical，舊快取隨 key 回收。</li>
+     *   <li>其他 plugin：走弱引用共享快取（同 plugin + 同 profile 共用同一
+     *       instance）。{@code isEnabled()} 為 false（或查詢拋錯）時回傳
+     *       同一快取實例的 disabled 視圖，派送回 cancelled no-op 並記
+     *       {@code ACELIB-SCHED-006}；重啟後（isEnabled 回 true）因快取已
+     *       disabled 而重建，不殘留舊狀態。</li>
+     * </ul>
+     *
+     * <p>Package-private 供同套件測試驗證共享身份；對外簽章不變。</p>
      */
-    private static SafeScheduler getOrCreateScheduler(JavaPlugin plugin,
-                                                       Platform platform,
-                                                       PlatformCapability capability) {
-        return new com.smile.acelib.scheduler.SafeSchedulerImpl(plugin, platform, capability);
+    static SafeSchedulerImpl resolveScheduler(JavaPlugin plugin,
+                                              Platform platform,
+                                              PlatformCapability capability) {
+        Objects.requireNonNull(plugin, "plugin");
+        Objects.requireNonNull(platform, "platform");
+        Objects.requireNonNull(capability, "capability");
+        if (plugin instanceof AceLibPlugin ace) {
+            SafeSchedulerImpl canonical = ace.getSchedulerForDiagnostics();
+            if (canonical != null) {
+                return canonical;
+            }
+            // onEnable 前尚無共享實例：退回快取（onEnable 後改走 canonical）
+            return cachedShared(plugin, platform, capability);
+        }
+        if (!isEnabledSafe(plugin)) {
+            return disabledShared(plugin, platform, capability);
+        }
+        return cachedShared(plugin, platform, capability);
+    }
+
+    private static SafeSchedulerImpl cachedShared(JavaPlugin plugin,
+                                                  Platform platform,
+                                                  PlatformCapability capability) {
+        synchronized (SHARED_CACHE) {
+            SafeSchedulerImpl cached = dereference(SHARED_CACHE.get(plugin));
+            if (cached != null && !cached.isDisabled()
+                && matchesProfile(cached, platform, capability)) {
+                return cached;
+            }
+            SafeSchedulerImpl fresh =
+                new SafeSchedulerImpl(plugin, platform, capability);
+            SHARED_CACHE.put(plugin, new WeakReference<>(fresh));
+            return fresh;
+        }
+    }
+
+    private static SafeSchedulerImpl disabledShared(JavaPlugin plugin,
+                                                    Platform platform,
+                                                    PlatformCapability capability) {
+        synchronized (SHARED_CACHE) {
+            SafeSchedulerImpl cached = dereference(SHARED_CACHE.get(plugin));
+            if (cached == null || !matchesProfile(cached, platform, capability)) {
+                cached = new SafeSchedulerImpl(plugin, platform, capability);
+                SHARED_CACHE.put(plugin, new WeakReference<>(cached));
+            }
+            // 停用是終端語意（與 Bukkit disable 一致）：標記後同一快取實例的
+            // 後續派送一律為 SCHED-006 no-op；重啟後 cachedShared 見 disabled
+            // 即重建，不殘留舊狀態。
+            cached.onPluginDisable();
+            return cached;
+        }
+    }
+
+    private static SafeSchedulerImpl dereference(WeakReference<SafeSchedulerImpl> ref) {
+        return ref == null ? null : ref.get();
+    }
+
+    private static boolean matchesProfile(SafeSchedulerImpl scheduler,
+                                          Platform platform,
+                                          PlatformCapability capability) {
+        return scheduler.getPlatform() == platform
+            && scheduler.getCapability().equals(capability);
+    }
+
+    /**
+     * 查詢 plugin 是否啟用；任何例外都視為不可用（fail-closed，
+     * 與訊息服務的 {@code isEnabled()} 約定一致）。
+     */
+    private static boolean isEnabledSafe(JavaPlugin plugin) {
+        try {
+            return plugin.isEnabled();
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private static void annotateIfCancelled(ScheduledTask task,
