@@ -136,8 +136,8 @@ final class JdbcCompatSuite {
                 + "k VARCHAR(1024) NOT NULL, "
                 + "v TEXT, "
                 + "PRIMARY KEY (store_name, k))");
-            // 同一張舊表兩個 store：compat-legacy 需資料遷移 1.0→2.0，
-            // compat-legacy-b 維持 1.0（升級時必須原樣保留，不得被 DROP）。
+            // [原因] 同一張舊表兩個 store：compat-legacy 需資料遷移 1.0→2.0，
+            // [原因] compat-legacy-b 維持 1.0（升級時必須原樣保留，不得被 DROP）。
             st.executeUpdate("INSERT INTO acelib_data_kv (store_name, k, v) VALUES "
                 + "('compat-legacy', '_version', '\"1.0\"'), "
                 + "('compat-legacy', 'oldKey', '\"oldValue\"'), "
