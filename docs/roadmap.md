@@ -171,7 +171,9 @@ ChunkLand 和 Ace-Economy 各寫了一份 GUI 假實作，另外還有排程、�
 
 測試套件提供這些假實作，給下游寫單元測試用。真實伺服器上的驗收由 Docker 管理的測試環境負責，不在測試套件的範圍。
 
-- [ ] 確認 Gradle 的 test fixtures 產出的 jar 可以透過 JitPack 發布，下游能在測試時引用。行不通就回到[待決事項](#待決事項)重新決定發布方式。
+- [x] 確認 Gradle 的 test fixtures 產出的 jar 可以透過 JitPack 發布，下游能在測試時引用。行不通就回到[待決事項](#待決事項)重新決定發布方式。
+- [ ] 測試 jar 也附在 GitHub Release 上，發布 workflow 跟著調整。ChunkLand 是從 Release 下載 AceLib 的。
+- [ ] 文件寫明下游的引用方式：在 AceLib 的座標後面加上 `test-fixtures` 後綴。Gradle 的 `testFixtures(...)` 寫法在 JitPack 上解析不到。
 - [ ] 可控制的時鐘、排程器、實體退休事件。
 - [ ] GUI 與表單的標準假實作，能模擬過時回應、重複回應、關閉失敗。
 - [ ] Provider 缺席、停用、重新取得的測試輔助。
@@ -259,13 +261,20 @@ ChunkLand 有自己的訊息管線，Ace-Economy 有設定與語系轉接。現�
 
 現有的指令模型沒有給下游的正式組裝入口，[指令模型](modules/command.md)頁要下游先用 Paper 自己的指令 API。Ace-Economy 仍然大量引用這個模組，但還沒有提出具體痛點，所以這一項排在介面之後。
 
-宣告方式先做 builder 風格。現有的 `SubCommandSpec` 留作相容層。
+宣告方式先做 builder 風格。底層改用 Paper 的 Brigadier 指令註冊方式，現有的 `SubCommandSpec` 留作相容層。
 
-- [ ] 在支援的 Paper 和 Folia 版本上，確認 Paper 的 Brigadier 指令註冊方式行為一致，再決定底層是否改用。
+基岩版玩家透過 Geyser 連線時，補全只認得指令結構裡固定的選項，伺服器即時算出來的建議送不到基岩版。這一項要讓基岩版玩家也有堪用的補全。
+
+- [ ] 底層改用 Brigadier 註冊，指令不必再寫進 `plugin.yml`。
+- [ ] AceLib 自己的 reload 配合 Brigadier 的註冊時機調整。
 - [ ] 給下游的正式組裝入口。
 - [ ] 引數型別：玩家、離線玩家、整數與小數範圍、時間長度、世界、列舉、材質。
 - [ ] 依引數型別自動補全，依權限過濾說明，錯誤訊息走在地化。
+- [ ] 固定的選項以基岩版看得到的方式註冊，讓 Geyser 玩家也有補全。
+- [ ] 實測各引數型別在基岩版的補全，結果記在模組頁。
 - [ ] 沿用現有的冷卻。
+- [ ] Paper 實機驗證：指令在哪個執行緒執行、輸入錯誤的提示、補全。
+- [ ] Folia 實機驗證：指令在哪個執行緒執行、輸入錯誤的提示、補全。
 
 ### 第四階段 資料與整合
 
