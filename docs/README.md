@@ -30,6 +30,8 @@
 
 [貢獻者指南](contributor/README.md) 列出開發環境、測試指令、文件檢查與本機 Maven 用法。送出修改前也請閱讀根目錄的 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 
+接下來各版本要做與不做的事列在[版本路線圖](roadmap.md)。
+
 ## 查資料
 
 - [如何取得 AceLib](reference/release-artifacts.md)

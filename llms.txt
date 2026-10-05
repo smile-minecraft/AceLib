@@ -18,6 +18,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 
 ## Contributor
 - [Contributor Guide](https://github.com/smile-minecraft/AceLib/blob/main/docs/contributor/README.md): Development setup, test commands, documentation checks, and local Maven publishing.
+- [Roadmap](https://github.com/smile-minecraft/AceLib/blob/main/docs/roadmap.md): Planned work for unreleased versions, candidate features, and what is explicitly out of scope.
 
 ## Modules
 - [Modules Overview](https://github.com/smile-minecraft/AceLib/blob/main/docs/modules/README.md): Index of all subsystem modules and their service entry points.
@@ -42,7 +43,7 @@ AceLib is a Folia-first shared foundation library for Paper and Folia plugins, p
 ## Reference
 - [Error Codes](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/error-codes.md): Lookup table for ACELIB-<AREA>-<CODE> including trigger conditions and categories.
 - [Release Artifacts](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/release-artifacts.md): How to obtain the API from JitPack, build the server JAR, and use the local Maven coordinate.
-- [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification for all 143 public types into Supported, SPI, and Internal.
+- [API Surface](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/api-surface.md): Classification of every public top-level type into Supported, SPI, and Internal.
 - [Runtime Compatibility Matrix](https://github.com/smile-minecraft/AceLib/blob/main/docs/reference/runtime-compatibility-matrix.json): Machine-readable version matrix (JSON) with platform, status (SUPPORTED / UNVERIFIED), and evidence for each verified runtime.
 
 ## Changelog

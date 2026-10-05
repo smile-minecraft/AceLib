@@ -56,6 +56,7 @@ cd AceLib
 
 ## 修改公開 API 或文件
 
+- 新功能先對照[版本路線圖](../roadmap.md)，確認已排入版本；未排入的功能請先提案。
 - 新功能與 bug 修正先寫能失敗的測試，再做最小實作。
 - 玩家、實體、方塊與 inventory 的操作要同時考慮 Paper 與 Folia；MockBukkit 不能取代真實 Folia runtime。
 - 公開型別分類列在 [API surface](../reference/api-surface.md)。該頁由 `api-surface.json` 產生，不要手動改 generated inventory。

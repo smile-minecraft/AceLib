@@ -14,6 +14,7 @@ AceLib 的文件依讀者正在做的事拆分。新增內容前，先把資訊�
 | 各模組 API 與使用限制 | `docs/modules/*.md` |
 | 完整錯誤碼 | `docs/reference/error-codes.md` |
 | 版本歷史 | `CHANGELOG.md` |
+| 尚未發布的版本規劃與不做的範圍 | `docs/roadmap.md` |
 
 `docs/reference/api-surface.md` 由 `docs/reference/api-surface.json` 產生。修改公開 API 分類時，依專案既有產生流程更新，不要直接編輯 generated Markdown。
 
