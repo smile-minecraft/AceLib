@@ -11,6 +11,8 @@ GuiService gui = api.getGuiService();
 
 AceLib 尚未就緒或停用時，GUI 操作會回傳 `NOT_READY` 或 `SHUTDOWN`，不會回傳 `null` service。
 
+成功 reload 後，舊 `GuiService` 實例會 shutdown：舊 listener 已解除註冊（不會留下雙 listener），舊實例的 `openInventory` 回 `SHUTDOWN`、`getModuleStatus` 不再是 `READY`。請重新向 `AceLibApi` 取得新實例，不要繼續持有舊 reference。
+
 ## 開啟 GUI
 
 ```java

@@ -75,7 +75,8 @@ import java.util.function.Function;
  *   <li>{@code ACELIB-PLAYER-001}：資料尚未就緒（caller 主動查詢 LOADING session）</li>
  *   <li>{@code ACELIB-PLAYER-002}：資料載入失敗</li>
  *   <li>{@code ACELIB-PLAYER-003}：資料保存失敗</li>
- *   <li>{@code ACELIB-PLAYER-004}：session 重複登入</li>
+ *   <li>{@code ACELIB-PLAYER-004}：session 重複登入（無 quit 進行中卻已有 session；
+ *       舊 session 尚在 UNLOADING 保存時，新 join 改為鏈接舊 quit、完成後自動重試）</li>
  *   <li>{@code ACELIB-PLAYER-005}：session 未找到</li>
  *   <li>{@code ACELIB-PLAYER-006}：DataStore 未初始化</li>
  *   <li>{@code ACELIB-PLAYER-007}：服務已關閉</li>
@@ -93,6 +94,8 @@ public final class PlayerDataService {
     private static final long SHUTDOWN_INFLIGHT_TIMEOUT_MS = 5_000L;
     /** Per-store 序列化的 in-flight 等待 poll 間隔。 */
     private static final long SHUTDOWN_POLL_INTERVAL_MS = 25L;
+    /** {@link #waitForState} 的輪詢間隔。 */
+    private static final long WAIT_FOR_STATE_POLL_MS = 10L;
 
     private final DataStore store;
     private final Executor ioExecutor;
@@ -116,6 +119,23 @@ public final class PlayerDataService {
      */
     private final ConcurrentMap<UUID, PlayerRecordView> records = new ConcurrentHashMap<>();
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    /**
+     * 進行中的 quit future：uuid → quit future。
+     *
+     * <p>UNLOADING 保存進行中重連的鏈接點 — 新 join 不再同步拋 PLAYER-004，
+     * 而是鏈接此 future，quit 完成（成功或保存失敗皆可）後自動重試建 session。
+     * quit task 於完成 future 前先移除本 entry（happens-before 保證重試鏈
+     * 被喚醒時登記已撤），另有 whenComplete 兜底，不殘留。</p>
+     */
+    private final ConcurrentMap<UUID, CompletableFuture<Void>> pendingQuits = new ConcurrentHashMap<>();
+    /**
+     * 等待中的重試鏈：uuid → 共享的重試 future。
+     *
+     * <p>同 UUID 在 quit 完成前多次重連共享單一 pending chain，避免 quit
+     * 完成瞬間多個 join 同時重建 session 造成風暴。重試 future 完成
+     * （成功或失敗皆可）時立即移除，不殘留。</p>
+     */
+    private final ConcurrentMap<UUID, CompletableFuture<Void>> pendingRejoins = new ConcurrentHashMap<>();
     /** 當前 in-flight 非同步任務數（onPlayerJoin / onPlayerQuit / withLoadedData）。 */
     private final AtomicInteger inFlightOps = new AtomicInteger(0);
     /**
@@ -173,10 +193,17 @@ public final class PlayerDataService {
      * <p>行為：</p>
      * <ol>
      *   <li>同步檢查 shutdown flag；若已 shutdown 立刻拋 PLAYER-007</li>
-     *   <li>同步建立 session（state=LOADING）；重複 UUID 拋 PLAYER-004</li>
+     *   <li>若該 UUID 有 quit 進行中（舊 session 處於 UNLOADING 保存階段）：
+     *       不拋 PLAYER-004，而是回傳鏈接舊 quit future 的重試 future —
+     *       quit 完成（成功或保存失敗皆可）後自動重試建立 session，全程
+     *       future 鏈接、不 sleep 輪詢；等待期間 shutdown 則重試以
+     *       PLAYER-007 失敗，不建立 session</li>
+     *   <li>無 quit 進行中卻已有 session（真正重複登入）：同步拋 PLAYER-004</li>
      *   <li>遞增 in-flight 計數；於 {@code ioExecutor} 上排程 task，task 內委派
      *       給 {@code serialStoreExecutor} 執行實際 store root() 載入</li>
-     *   <li>成功：session 轉 READY，future 完成</li>
+     *   <li>成功：若前次 quit 保存失敗遺留 dirty 資料，將其整體合併回新載入資料
+     *       （遺留優先，含已刪除 key 不復活）並保持 dirty；session 轉 READY，
+     *       future 完成</li>
      *   <li>失敗：session 轉 ENDED，future 以 PLAYER-002 失敗完成</li>
      * </ol>
      *
@@ -189,6 +216,92 @@ public final class PlayerDataService {
     public CompletableFuture<Void> onPlayerJoin(UUID uuid, String name) {
         Objects.requireNonNull(uuid, "uuid");
         Objects.requireNonNull(name, "name");
+        ensureNotShutdown();
+        CompletableFuture<Void> quitInFlight = pendingQuits.get(uuid);
+        if (quitInFlight != null) {
+            return joinAfterQuit(uuid, name, quitInFlight);
+        }
+        try {
+            return startJoinLoad(uuid, name);
+        } catch (PlayerStateException duplicate) {
+            if (!"ACELIB-PLAYER-004".equals(duplicate.getCode())) {
+                throw duplicate;
+            }
+            // 與舊 quit 的登記交錯：startSession 當下 pendingQuits 已有
+            // quit 登記 — 改走重試鏈而非拒絕。
+            CompletableFuture<Void> lateQuit = pendingQuits.get(uuid);
+            if (lateQuit != null) {
+                return joinAfterQuit(uuid, name, lateQuit);
+            }
+            throw duplicate;
+        }
+    }
+
+    /**
+     * 鏈接舊 quit future 的重試：quit 完成後自動重建 session。
+     *
+     * <p>以 {@link ConcurrentMap#putIfAbsent} 佔位保證同 UUID 在 quit 完成前
+     * 多次重連只建一條鏈（併發重連共享同一 future）；只有佔位勝出者才在 map
+     * 之外接鏈 — mapping function 內不做同步副作用，避免已完成的鏈在寫入前
+     * 就地完成、留下永不清理的 completed entry。鏈接全由 future
+     * 組合完成，不 sleep 輪詢。重試前再檢查 shutdown flag，等待期間
+     * shutdown 不再建 session。</p>
+     *
+     * <p>清理先移除屬於自己的 entry（{@code remove(key, exposed)}，不誤刪
+     * 後建的新鏈），再完成回傳的 future：caller 經由它觀察到的完成，
+     * 必已移除本 entry（happens-before），可直接斷言不殘留。</p>
+     *
+     * @param uuid       玩家 UUID
+     * @param name       顯示名稱快照
+     * @param quitFuture 舊 quit 的 future；成功或失敗完成皆觸發重試
+     * @return 重試 future；quit 完成且重建成功時完成
+     */
+    private CompletableFuture<Void> joinAfterQuit(UUID uuid, String name,
+            CompletableFuture<Void> quitFuture) {
+        CompletableFuture<Void> exposed = new CompletableFuture<>();
+        CompletableFuture<Void> existing = pendingRejoins.putIfAbsent(uuid, exposed);
+        if (existing != null) {
+            return existing;
+        }
+        inFlightOps.incrementAndGet();
+        CompletableFuture<Void> chained;
+        try {
+            chained = quitFuture
+                .handle((ignored, quitFailure) -> null)
+                .thenCompose(ignored -> {
+                    if (shutdown.get()) {
+                        throw new PlayerStateException("ACELIB-PLAYER-007",
+                            "service has been shut down while waiting for quit to complete; "
+                                + "rejoin aborted for uuid=" + uuid);
+                    }
+                    return startJoinLoad(uuid, name);
+                });
+        } catch (Throwable syncFailure) {
+            // 建鏈本身同步失敗（理論上不應發生）：撤回佔位並回滾計數，不殘留。
+            pendingRejoins.remove(uuid, exposed);
+            inFlightOps.decrementAndGet();
+            exposed.completeExceptionally(syncFailure);
+            return exposed;
+        }
+        chained.whenComplete((ignored, failure) -> {
+            // 先清理再完成 exposed（happens-before），且只移除自己佔的 entry。
+            pendingRejoins.remove(uuid, exposed);
+            inFlightOps.decrementAndGet();
+            if (failure == null) {
+                exposed.complete(null);
+            } else {
+                exposed.completeExceptionally(failure);
+            }
+        });
+        return exposed;
+    }
+
+    /**
+     * 建立 session 並啟動非同步載入（join 的實際執行體）。
+     *
+     * <p>重複 UUID（且無 quit 進行中）時同步拋 PLAYER-004。</p>
+     */
+    private CompletableFuture<Void> startJoinLoad(UUID uuid, String name) {
         ensureNotShutdown();
         PlayerSession session = registry.startSession(uuid, name);
         CompletableFuture<Void> future = new CompletableFuture<>();
@@ -203,7 +316,7 @@ public final class PlayerDataService {
                     future.complete(null);
                     return;
                 }
-                records.put(uuid, view);
+                mergeRetainedDirty(uuid, view);
                 session.transitionTo(PlayerSessionState.READY);
                 future.complete(null);
             } catch (Throwable t) {
@@ -236,8 +349,10 @@ public final class PlayerDataService {
      *   <li>遞增 in-flight 計數；於 {@code ioExecutor} 上排程 task</li>
      *   <li>若 session 尚未 READY（仍在 LOADING）：等待 load 完成後才進入保存階段</li>
      *   <li>標記 UNLOADING → 委派給 {@code serialStoreExecutor} 同步寫回並 store.save()</li>
-     *   <li>ENDED → 從 registry 移除</li>
-     *   <li>任何保存失敗：future 以 PLAYER-003 失敗完成，並保留 dirty record 供 shutdown flush</li>
+     *   <li>成功：ENDED → 從 registry 移除</li>
+     *   <li>保存失敗：session 轉 ENDED 並從 registry 移除（不可卡在 UNLOADING
+     *       阻擋後續 join）；dirty 資料保留於 cache，重登時合併取回或由
+     *       shutdown flush 重試；future 以 PLAYER-003 失敗完成</li>
      * </ol>
      *
      * @param uuid 玩家 UUID；不可為 null
@@ -255,8 +370,11 @@ public final class PlayerDataService {
         }
         PlayerSession session = opt.get();
         CompletableFuture<Void> future = new CompletableFuture<>();
+        pendingQuits.put(uuid, future);
+        future.whenComplete((ignored, failure) -> pendingQuits.remove(uuid, future));
         inFlightOps.incrementAndGet();
-        ioExecutor.execute(() -> {
+        try {
+            ioExecutor.execute(() -> {
             PlayerRecordView view = null;
             try {
                 // 若仍在 LOADING，等待資料就緒
@@ -271,6 +389,9 @@ public final class PlayerDataService {
                         // ignore
                     }
                     registry.endSession(uuid);
+                    // 先撤登記再完成 future：重試鏈被喚醒時本 entry 必已移除
+                    //（happens-before），caller 可直接斷言不殘留。
+                    pendingQuits.remove(uuid, future);
                     future.complete(null);
                     return;
                 }
@@ -281,7 +402,6 @@ public final class PlayerDataService {
                         "cannot unload uuid=" + uuid + " from state=" + session.getState());
                 }
                 view = records.remove(uuid);
-                boolean savedOk = true;
                 try {
                     if (view != null && view.dirty.get()) {
                         // 委派給 serialStoreExecutor 同步執行 root()/save()
@@ -291,24 +411,34 @@ public final class PlayerDataService {
                         saveToStoreSerial(uuid, view);
                     }
                 } catch (Throwable saveEx) {
-                    savedOk = false;
                     if (view != null) {
-                        // 保存失敗時不得丟失唯一仍含 dirty 資料的 view。
+                        // 保存失敗時不得丟失唯一仍含 dirty 資料的 view —
+                        // 保留於 records 供重登合併取回 / shutdown flush 重試。
                         records.put(uuid, view);
                     }
+                    // 保存失敗仍須結束 session：轉 ENDED 並從 registry 移除，
+                    // 否則 session 永久卡在 UNLOADING，後續所有 join 皆被
+                    // PLAYER-004 拒絕。
+                    try {
+                        session.transitionTo(PlayerSessionState.ENDED);
+                    } catch (IllegalStateException ignore) {
+                        // 已為 ENDED — 忽略
+                    }
+                    registry.endSession(uuid);
+                    pendingQuits.remove(uuid, future);
                     Throwable cause = unwrap(saveEx);
                     PlayerStateException wrapped = new PlayerStateException(
                         "ACELIB-PLAYER-003",
-                        "failed to save player data for uuid=" + uuid + ": " + cause.getMessage(),
+                        "failed to save player data for uuid=" + uuid + ": " + cause.getMessage()
+                            + " (dirty data retained; rejoin to recover or retry on shutdown)",
                         cause);
                     future.completeExceptionally(wrapped);
                     return;
                 }
-                if (savedOk) {
-                    session.transitionTo(PlayerSessionState.ENDED);
-                    registry.endSession(uuid);
-                    future.complete(null);
-                }
+                session.transitionTo(PlayerSessionState.ENDED);
+                registry.endSession(uuid);
+                pendingQuits.remove(uuid, future);
+                future.complete(null);
             } catch (Throwable t) {
                 // 任何其他例外：仍需結束 session 避免殘留
                 if (view != null) {
@@ -325,6 +455,7 @@ public final class PlayerDataService {
                 } finally {
                     registry.endSession(uuid);
                 }
+                pendingQuits.remove(uuid, future);
                 Throwable cause = unwrap(t);
                 future.completeExceptionally(new PlayerStateException(
                     "ACELIB-PLAYER-003",
@@ -335,6 +466,13 @@ public final class PlayerDataService {
                 inFlightOps.decrementAndGet();
             }
         });
+        } catch (RejectedExecutionException rejected) {
+            // 外部 executor 拒絕派送：quit 未實際啟動 — 撤回登記並回滾計數，
+            // 不殘留 pendingQuits entry 卡住後續 join。
+            pendingQuits.remove(uuid, future);
+            inFlightOps.decrementAndGet();
+            throw rejected;
+        }
         return future;
     }
 
@@ -390,11 +528,28 @@ public final class PlayerDataService {
     }
 
     /**
+     * 若 session 已 READY 且 record 仍在 cache，回傳其 view（fast-path 用）。
+     *
+     * <p>任一條件不成立回傳 null，caller 改走非同步等待路徑。</p>
+     */
+    private PlayerRecordView readyViewOrNull(UUID uuid) {
+        if (shutdown.get()) {
+            return null;
+        }
+        Optional<PlayerSession> opt = registry.getSession(uuid);
+        if (opt.isEmpty() || opt.get().getState() != PlayerSessionState.READY) {
+            return null;
+        }
+        return records.get(uuid);
+    }
+
+    /**
      * 在指定玩家資料「就緒」後執行 callback（異步等待）。
      *
      * <p>行為：</p>
      * <ul>
-     *   <li>session 已 READY → 立即於 caller 所在執行緒執行 callback</li>
+     *   <li>session 已 READY → 於 caller 所在執行緒直接執行 callback
+     *      （不經 {@code ioExecutor} 排程）</li>
      *   <li>session 仍在 LOADING → 在 ioExecutor 上週期輪詢直到 READY 為止，
      *       或達 timeout（{@code 5 秒}）</li>
      *   <li>session 不存在 → future 以 PLAYER-005 失敗完成</li>
@@ -409,6 +564,18 @@ public final class PlayerDataService {
     public <R> CompletableFuture<R> withLoadedData(UUID uuid, Function<Record, R> callback) {
         Objects.requireNonNull(uuid, "uuid");
         Objects.requireNonNull(callback, "callback");
+        // Fast path：session 已 READY → 於 caller 執行緒直接執行 callback，
+        // 兌現 Javadoc 約定且不佔用 ioExecutor。
+        PlayerRecordView readyView = readyViewOrNull(uuid);
+        if (readyView != null) {
+            CompletableFuture<R> immediate = new CompletableFuture<>();
+            try {
+                immediate.complete(callback.apply(readyView.record));
+            } catch (Throwable t) {
+                immediate.completeExceptionally(unwrap(t));
+            }
+            return immediate;
+        }
         CompletableFuture<R> future = new CompletableFuture<>();
         inFlightOps.incrementAndGet();
         ioExecutor.execute(() -> {
@@ -454,6 +621,45 @@ public final class PlayerDataService {
     }
 
     /**
+     * 快照保存失敗遺留的 dirty 資料合併（join 成功路徑）。
+     *
+     * <p>quit 保存失敗後 session 已 ENDED 並從 registry 移除，但 dirty view
+     * 保留於 {@link #records}。重登載入成功時，若 cache 仍有該 UUID 的
+     * dirty 遺留，採<strong>遺留整體採用</strong>：遺留快照內容新於 store，
+     * 將其回放覆寫新載入資料並保持 dirty，使下一次 quit/shutdown 重試保存。</p>
+     *
+     * <p>刪除鍵語意：遺留快照沒有、而新載入資料含有的頂層 key，視為 quit
+     * 失敗前已 {@code remove} 的刪除，一併從新載入資料移除 — 已刪除的 key
+     * 不得因 store 舊值在重登後復活。此與保存路徑的整節點取代
+     * （{@code root.set("players.<uuid>", snapshot)}）一致：成功保存會寫下
+     * 的內容，正是遺留快照的整體（含刪除）。巢狀路徑的修改落在頂層 key
+     * 的值覆寫內，同樣由遺留版本勝出。</p>
+     *
+     * <p>以 {@link ConcurrentMap#merge} 原子執行，避免 join 載入與並發
+     * quit-failure 寫回交錯遺失 dirty。</p>
+     *
+     * @param uuid  玩家 UUID
+     * @param fresh 剛自 store 載入的 view
+     */
+    private void mergeRetainedDirty(UUID uuid, PlayerRecordView fresh) {
+        records.merge(uuid, fresh, (orphan, loaded) -> {
+            if (orphan.dirty.get()) {
+                Map<String, Object> retained = orphan.record.snapshotLocked();
+                for (String key : loaded.record.keys()) {
+                    if (!retained.containsKey(key)) {
+                        loaded.record.remove(key);
+                    }
+                }
+                for (Map.Entry<String, Object> entry : retained.entrySet()) {
+                    loaded.record.set(entry.getKey(), entry.getValue());
+                }
+                loaded.dirty.set(true);
+            }
+            return loaded;
+        });
+    }
+
+    /**
      * 取得 session 物件（測試 / 觀察用）。
      *
      * @param uuid 玩家 UUID
@@ -489,6 +695,17 @@ public final class PlayerDataService {
      * </ol>
      *
      * <p><strong>冪等</strong>：重複呼叫不丟例外。</p>
+     *
+     * <p><strong>失敗可重試</strong>：flush 失敗（保存錯誤
+     * {@code ACELIB-PLAYER-003}、逾時或中斷 {@code ACELIB-PLAYER-008}）
+     * 時 dirty 全保留，shutdown flag 回滾，呼叫端可稍後重試
+     * {@code shutdown()}；重試會重新快照並完整重寫。逾時只表示「等不到
+     * flush 完成」，不等於 flush 成功 — 不得把逾時前的資料當成已落盤。
+     * flush 等待上限與 serial executor 終止共用
+     * {@value #SERIAL_EXECUTOR_TERMINATION_MS} 毫秒。</p>
+     *
+     * <p><strong>不提供的保證</strong>：本服務只在 quit 與 shutdown 時保存，
+     * 沒有自動保存；程序崩潰時未落盤的 dirty 資料會遺失，不宣稱崩潰復原。</p>
      *
      * <p><strong>無 late resurrection</strong>：在 in-flight task 完成寫回 cache 步驟
      * 之前，會再次檢查 shutdown flag；已 shutdown 時，task 不會將資料放回 records map，
@@ -526,6 +743,17 @@ public final class PlayerDataService {
     }
 
     /**
+     * 內部 serial store executor 是否已終止（package-private test seam —
+     * executor 邊界測試用：外部注入的 {@code ioExecutor} 不可被關閉，
+     * 僅內部 serial executor 於 shutdown 時終止）。
+     *
+     * @return true 表示內部 serial executor 已終止
+     */
+    boolean isSerialExecutorTerminated() {
+        return serialExecutorTerminated.get();
+    }
+
+    /**
      * 等待 in-flight ops 計數歸零（最多 {@code timeout} 毫秒）。
      *
      * @param timeout 最大等待時間
@@ -548,6 +776,17 @@ public final class PlayerDataService {
      *
      * <p>委派給 internal executor 是因為 store 本身非 thread-safe；此處以
      * 「同步委派、等待完成」的方式確保 flush 一定發生在 serial thread 上。</p>
+     *
+     * <p><strong>批次語意</strong>：先把全部 dirty snapshot 寫回 store，
+     * 最後只呼叫一次 {@code store.save()}。單次 save 失敗即整批視為未落盤：
+     * records 不清除、dirty 全保留，由 {@link #shutdown()} 回滾 flag 後重試；
+     * 重試時重新快照並完整重寫，不做增量補寫，故重試是安全的。</p>
+     *
+     * <p><strong>Timeout 語意</strong>：等待上限與內部 executor 的 graceful
+     * 終止共用 {@value #SERIAL_EXECUTOR_TERMINATION_MS} 毫秒。逾時以
+     * {@code ACELIB-PLAYER-008} 失敗並取消 flush 任務，但底層
+     * {@code store.save()} 可能仍在進行 — 逾時不等於 flush 成功，
+     * 不得把舊資料當成已落盤；dirty 照樣保留，重試會完整重寫。</p>
      */
     private void flushAllDirtySync() {
         // 快照 dirty record（避免 ConcurrentModification）
@@ -566,8 +805,8 @@ public final class PlayerDataService {
             flush = serialStoreExecutor.submit(() -> {
                 for (Map.Entry<UUID, PlayerRecordView> e : snapshot.entrySet()) {
                     saveToStoreInternal(e.getKey(), e.getValue());
-                    store.save();
                 }
+                store.save();
             });
         } catch (RejectedExecutionException rejected) {
             throw flushFailure("ACELIB-PLAYER-008", snapshot,
@@ -735,14 +974,58 @@ public final class PlayerDataService {
     }
 
     /**
+     * 等待中的 quit/retry 交接數（package-private test seam —
+     * 重試有界測試用：重試完成後 pendingQuits 與 pendingRejoins 皆須為空）。
+     *
+     * @return 尚未完成的 quit future 數與重試鏈數之和
+     */
+    int pendingReconnectCountForTest() {
+        return pendingQuits.size() + pendingRejoins.size();
+    }
+
+    /**
      * 等待 session 進入目標狀態（最多 {@code timeoutMillis}）。
      *
-     * <p>使用短暫 sleep + state 檢查；測試可注入 clock 模擬長時間等待。
-     * 回傳 true 表示進入目標狀態；false 表示逾時。</p>
+     * <p>使用短暫 sleep + state 檢查；測試可經由
+     * {@link #waitForState(PlayerSession, PlayerSessionState, long, WaitSleeper)}
+     * 注入假 sleeper，決定性模擬長時間等待而不真實 sleep。</p>
      */
     private boolean waitForState(PlayerSession session,
                                  PlayerSessionState target,
                                  long timeoutMillis) {
+        return waitForState(session, target, timeoutMillis, Thread::sleep);
+    }
+
+    /**
+     * Sleep 可注入的等待 seam（package-private test seam）。
+     */
+    @FunctionalInterface
+    interface WaitSleeper {
+        /**
+         * 睡眠指定毫秒。
+         *
+         * @param millis 睡眠毫秒數
+         * @throws InterruptedException 若等待被中斷
+         */
+        void sleep(long millis) throws InterruptedException;
+    }
+
+    /**
+     * 等待 session 進入目標狀態（sleep 策略可注入）。
+     *
+     * @param session       等待的 session
+     * @param target        目標狀態
+     * @param timeoutMillis 最多等待毫秒數
+     * @param sleeper       sleep 策略；不可為 null
+     * @return true 表示進入目標狀態；false 表示逾時或被中斷
+     */
+    boolean waitForState(PlayerSession session,
+                         PlayerSessionState target,
+                         long timeoutMillis,
+                         WaitSleeper sleeper) {
+        Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(sleeper, "sleeper");
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (System.currentTimeMillis() < deadline) {
             if (session.getState() == target) {
@@ -752,7 +1035,7 @@ public final class PlayerDataService {
                 return target == PlayerSessionState.ENDED;
             }
             try {
-                Thread.sleep(10);
+                sleeper.sleep(WAIT_FOR_STATE_POLL_MS);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 return false;

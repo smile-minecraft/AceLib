@@ -40,12 +40,22 @@ import com.smile.acelib.world.WorldServiceImpl;
 import com.smile.acelib.world.WorldServiceUnavailableImpl;
 import com.smile.acelib.world.WorldErrorCode;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -162,6 +172,16 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile PlayerLifecycleListener playerLifecycleListener;
     private volatile boolean playerLifecycleRegistered;
+    /**
+     * 當前 {@link PlayerDataService} 使用的自建 I/O executor。
+     *
+     * <p>於 {@code bindPlayerDataService} 建立並指派；舊 executor 於 reload /
+     * onDisable / INCOMPATIBLE teardown 釋放舊 player 服務時一併關閉。
+     * {@link PlayerDataService#shutdown()} 不關閉外部注入的 executor，
+     * 故生命週期由本 plugin 集中管理（不得關閉外部注入資源——本欄位只保存
+     * {@link #createPlayerIoExecutor()} 的自建 pool）。</p>
+     */
+    private volatile ExecutorService playerIoExecutor;
 
     /**
      * v0.1.0 管理指令（{@code /acelib status}）使用的 {@link CommandRegistryImpl}。
@@ -538,6 +558,9 @@ public class AceLibPlugin extends JavaPlugin {
                 this.playerDataService = null;
             }
         }
+        // 自建 io pool 隨舊服務釋放（service.shutdown 不關閉外部注入的 executor，
+        // 本欄位只追蹤自建 pool，可安全關閉）。
+        shutdownPlayerIoExecutor();
 
         // world 服務 shutdown（標記 stopped、取消 in-flight handle、
         // 註冊 FAILED module state）。順序置於 player 與 scheduler 卸載之後，
@@ -757,6 +780,18 @@ public class AceLibPlugin extends JavaPlugin {
      */
     PlayerDataService getPlayerDataService() {
         return playerDataService;
+    }
+
+    /**
+     * 取得當前 player 服務使用的自建 I/O executor（package-private 測試 seam）。
+     *
+     * <p>僅供生命週期測試驗證舊 pool 已關閉、新 pool 已重建；非測試 caller
+     * 不得關閉或提交任務。</p>
+     *
+     * @return 當前自建 io executor；onEnable 前為 null
+     */
+    ExecutorService getPlayerIoExecutor() {
+        return playerIoExecutor;
     }
 
     /**
@@ -1037,7 +1072,17 @@ public class AceLibPlugin extends JavaPlugin {
             HandlerList.unregisterAll(oldListener);
         }
         this.playerLifecycleRegistered = false;
+        // 舊 player 服務已 shutdown（flush 完成、in-flight 排空）：關閉其自建 io pool。
+        // 失敗路徑（上方已 return）不關閉——舊服務仍存活且使用該 pool。
+        shutdownPlayerIoExecutor();
         bindPlayerDataService(this.server);
+        // 先釋放舊 world/gui 服務（unregister 舊 GUI listener + shutdown 舊 impl），
+        // 再 commit 新 scheduler 並重建。順序理由：未釋放就覆寫會留下雙 listener
+        // （舊 listener 仍在 HandlerList，下次 onPluginReady 又註冊新的）與仍 READY
+        // 的舊 impl（getModuleStatus 假象）；unbind 後欄位先為 SHUTDOWN facade，
+        // 若後續 bind 拋錯，既有 caller 讀到的狀態仍可判斷。
+        unbindWorldService();
+        unbindGuiService();
         // 先 commit 新 scheduler 至 this.scheduler，再 bind GUI service。
         // 順序理由：bindGuiService() 內部讀取 this.scheduler 來建立 SafeSchedulerPlayerContextExecutor，
         // 若 scheduler 仍指向 Phase A 已 disabled 的舊 scheduler，新 GUI service 會
@@ -1049,6 +1094,11 @@ public class AceLibPlugin extends JavaPlugin {
         // reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
         // 必須在 this.scheduler = newScheduler 之後呼叫。
         bindGuiService(this.server);
+
+        // 在線玩家重接：舊服務 shutdown 已把 dirty flush 回 store，
+        // 新服務 registry 為空；逐一重建 session 並等待載入完成，
+        // 使 reload 回傳時 getData/markDirty/quit 皆可用。
+        rejoinOnlinePlayers();
 
         this.api = AceLibApi.ready(
             AceLibVersion.VERSION,
@@ -1313,6 +1363,13 @@ public class AceLibPlugin extends JavaPlugin {
                     "reload(INCOMPATIBLE): player data shutdown failed (ignored): " + t);
             }
             this.playerDataService = null;
+        }
+        // 自建 io pool 隨舊服務釋放（best-effort，不中斷 teardown）。
+        try {
+            shutdownPlayerIoExecutor();
+        } catch (Throwable t) {
+            logFine("reload(INCOMPATIBLE): player io executor shutdown failed (ignored): "
+                + t.getMessage());
         }
         // 6. 其餘服務 shutdown + SHUTDOWN facade 替換（內部已 try/catch）
         try { unbindWorldService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): world unbind failed (ignored): " + t); }
@@ -1702,12 +1759,191 @@ public class AceLibPlugin extends JavaPlugin {
             return;
         }
 
-        // 建立 service（內部 serial executor 為單一 daemon thread）
-        PlayerDataService service = new PlayerDataService(playerStore,
-            createPlayerIoExecutor());
-        PlayerLifecycleListener listener = new PlayerLifecycleListener(service);
+        // 建立 service（內部 serial executor 為單一 daemon thread）。
+        // 自建 io executor 由 plugin 持有生命週期（reload / onDisable /
+        // INCOMPATIBLE teardown 釋放舊服務時一併關閉舊 pool）；
+        // service.shutdown() 不關閉外部注入的 executor，故不可在此丟失 reference。
+        ExecutorService ioExecutor = createPlayerIoExecutor();
+        this.playerIoExecutor = ioExecutor;
+        PlayerDataService service = new PlayerDataService(playerStore, ioExecutor);
+        PlayerLifecycleListener listener = new PlayerLifecycleListener(service, safeLogger());
         this.playerDataService = service;
         this.playerLifecycleListener = listener;
+    }
+
+    /**
+     * 在線玩家重接等待上限（毫秒）：所有在線玩家共用單一總時限。
+     *
+     * <p>reload commit 階段先為每位在線玩家重建 session，再以共用 deadline
+     * 等待全部載入完成；總等待不隨在線人數線性成長。逾時（個別逾時或總時限
+     * 耗盡）只記錄警告、不中斷 reload（該玩家稍後可經 join 事件重建）。</p>
+     */
+    private static final long PLAYER_REJOIN_TIMEOUT_MS = 10_000L;
+
+    /**
+     * Package-private 測試 seam：覆寫在線玩家重接的等待上限（毫秒）。
+     *
+     * <p>正數時取代 {@link #PLAYER_REJOIN_TIMEOUT_MS}；預設 {@code -1} 表示
+     * 使用正式上限。僅供 {@code com.smile.acelib} 套件內測試使用。</p>
+     */
+    volatile long reloadRejoinTimeoutMsOverride = -1L;
+
+    /**
+     * Package-private 測試 seam：取代重接時對單一玩家的 join 提交。
+     *
+     * <p>非 null 時，重接流程以此函數的回傳值作為該玩家的載入 future，
+     * 而不呼叫 {@code PlayerDataService.onPlayerJoin}；測試以此構造
+     * 「載入全卡住」等受控情境。僅供 {@code com.smile.acelib} 套件內測試使用。</p>
+     */
+    volatile BiFunction<UUID, String, CompletableFuture<Void>> reloadRejoinJoinOverride = null;
+
+    /**
+     * 在線玩家重接等待上限（毫秒）的實際取值。
+     *
+     * <p>測試以 {@link #reloadRejoinTimeoutMsOverride} 注入較短的上限時，
+     * 回傳注入值；否則回傳 {@link #PLAYER_REJOIN_TIMEOUT_MS}。</p>
+     */
+    private long effectiveRejoinTimeoutMs() {
+        long override = reloadRejoinTimeoutMsOverride;
+        return override > 0L ? override : PLAYER_REJOIN_TIMEOUT_MS;
+    }
+
+    /**
+     * 關閉自建 player io executor。
+     *
+     * <p>只關閉 {@link #playerIoExecutor} 追蹤的自建 pool（{@link #createPlayerIoExecutor()}
+     * 產物）；外部注入的 executor 絕不經此關閉。呼叫時機：舊 player 服務已
+     * shutdown 之後（flush 完成、in-flight 排空），避免中斷進行中的保存。
+     * 若舊服務 shutdown 失敗（服務仍存活），不得呼叫本方法。</p>
+     */
+    private void shutdownPlayerIoExecutor() {
+        ExecutorService io = this.playerIoExecutor;
+        this.playerIoExecutor = null;
+        if (io == null) {
+            return;
+        }
+        io.shutdown();
+        try {
+            if (!io.awaitTermination(5L, TimeUnit.SECONDS)) {
+                logFine("player io executor did not terminate within timeout; "
+                    + "remaining daemon threads exit on JVM shutdown");
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            logFine("player io executor termination wait interrupted");
+        }
+    }
+
+    /**
+     * 為在線玩家在新 player 服務重建 session。
+     *
+     * <p>舊服務 shutdown 已把 dirty flush 回 store，新服務 registry 為空；
+     * 對 {@code server.getOnlinePlayers()} 逐一呼叫
+     * {@code onPlayerJoin}（含重連閉環），再以共用 deadline 等待全部載入完成，
+     * 使 reload 回傳時 {@code getData}/{@code markDirty}/{@code onPlayerQuit}
+     * 皆可用。等待總時限不隨在線人數成長；單一玩家重建失敗或逾時只記錄警告、
+     * 不中斷 reload（reload 整體仍成功）。</p>
+     */
+    private void rejoinOnlinePlayers() {
+        PlayerDataService current = this.playerDataService;
+        Server currentServer = this.server;
+        if (current == null || currentServer == null) {
+            return;
+        }
+        Collection<? extends Player> online;
+        try {
+            online = currentServer.getOnlinePlayers();
+        } catch (Throwable t) {
+            logFine("reload: getOnlinePlayers failed, skipping rejoin: " + t.getMessage());
+            return;
+        }
+        if (online.isEmpty()) {
+            return;
+        }
+        List<RejoinPending> pending = new ArrayList<>(online.size());
+        for (Player player : online) {
+            UUID uuid;
+            String name;
+            try {
+                uuid = player.getUniqueId();
+                name = player.getName();
+            } catch (Throwable t) {
+                logFine("reload: online player snapshot failed, skipping rejoin: "
+                    + t.getMessage());
+                continue;
+            }
+            try {
+                CompletableFuture<Void> joined = reloadRejoinJoinOverride != null
+                    ? reloadRejoinJoinOverride.apply(uuid, name)
+                    : current.onPlayerJoin(uuid, name);
+                if (joined == null) {
+                    logWarningWithCode("ACELIB-PLAYER-002",
+                        "reload: online player rejoin join-seam returned null for uuid=" + uuid
+                            + " name=" + name);
+                    continue;
+                }
+                pending.add(new RejoinPending(joined, uuid, name));
+            } catch (PlayerStateException rejected) {
+                logWarningWithCode(rejected.getCode(),
+                    "reload: online player rejoin rejected for uuid=" + uuid
+                        + " name=" + name + ": " + rejected.getMessage());
+            } catch (RuntimeException unexpected) {
+                logWarningWithCode("ACELIB-PLAYER-002",
+                    "reload: online player rejoin failed for uuid=" + uuid
+                        + " name=" + name + ": " + unexpected);
+            }
+        }
+        // 共用總時限等待全部 join：總等待以 budget 為界，不隨在線人數線性成長。
+        // 總時限耗盡後，剩餘玩家不再等待、各記一則逾時警告，reload 照常成功。
+        long budgetMs = effectiveRejoinTimeoutMs();
+        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs);
+        for (RejoinPending rejoin : pending) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0L) {
+                logWarningWithCode("ACELIB-PLAYER-002",
+                    "reload: online player rejoin timed out after " + budgetMs
+                        + "ms shared budget for uuid=" + rejoin.uuid
+                        + " name=" + rejoin.name);
+                continue;
+            }
+            try {
+                rejoin.future.get(remainingNanos, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                logFine("reload: player rejoin wait interrupted");
+                return;
+            } catch (ExecutionException asyncFailure) {
+                Throwable cause = asyncFailure.getCause();
+                String code = cause instanceof PlayerStateException playerFailure
+                    ? playerFailure.getCode() : "ACELIB-PLAYER-002";
+                logWarningWithCode(code,
+                    "reload: online player rejoin async load failed for uuid=" + rejoin.uuid
+                        + " name=" + rejoin.name + ": " + cause);
+            } catch (TimeoutException timeout) {
+                logWarningWithCode("ACELIB-PLAYER-002",
+                    "reload: online player rejoin timed out after " + budgetMs
+                        + "ms shared budget for uuid=" + rejoin.uuid
+                        + " name=" + rejoin.name + ": " + timeout);
+            }
+        }
+    }
+
+    /**
+     * 重接等待中的單一玩家 join（載入 future + 身分快照）。
+     *
+     * <p>逾時警告必須能對應到玩家，故 future 與取樣時的 uuid/name 綁在一起；
+     * 不直接保留 {@code Player}（reload 期間實體可能失效）。</p>
+     */
+    private static final class RejoinPending {
+        final CompletableFuture<Void> future;
+        final UUID uuid;
+        final String name;
+
+        RejoinPending(CompletableFuture<Void> future, UUID uuid, String name) {
+            this.future = future;
+            this.uuid = uuid;
+            this.name = name;
+        }
     }
 
     /**
@@ -1718,7 +1954,8 @@ public class AceLibPlugin extends JavaPlugin {
      * {@link DiagnosticsService} 註冊 {@code READY} 模組狀態。</p>
      *
      * <p>既有 {@code this.worldService} 若仍是 NOT_READY unavailable facade，
-     * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
+     * 直接覆寫；reload 路徑先經 {@link #unbindWorldService()} 釋放舊 impl
+     * （shutdown + SHUTDOWN facade 替換）再呼叫本方法重建，避免舊 impl 殘留 READY。</p>
      *
      * @param server 當前 Bukkit/Paper/Folia server；不可為 null
      */
@@ -1762,7 +1999,8 @@ public class AceLibPlugin extends JavaPlugin {
      * （避免 Bukkit 在 plugin is enabled 之前 allow register）。</p>
      *
      * <p>既有 {@code this.guiService} 若仍是 NOT_READY unavailable facade，
-     * 直接覆寫；如果已經是 SHUTDOWN unavailable（reload 情況），同樣覆寫。</p>
+     * 直接覆寫；reload 路徑先經 {@link #unbindGuiService()} 解除舊 listener
+     * 註冊並 shutdown 舊 impl 再呼叫本方法重建，避免雙 listener 與舊 impl 殘留 READY。</p>
      *
      * @param server 當前 Bukkit/Paper/Folia server；不可為 null
      */
@@ -2050,15 +2288,25 @@ public class AceLibPlugin extends JavaPlugin {
      * <strong>不保留 Player reference</strong>。priority 為 {@link EventPriority#MONITOR} —
      * 表示我們只在事件流程最後觀察，不取消亦不修改事件。</p>
      *
+     * <p>失敗語意：join/quit 的同步拒絕（PLAYER-004/005/007）與非同步
+     * 完成失敗（PLAYER-002/003）一律攔截並以 ACELIB-PLAYER 分類記入
+     * logger，<strong>不向外拋</strong>，避免污染 Bukkit 事件流程。</p>
+     *
      * <p>於 onDisable / reload 時透過 {@link HandlerList#unregisterAll(Listener)}
      * 解除註冊，確保 listener 不殘留於 Bukkit HandlerList。</p>
      */
-    private static final class PlayerLifecycleListener implements Listener {
+    static final class PlayerLifecycleListener implements Listener {
 
         private final PlayerDataService service;
+        private final Logger logger;
 
         PlayerLifecycleListener(PlayerDataService service) {
+            this(service, Logger.getLogger(LOG_NAME));
+        }
+
+        PlayerLifecycleListener(PlayerDataService service, Logger logger) {
             this.service = Objects.requireNonNull(service, "service");
+            this.logger = Objects.requireNonNull(logger, "logger");
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
@@ -2067,7 +2315,26 @@ public class AceLibPlugin extends JavaPlugin {
             UUID uuid = player.getUniqueId();
             String name = player.getName();
             // 立即 snapshot UUID/name；listener 不保留 Player reference
-            service.onPlayerJoin(uuid, name);
+            final CompletableFuture<Void> future;
+            try {
+                future = service.onPlayerJoin(uuid, name);
+            } catch (PlayerStateException rejected) {
+                logger.log(Level.WARNING,
+                    "[" + rejected.getCode() + "] onPlayerJoin rejected for uuid=" + uuid
+                        + " name=" + name + ": " + rejected.getMessage());
+                return;
+            } catch (RuntimeException unexpected) {
+                logger.log(Level.WARNING,
+                    "onPlayerJoin failed for uuid=" + uuid + " name=" + name + ": " + unexpected);
+                return;
+            }
+            future.whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    logger.log(Level.WARNING,
+                        "[" + codeOf(failure, "ACELIB-PLAYER-002") + "] onPlayerJoin "
+                            + "async load failed for uuid=" + uuid + ": " + failure.getMessage());
+                }
+            });
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
@@ -2076,7 +2343,37 @@ public class AceLibPlugin extends JavaPlugin {
             UUID uuid = player.getUniqueId();
             // quit 觸發時 player 即將離線；此處取 UUID 即足夠，
             // service 內部已有 name snapshot。
-            service.onPlayerQuit(uuid);
+            final CompletableFuture<Void> future;
+            try {
+                future = service.onPlayerQuit(uuid);
+            } catch (PlayerStateException rejected) {
+                logger.log(Level.WARNING,
+                    "[" + rejected.getCode() + "] onPlayerQuit rejected for uuid=" + uuid
+                        + ": " + rejected.getMessage());
+                return;
+            } catch (RuntimeException unexpected) {
+                logger.log(Level.WARNING,
+                    "onPlayerQuit failed for uuid=" + uuid + ": " + unexpected);
+                return;
+            }
+            future.whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    logger.log(Level.WARNING,
+                        "[" + codeOf(failure, "ACELIB-PLAYER-003") + "] onPlayerQuit "
+                            + "async save failed for uuid=" + uuid + ": " + failure.getMessage());
+                }
+            });
+        }
+
+        private static String codeOf(Throwable failure, String fallback) {
+            Throwable cause = failure;
+            while (cause instanceof CompletionException && cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            if (cause instanceof PlayerStateException playerFailure) {
+                return playerFailure.getCode();
+            }
+            return fallback;
         }
     }
 }

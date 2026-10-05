@@ -48,6 +48,8 @@ AceLib 的 reload 是函式庫內部生命週期操作，不是 Bukkit `/reload`
 
 因此 consumer 應重新讀取 `provider.api()`，不要比較物件是否相同，也不要自行推斷 reload 結果。
 
+成功 reload 後舊的 world／GUI service 實例已 shutdown（操作回 `SHUTDOWN`），舊的 listener 已解除註冊；在線玩家的資料 session 已在新 player 服務重建。繼續持有舊實例只會讀到停用語意，一律重新讀取 `provider.api()` 再使用。
+
 ## 停用時
 
 AceLib 停用時會從 `ServicesManager` 移除 registration：

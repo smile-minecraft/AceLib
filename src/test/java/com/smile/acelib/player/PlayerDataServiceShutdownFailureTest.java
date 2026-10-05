@@ -103,10 +103,17 @@ class PlayerDataServiceShutdownFailureTest {
         service.markDirty(uuid);
 
         assertThrows(CompletionException.class, () -> service.onPlayerQuit(uuid).join());
+        // 保存失敗後 session 已 ENDED 並從 registry 移除（不再卡 UNLOADING）—
+        // 重試路徑為重登（dirty 合併取回）而非再次 quit。
+        assertTrue(service.getSession(uuid).isEmpty(),
+            "保存失敗後 session 不可殘留");
+        service.onPlayerJoin(uuid, "alice").join();
+        assertEquals("retain", service.getData(uuid).orElseThrow().get("important"),
+            "重登必須取回保存失敗的 dirty 資料");
         service.onPlayerQuit(uuid).join();
         service.shutdown();
 
-        assertEquals(2, saveCalls.get(), "shutdown must retry the dirty record removed from quit flow");
+        assertEquals(2, saveCalls.get(), "shutdown 前 quit 重試必須成功保存 dirty record");
         delegate.close();
     }
 
