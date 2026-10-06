@@ -2,6 +2,16 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.4.0-SNAPSHOT] - 開發中
+
+1.4.0-SNAPSHOT 為開發中的預覽版本，尚未發布：GitHub Release 尚未建立，JitPack 尚未提供此版本的公開座標。下游在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0-SNAPSHOT`。已發布版本的取得方式（JitPack `com.github.smile-minecraft:AceLib:v1.3.1`、v1.3.1 GitHub Release）維持不變，見下方 `1.3.1` 節。
+
+### 本階段內容（測試套件與測試 JAR）
+
+- 以 Gradle `java-test-fixtures` 在單一模組內交付下游單元測試輔助：可控制時鐘（`FakeClock`）、可控制排程與實體退休事件（`FakeSafeScheduler`）、GUI 與表單標準假實作（`FakeGuiService`／`FakeFormService`，可模擬過時回應、重複回應、關閉失敗）、Provider 缺席／停用／重新取得輔助（`FakeExternalIntegrationService`），以及真實作與假實作共用的服務契約測試。
+- 測試 JAR（`AceLib-<version>-test-fixtures.jar`）納入 Release workflow 的獨立選取與 SHA-256 完整性檢查；下游以座標加 `test-fixtures` 後綴引用（`testFixtures(...)` 寫法在 JitPack 解析不到）。
+- 開發版本三處（`build.gradle.kts`、`plugin.yml`、`AceLibVersion.java`）與本機 consumer 座標同步為 `1.4.0-SNAPSHOT`。
+
 ## [1.3.1] - 2026-10-06
 
 v1.3.1 是修補版，修正排程、資料、事件、冷卻、設定、世界、生命週期與玩家資料的已知缺陷；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.3.1`）取得。

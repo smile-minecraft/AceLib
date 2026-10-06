@@ -5,11 +5,12 @@
 
 plugins {
     java
+    `java-test-fixtures`
     `maven-publish`
 }
 
 group = "com.smile"
-version = "1.3.1"
+version = "1.4.0-SNAPSHOT"
 
 // Java 25 是 Paper 26.1+ 的最低需求；保留 toolchain 確保跨開發者一致。
 java {
@@ -130,6 +131,16 @@ dependencies {
     // MockBukkit 4.x 起改用新 groupId `org.mockbukkit.mockbukkit`，並依 paper-api
     // 版本區分子 artifact（mockbukkit-v26.1.2 內含 paper-api 26.1.2）。
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.1.2:4.113.1")
+
+    // 測試輔助 fixtures（下游單元測試用假實作與服務契約，需隨 test-fixtures jar 發布）：
+    // 只用公開 API＋Bukkit 型別，不依賴 MockBukkit／Mockito，確保下游輕量引用。
+    // 契約基底含 JUnit 註解，故 junit-jupiter 走 testFixturesApi（隨 variant 傳遞）；
+    // paper-api 供 FakeSafeScheduler／FakeGuiService 的 Player／Entity／Location
+    // 形狀，走 testFixturesImplementation（不進下游 compile classpath 亦可，
+    // 下游本就依賴 paper-api；此處僅為編譯 fixtures 所需）。
+    testFixturesApi(platform("org.junit:junit-bom:5.11.0"))
+    testFixturesApi("org.junit.jupiter:junit-jupiter")
+    testFixturesImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
 
 tasks.test {
@@ -230,7 +241,7 @@ publishing {
     }
 }
 
-// verifyPublication：在 publishToMavenLocal 之後檢查四類 artifact 是否產出，
+// verifyPublication：在 publishToMavenLocal 之後檢查五類 artifact 是否產出，
 // 並驗證 POM 座標與版本在三處來源（build.gradle.kts / plugin.yml / AceLibVersion.java）
 // 的一致性。此 task 不依賴任何外部 repository 或 secret。
 // 注意：組態期先將 repo 路徑 / 版本 / projectDir 擷取為可序列化區域變數，
@@ -247,7 +258,9 @@ val verifyPublication by tasks.registering {
             "acelib-$artifactVersion.jar",
             "acelib-$artifactVersion.pom",
             "acelib-$artifactVersion-sources.jar",
-            "acelib-$artifactVersion-javadoc.jar"
+            "acelib-$artifactVersion-javadoc.jar",
+            // java-test-fixtures 產出的下游測試 jar（classifier test-fixtures）。
+            "acelib-$artifactVersion-test-fixtures.jar"
         )
         val missing = expected.filter { !File(base, it).exists() }
         require(missing.isEmpty()) {
@@ -271,7 +284,7 @@ val verifyPublication by tasks.registering {
         require(versionJava.contains("VERSION = \"$artifactVersion\"")) { "AceLibVersion.java 版本與 build 不一致" }
 
         logger.lifecycle(
-            "verifyPublication: 座標 com.smile:acelib:$artifactVersion 四類 artifact 與版本一致性檢查通過"
+            "verifyPublication: 座標 com.smile:acelib:$artifactVersion 五類 artifact 與版本一致性檢查通過"
         )
     }
 }
@@ -381,7 +394,8 @@ val compatibilityMatrix by tasks.registering {
 
 // artifact gate 需要實際 jar（build/libs/AceLib-*.jar）；確保 test 在 jar 之後執行，
 // 避免 gate 因 jar 尚未產出而誤判。此為 build wiring，不影響 production code。
-tasks.test { dependsOn(tasks.jar) }
+// fixtures gate 同理需要 build/libs/AceLib-*-test-fixtures.jar，先執行 testFixturesJar。
+tasks.test { dependsOn(tasks.jar, tasks.named("testFixturesJar")) }
 
 val compatibilityCheck by tasks.registering {
     group = "verification"

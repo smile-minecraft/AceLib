@@ -4,7 +4,7 @@ English · [繁體中文](README.zh-TW.md)
 
 AceLib is a shared foundation library for Paper and Folia plugins. It provides safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, and diagnostics.
 
-The source version in this checkout is **1.3.1**. The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.3.1 GitHub Release provides a downloadable `AceLib-1.3.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.3.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.3.1`). See CHANGELOG for history.
+The source version in this checkout is **1.4.0-SNAPSHOT** (in development; no GitHub Release or public JitPack coordinate exists for it yet). The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.3.1 GitHub Release provides a downloadable `AceLib-1.3.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.3.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.4.0-SNAPSHOT`). See CHANGELOG for history.
 
 ## Supported Versions
 
@@ -30,13 +30,15 @@ dependencies {
 }
 ```
 
-This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag; the source version in this checkout is 1.3.1.
-To verify locally before relying on the released artifact, run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.1`). See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
+This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag; the source version in this checkout is 1.4.0-SNAPSHOT (in development).
+To verify locally before relying on the released artifact, run `./gradlew publishToMavenLocal`.
+The local development coordinate is `com.smile:acelib:1.4.0-SNAPSHOT`.
+See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
 
 ## Release status
 
 Version `1.3.1` is released: the `v1.3.1` GitHub Release provides the downloadable `AceLib-1.3.1.jar`, and the public JitPack coordinate above resolves to the `v1.3.1` tag.
-Contributors validating the current sources can run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.1`).
+Contributors validating the current sources can run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.4.0-SNAPSHOT`). The current `1.4.0-SNAPSHOT` sources are in development and have no GitHub Release or public JitPack coordinate yet.
 
 ## Configuring `plugin.yml`
 

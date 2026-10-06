@@ -4,7 +4,10 @@
 
 AceLib 是給 Paper 與 Folia 插件共用的基礎函式庫。它提供安全排程、執行緒上下文、設定、訊息、指令、事件、資料、玩家狀態、世界操作、GUI、物品、外部整合與診斷 API。
 
-此 checkout 的原始碼版本為 **1.3.1**。repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.3.1 的 GitHub Release 提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或仍可從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag；在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.1`）。詳情見 CHANGELOG。
+此 checkout 的原始碼版本為 **1.4.0-SNAPSHOT**（開發中；尚無對應的 GitHub Release 或公開 JitPack 座標）。
+
+repository 已公開；發布採 [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) 流程。v1.3.1 的 GitHub Release 提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或仍可從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得 server JAR。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag。
+在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.4.0-SNAPSHOT`）。詳情見 CHANGELOG。
 
 ## 支援版本
 
@@ -30,12 +33,12 @@ dependencies {
 }
 ```
 
-這個 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag；此 checkout 的原始碼版本為 1.3.1。在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.1`）。完整且可編譯的 Gradle 設定請看[快速開始](docs/consumer/quickstart.md)。
+這個 JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag；此 checkout 的原始碼版本為 1.4.0-SNAPSHOT（開發中）。在本機驗證請用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.4.0-SNAPSHOT`）。完整且可編譯的 Gradle 設定請看[快速開始](docs/consumer/quickstart.md)。
 
 ## 發布狀態
 
 `1.3.1` 已發布：`v1.3.1` GitHub Release 提供可下載的 `AceLib-1.3.1.jar`，上方的公開 JitPack 座標對應 `v1.3.1` tag。
-貢獻者驗證目前原始碼可用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.3.1`）。
+貢獻者驗證目前原始碼可用 `./gradlew publishToMavenLocal`（`com.smile:acelib:1.4.0-SNAPSHOT`）。目前的 `1.4.0-SNAPSHOT` 原始碼仍在開發中，尚未建立 GitHub Release，也沒有公開 JitPack 座標。
 
 ## 設定 `plugin.yml`
 

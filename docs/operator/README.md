@@ -3,7 +3,7 @@
 > 適合負責在 Paper 或 Folia 伺服器部署、啟動檢查與疑難排解的管理員。
 
 
-AceLib 1.3.1（此 checkout 的原始碼版本為 1.3.1）需要 Java 25，支援的 server 版本是 Paper 或 Folia 26.1.2 與 26.2。v1.3.1 的 GitHub Release 提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 自行建置；`git checkout v1.3.1` 對應 `v1.3.1` tag，JitPack `com.github.smile-minecraft:AceLib:v1.3.1` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
+AceLib 1.3.1（此 checkout 的原始碼版本為 1.4.0-SNAPSHOT，開發中、尚未發布；下列為已發布版本的部署方式）需要 Java 25，支援的 server 版本是 Paper 或 Folia 26.1.2 與 26.2。v1.3.1 的 GitHub Release 提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 自行建置；`git checkout v1.3.1` 對應 `v1.3.1` tag，JitPack `com.github.smile-minecraft:AceLib:v1.3.1` 為對應的發布座標，在本機驗證請直接用當前 checkout 建置或用 `publishToMavenLocal`。
 
 ## 目錄
 

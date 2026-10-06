@@ -76,11 +76,11 @@ ChunkLand 和 Ace-Economy 各寫了一份 GUI 假實作，另外還有排程、�
 
 - [x] 確認 Gradle 的 test fixtures 產出的 jar 可以透過 JitPack 發布，下游能在測試時引用。行不通就回到[待決事項](#待決事項)重新決定發布方式。
 - [ ] 測試 jar 也附在 GitHub Release 上，發布 workflow 跟著調整。ChunkLand 是從 Release 下載 AceLib 的。
-- [ ] 文件寫明下游的引用方式：在 AceLib 的座標後面加上 `test-fixtures` 後綴。Gradle 的 `testFixtures(...)` 寫法在 JitPack 上解析不到。
-- [ ] 可控制的時鐘、排程器、實體退休事件。
-- [ ] GUI 與表單的標準假實作，能模擬過時回應、重複回應、關閉失敗。
-- [ ] Provider 缺席、停用、重新取得的測試輔助。
-- [ ] 一套服務契約測試，真實作和假實作都要通過。
+- [x] 文件寫明下游的引用方式：在 AceLib 的座標後面加上 `test-fixtures` 後綴。Gradle 的 `testFixtures(...)` 寫法在 JitPack 上解析不到。
+- [x] 可控制的時鐘、排程器、實體退休事件。
+- [x] GUI 與表單的標準假實作，能模擬過時回應、重複回應、關閉失敗。
+- [x] Provider 缺席、停用、重新取得的測試輔助。
+- [x] 一套服務契約測試，真實作和假實作都要通過。
 
 #### 任務完成語意與作用域
 

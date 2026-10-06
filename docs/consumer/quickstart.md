@@ -8,6 +8,7 @@
 ## 目錄
 
 - [1. 加入 Gradle dependency](#1-加入-gradle-dependency)
+- [1b. 在測試中使用測試輔助](#1b-在測試中使用測試輔助)
 - [2. 宣告 server dependency](#2-宣告-server-dependency)
 - [3. 取得 provider](#3-取得-provider)
 - [常見失敗](#常見失敗)
@@ -39,9 +40,25 @@ dependencies {
 }
 ```
 
-AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.3.1.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.3.1；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.3.1`）。
+AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.3.1.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.4.0-SNAPSHOT，開發中、尚未發布；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0-SNAPSHOT`）。
 
 若 Gradle 找不到 AceLib，先確認 repository URL 是 `https://jitpack.io`，座標的 group 是 `com.github.smile-minecraft`，版本包含 `v`：`v1.3.1`。
+
+## 1b. 在測試中使用測試輔助
+
+單元測試需要假時鐘、假排程或 GUI／表單假實作時，加上 test-fixtures 依賴（版本後綴寫法；`testFixtures(...)` 在 JitPack 解析不到）：
+
+```kotlin
+dependencies {
+    compileOnly("com.github.smile-minecraft:AceLib:v1.3.1")
+    testImplementation("com.github.smile-minecraft:AceLib:v1.3.1")
+    testImplementation("com.github.smile-minecraft:AceLib:9ac06a16d0:test-fixtures")
+}
+```
+
+後綴座標只提供 test-fixtures 單一檔案，main API 仍由 `compileOnly` 提供（測試以 `testImplementation` 同時取得 main 與 fixtures）。
+
+注意版本一致：`9ac06a16d0` 只是用來證明後綴寫法解析得到的已驗證座標，它的 jar 是可行性實驗產物（僅一個 throwaway 類別）；完整測試輔助要等 1.4.0 正式發布，屆時 main 與 fixtures 取同一版本（`v1.4.0`），不要長期混用不同版本。完整座標形式、失敗模擬對照與本機驗證方式請看[如何取得 AceLib](../reference/release-artifacts.md)。
 
 ## 2. 宣告 server dependency
 
@@ -131,7 +148,7 @@ API 物件存在，但服務目前不可用。停止使用 AceLib 服務，改�
 ./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
 ```
 
-該範例使用 `mavenLocal()` 與 `com.smile:acelib:1.3.1`，只用於驗證目前 checkout 的程式碼。一般 plugin 專案請使用本頁前面的 JitPack 座標。
+該範例使用 `mavenLocal()` 與 `com.smile:acelib:1.4.0-SNAPSHOT`（含 `com.smile:acelib:1.4.0-SNAPSHOT:test-fixtures` 測試輔助），只用於驗證目前 checkout 的程式碼。一般 plugin 專案請使用本頁前面的 JitPack 座標。
 
 ## 相關頁面
 

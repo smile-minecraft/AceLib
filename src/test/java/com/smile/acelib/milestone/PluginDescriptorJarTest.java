@@ -38,8 +38,12 @@ class PluginDescriptorJarTest {
         // `sources` / `javadoc` 的 jar，與 runtime plugin jar 共存於 build/libs/。
         // filter 必須排除這兩個 classifier，否則會誤把 auxiliary jar 當成
         // runtime plugin jar。
+        // `java-test-fixtures` 另產出 classifier 為 `test-fixtures` 的 jar
+        // （下游單元測試用），同樣排除在 runtime 候選外（與 release workflow
+        // 及 ArtifactCompatibilityGateTest 的選取規則一致）。
         private static final String SOURCES_CLASSIFIER_SUFFIX = "-sources.jar";
         private static final String JAVADOC_CLASSIFIER_SUFFIX = "-javadoc.jar";
+        private static final String TEST_FIXTURES_CLASSIFIER_SUFFIX = "-test-fixtures.jar";
 
     private static Path jarPath;
     private static String pluginYmlContent;
@@ -59,7 +63,8 @@ class PluginDescriptorJarTest {
                     return name.startsWith(PLUGIN_NAME)
                         && name.endsWith(".jar")
                         && !name.endsWith(SOURCES_CLASSIFIER_SUFFIX)
-                        && !name.endsWith(JAVADOC_CLASSIFIER_SUFFIX);
+                        && !name.endsWith(JAVADOC_CLASSIFIER_SUFFIX)
+                        && !name.endsWith(TEST_FIXTURES_CLASSIFIER_SUFFIX);
                 })
                 .toList();
             assertEquals(1, jars.size(),

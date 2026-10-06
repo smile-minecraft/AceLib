@@ -239,6 +239,34 @@ class ArtifactCompatibilityGateTest {
     }
 
     @Test
+    @DisplayName("test-fixtures jar 存在且內含下游測試輔助（FakeClock／FakeSafeScheduler／契約）")
+    void fixturesJar_containsTestingHelpers() throws IOException {
+        Path jar = locateFixturesJar();
+        List<String> entries = new ArrayList<>();
+        try (JarFile jf = new JarFile(jar.toFile())) {
+            for (var e = jf.entries(); e.hasMoreElements(); ) {
+                entries.add(e.nextElement().getName());
+            }
+        }
+        for (String required : List.of(
+                "com/smile/acelib/testing/FakeClock.class",
+                "com/smile/acelib/testing/FakeSafeScheduler.class",
+                "com/smile/acelib/testing/FakeFormService.class",
+                "com/smile/acelib/testing/FakeExternalIntegrationService.class",
+                "com/smile/acelib/gui/FakeGuiService.class",
+                "com/smile/acelib/testing/contracts/GuiServiceContract.class",
+                "com/smile/acelib/testing/contracts/FormServiceContract.class",
+                "com/smile/acelib/testing/contracts/SafeSchedulerContract.class",
+                "com/smile/acelib/testing/contracts/ExternalIntegrationContract.class")) {
+            assertTrue(entries.contains(required),
+                "test-fixtures jar 缺少 " + required + "（單一模組必須完整交付）");
+        }
+        assertTrue(entries.stream().noneMatch(n ->
+                n.startsWith("org/bukkit/") || n.startsWith("io/papermc/")),
+            "test-fixtures jar 不得內含 server API class");
+    }
+
+    @Test
     @DisplayName("production 無 optional eager linkage（org.geysermc 僅允許出現在 external 套件）")
     void production_hasNoOptionalEagerLinkage() throws IOException {
         Path classesDir = productionClassesDir();
@@ -312,13 +340,224 @@ class ArtifactCompatibilityGateTest {
                     return name.startsWith("AceLib")
                         && name.endsWith(".jar")
                         && !name.endsWith("-sources.jar")
-                        && !name.endsWith("-javadoc.jar");
+                        && !name.endsWith("-javadoc.jar")
+                        && !name.endsWith("-test-fixtures.jar");
                 })
                 .toList();
         }
+        List<String> names = jars.stream()
+            .map(p -> p.getFileName().toString())
+            .sorted()
+            .toList();
+        // 與 release workflow 相同的 canonical 拒絕規則（經 selectRuntimeCandidate
+        // 鏡像驗證）：零個、多個、錯名都 fail-closed。
+        String expected = runtimeJarName();
+        assertEquals(expected, selectRuntimeCandidate(names, expected),
+            "build/libs 必須恰好有一個 canonical AceLib runtime jar");
         assertEquals(1, jars.size(),
             "build/libs 必須恰好有一個 AceLib runtime jar（已排除 classifier artifact）；實際: " + jars);
         return jars.get(0);
+    }
+
+    /**
+     * 定位 canonical test-fixtures jar（下游單元測試依賴）。
+     *
+     * <p>fail-closed：缺檔、多檔、錯名都失敗（經 {@link #selectFixturesCandidate}
+     * 鏡像驗證），確保單一模組確實產出可發布的測試 jar。</p>
+     */
+    private static Path locateFixturesJar() throws IOException {
+        Path libs = projectRoot().resolve("build/libs");
+        assertTrue(Files.isDirectory(libs),
+            "找不到 build/libs 目錄：" + libs + "（test 應已先執行 testFixturesJar task）");
+        List<Path> jars;
+        try (Stream<Path> stream = Files.list(libs)) {
+            jars = stream
+                .filter(p -> p.getFileName().toString().endsWith("-test-fixtures.jar"))
+                .toList();
+        }
+        List<String> names = jars.stream()
+            .map(p -> p.getFileName().toString())
+            .sorted()
+            .toList();
+        String expected = fixturesJarName();
+        assertEquals(expected, selectFixturesCandidate(names, expected),
+            "build/libs 必須恰好有一個 canonical test-fixtures jar");
+        assertEquals(1, jars.size(),
+            "build/libs 必須恰好有一個 test-fixtures jar；實際: " + jars);
+        return jars.get(0);
+    }
+
+    /** 由版本三處推導 canonical runtime 檔名（與 release workflow 同規則）。 */
+    private static String runtimeJarName() throws IOException {
+        return "AceLib-" + projectVersion() + ".jar";
+    }
+
+    /** 由版本三處推導 canonical fixtures 檔名（與 release workflow 同規則）。 */
+    private static String fixturesJarName() throws IOException {
+        return "AceLib-" + projectVersion() + "-test-fixtures.jar";
+    }
+
+    /** 讀取 build.gradle.kts 的 version（版本三處之一）。 */
+    private static String projectVersion() throws IOException {
+        Path buildScript = projectRoot().resolve("build.gradle.kts");
+        assertTrue(Files.isRegularFile(buildScript), "找不到 build.gradle.kts");
+        String content = Files.readString(buildScript, StandardCharsets.UTF_8);
+        Matcher matcher = Pattern.compile("version\\s*=\\s*\"([^\"]+)\"")
+            .matcher(content);
+        assertTrue(matcher.find(), "build.gradle.kts 缺少 version 欄位");
+        return matcher.group(1);
+    }
+
+    // ---------------------------------------------------------------------
+    // fixtures 感知選取（runtime 與 -test-fixtures.jar 分離 canonical 選取）
+    // ---------------------------------------------------------------------
+    // release workflow 與本 gate 的 runtime 選取必須把 `-test-fixtures.jar`
+    // 排除在候選外，並另立 fixtures 專屬選取；兩者各自 canonical＋獨立 digest。
+    //
+    // 下列純函式與 workflow 的 shell 選取邏輯互為鏡像（同樣的三條拒絕規則：
+    // 零個、多個、唯一但名稱不符都 fail-closed）：
+
+    /**
+     * 從檔名清單選出 canonical runtime jar。
+     *
+     * <p>過濾規則與 release workflow 的 shell 選取完全一致：
+     * {@code AceLib-} 前綴、{@code .jar} 結尾，並排除 {@code *-sources.jar}、
+     * {@code *-javadoc.jar}、{@code *-test-fixtures.jar}。</p>
+     *
+     * @param names    候選檔名
+     * @param expected canonical 檔名（例如 {@code AceLib-1.4.0-SNAPSHOT.jar}）
+     * @return canonical runtime 檔名
+     * @throws IllegalArgumentException 零個、多個（過濾後仍多個）、
+     *                                  或唯一但名稱不符
+     */
+    static String selectRuntimeCandidate(List<String> names, String expected) {
+        List<String> candidates = names.stream()
+            .filter(name -> name.startsWith("AceLib-")
+                && name.endsWith(".jar")
+                && !name.endsWith("-sources.jar")
+                && !name.endsWith("-javadoc.jar")
+                && !name.endsWith("-test-fixtures.jar"))
+            .toList();
+        if (candidates.size() != 1) {
+            throw new IllegalArgumentException(
+                "runtime candidates 數量為 " + candidates.size() + "，期望恰好 1 個："
+                    + (candidates.isEmpty() ? "（無）" : candidates));
+        }
+        if (!candidates.get(0).equals(expected)) {
+            throw new IllegalArgumentException(
+                "runtime candidate " + candidates.get(0) + " 與 canonical 檔名 "
+                    + expected + " 不符");
+        }
+        return candidates.get(0);
+    }
+
+    /**
+     * 從檔名清單選出 canonical test-fixtures jar。
+     *
+     * <p>過濾規則與 release workflow 的 shell 選取完全一致：
+     * {@code AceLib-} 前綴、{@code -test-fixtures.jar} 結尾。</p>
+     *
+     * @param names    候選檔名
+     * @param expected canonical 檔名（例如
+     *                 {@code AceLib-1.4.0-SNAPSHOT-test-fixtures.jar}）
+     * @return canonical fixtures 檔名
+     * @throws IllegalArgumentException 零個、多個、或唯一但名稱不符
+     */
+    static String selectFixturesCandidate(List<String> names, String expected) {
+        List<String> candidates = names.stream()
+            .filter(name -> name.startsWith("AceLib-")
+                && name.endsWith("-test-fixtures.jar"))
+            .toList();
+        if (candidates.size() != 1) {
+            throw new IllegalArgumentException(
+                "fixtures candidates 數量為 " + candidates.size() + "，期望恰好 1 個："
+                    + (candidates.isEmpty() ? "（無）" : candidates));
+        }
+        if (!candidates.get(0).equals(expected)) {
+            throw new IllegalArgumentException(
+                "fixtures candidate " + candidates.get(0) + " 與 canonical 檔名 "
+                    + expected + " 不符");
+        }
+        return candidates.get(0);
+    }
+
+    @Test
+    @DisplayName("runtime 選取：同時含 runtime 與 -test-fixtures.jar 時仍恰好選出 runtime")
+    void runtimeSelection_ignoresTestFixturesJar() {
+        List<String> names = List.of(
+            "AceLib-1.4.0-SNAPSHOT.jar",
+            "AceLib-1.4.0-SNAPSHOT-test-fixtures.jar");
+        assertEquals("AceLib-1.4.0-SNAPSHOT.jar",
+            selectRuntimeCandidate(names, "AceLib-1.4.0-SNAPSHOT.jar"));
+    }
+
+    @Test
+    @DisplayName("runtime 選取：零個、多個、錯名候選都要 fail-closed")
+    void runtimeSelection_rejectsIllegalCandidates() {
+        String expected = "AceLib-1.4.0-SNAPSHOT.jar";
+        for (List<String> names : List.of(
+                List.<String>of(),
+                List.of("AceLib-1.4.0-SNAPSHOT.jar", "AceLib-1.4.0-SNAPSHOT-all.jar"),
+                List.of("AceLib-1.4.0-SNAPSHOT-all.jar"))) {
+            try {
+                selectRuntimeCandidate(names, expected);
+                fail("應拒絕不合法 runtime 候選：" + names);
+            } catch (IllegalArgumentException expectedRejection) {
+                assertFalse(expectedRejection.getMessage().isBlank());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("fixtures 選取：恰好選出 -test-fixtures.jar；錯名／多檔／缺檔都要 fail-closed")
+    void fixturesSelection_selectsFixturesCandidate() {
+        String expected = "AceLib-1.4.0-SNAPSHOT-test-fixtures.jar";
+        assertEquals(expected, selectFixturesCandidate(List.of(expected), expected));
+        for (List<String> names : List.of(
+                List.<String>of(),
+                List.of("AceLib-1.4.0-SNAPSHOT.jar"),
+                List.of(expected, "AceLib-1.3.1-test-fixtures.jar"))) {
+            try {
+                selectFixturesCandidate(names, expected);
+                fail("應拒絕不合法 fixtures 候選：" + names);
+            } catch (IllegalArgumentException expectedRejection) {
+                assertFalse(expectedRejection.getMessage().isBlank());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("runtime 選取：sources／javadoc／無前綴干擾檔存在時仍選出 canonical runtime")
+    void runtimeSelection_ignoresNonRuntimeFiles() {
+        String expected = "AceLib-1.4.0-SNAPSHOT.jar";
+        assertEquals(expected, selectRuntimeCandidate(List.of(
+            expected,
+            "AceLib-1.4.0-SNAPSHOT-sources.jar",
+            "AceLib-1.4.0-SNAPSHOT-javadoc.jar",
+            "other-1.4.0-SNAPSHOT.jar"), expected));
+    }
+
+    @Test
+    @DisplayName("runtime 選取：只有 sources／javadoc 時視為零候選並拒絕")
+    void runtimeSelection_sourcesOnlyIsRejected() {
+        String expected = "AceLib-1.4.0-SNAPSHOT.jar";
+        try {
+            selectRuntimeCandidate(
+                List.of("AceLib-1.4.0-SNAPSHOT-sources.jar"), expected);
+            fail("只有 sources jar 時應視為零 runtime 候選並拒絕");
+        } catch (IllegalArgumentException expectedRejection) {
+            assertFalse(expectedRejection.getMessage().isBlank());
+        }
+    }
+
+    @Test
+    @DisplayName("fixtures 選取：runtime 與無前綴干擾檔存在時仍選出 canonical fixtures")
+    void fixturesSelection_ignoresNonFixturesFiles() {
+        String expected = "AceLib-1.4.0-SNAPSHOT-test-fixtures.jar";
+        assertEquals(expected, selectFixturesCandidate(List.of(
+            expected,
+            "AceLib-1.4.0-SNAPSHOT.jar",
+            "other-1.4.0-SNAPSHOT-test-fixtures.jar"), expected));
     }
 
     /** 在系統暫存區建立一個含單一 entry 的 jar，供 fixture 測試使用。 */
