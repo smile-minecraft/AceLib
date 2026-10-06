@@ -37,18 +37,18 @@ repositories {
 }
 
 dependencies {
-    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.3.0，
+    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.3.1，
     // 僅供貢獻者本地開發；公開安裝座標為 JitPack，見 consumer-plugin 註解）。
     // compileOnly：運行期由伺服器上的 AceLib plugin 提供（plugin.yml 另以
     // depend: [AceLib] 保證載入順序）。
-    compileOnly("com.smile:acelib:1.3.0")
+    compileOnly("com.smile:acelib:1.3.1")
     // Paper/Folia API 由伺服器 runtime 提供，編譯期只需要 API 面。
     // paper-api 的 POM 會把 adventure-api / adventure-text-minimessage 以
     // compileOnly 形式帶入，因此本探針可直接使用 net.kyori.adventure.text.* 建構案例。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 
     // 測試需要 FormSpec / FormText 型別與 Component 型別進入 runtime classpath。
-    testImplementation("com.smile:acelib:1.3.0")
+    testImplementation("com.smile:acelib:1.3.1")
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

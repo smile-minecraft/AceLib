@@ -26,11 +26,11 @@ import org.junit.jupiter.api.Test;
  * 與 docs/reference/runtime-compatibility-matrix.json 的 libraryVersion 必須四個來源一致，
  * 且矩陣必須記錄已驗證的 SUPPORTED runtime。
  *
- * <p>此測試是 TDD 的 Red→Green 錨點：在版本號尚未同步至 1.3.0 前會失敗。</p>
+ * <p>此測試是 TDD 的 Red→Green 錨點：在版本號尚未同步至 1.3.1 前會失敗。</p>
  */
 class VersionConsistencyTest {
 
-    private static final String EXPECTED_VERSION = "1.3.0";
+    private static final String EXPECTED_VERSION = "1.3.1";
     private static final Pattern BUILD_VERSION =
         Pattern.compile("^version[ \\t]*=[ \\t]*\"([^\"]+)\"[ \\t]*$", Pattern.MULTILINE);
     private static final Pattern PLUGIN_VERSION =

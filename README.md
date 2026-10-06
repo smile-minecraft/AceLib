@@ -4,7 +4,7 @@ English · [繁體中文](README.zh-TW.md)
 
 AceLib is a shared foundation library for Paper and Folia plugins. It provides safe scheduling, thread-context checks, configuration, messaging, commands, events, data, player state, world operations, GUI, items, external integrations, and diagnostics.
 
-The source version in this checkout is **1.3.0**. The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.3.0 GitHub Release provides a downloadable `AceLib-1.3.0.jar`, so operators can download it directly, or still build the server JAR from the `v1.3.0` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.0` corresponds to the `v1.3.0` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.3.0`). See CHANGELOG for history.
+The source version in this checkout is **1.3.1**. The GitHub repository is a **public repository**; releases use the [GitHub Release](https://github.com/smile-minecraft/AceLib/releases) process. The v1.3.1 GitHub Release provides a downloadable `AceLib-1.3.1.jar`, so operators can download it directly, or still build the server JAR from the `v1.3.1` tag with `./gradlew clean build --no-daemon --console=plain`. The JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag (local verification: `./gradlew publishToMavenLocal` with `com.smile:acelib:1.3.1`). See CHANGELOG for history.
 
 ## Supported Versions
 
@@ -26,17 +26,17 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.3.0")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.3.1")
 }
 ```
 
-This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.0` corresponds to the `v1.3.0` tag; the source version in this checkout is 1.3.0.
-To verify locally before relying on the released artifact, run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.0`). See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
+This JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` corresponds to the `v1.3.1` tag; the source version in this checkout is 1.3.1.
+To verify locally before relying on the released artifact, run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.1`). See [Quick Start](docs/consumer/quickstart.md) for a complete, compilable Gradle setup.
 
 ## Release status
 
-Version `1.3.0` is released: the `v1.3.0` GitHub Release provides the downloadable `AceLib-1.3.0.jar`, and the public JitPack coordinate above resolves to the `v1.3.0` tag.
-Contributors validating the current sources can run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.0`).
+Version `1.3.1` is released: the `v1.3.1` GitHub Release provides the downloadable `AceLib-1.3.1.jar`, and the public JitPack coordinate above resolves to the `v1.3.1` tag.
+Contributors validating the current sources can run `./gradlew publishToMavenLocal` (`com.smile:acelib:1.3.1`).
 
 ## Configuring `plugin.yml`
 
@@ -98,7 +98,7 @@ Do not depend directly on `AceLibPlugin`. If your plugin is long-running, see [P
 | Task group | Document | When to use it |
 | --- | --- | --- |
 | Getting started | [Quick Start](docs/consumer/quickstart.md) | First time integrating AceLib — set up Gradle, declare dependencies, and obtain `AceLibProvider` |
-| Getting started | [How AceLib is released](docs/reference/release-artifacts.md) | Verify the public repository status and copy the JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.0` |
+| Getting started | [How AceLib is released](docs/reference/release-artifacts.md) | Verify the public repository status and copy the JitPack coordinate `com.github.smile-minecraft:AceLib:v1.3.1` |
 | Daily integration | [Module Guide](docs/modules/) | Look up a specific subsystem — scheduler, context, config, messages, commands, events, data, player, world, GUI, items, externals |
 | Daily integration | [Provider Lifecycle](docs/consumer/provider-lifecycle.md) | Handle reload and disable correctly for long-running plugins |
 | Daily integration | [Error Codes](docs/reference/error-codes.md) | Look up `ACELIB-<AREA>-<CODE>` and the five required fields in each message |
@@ -109,7 +109,7 @@ Do not depend directly on `AceLibPlugin`. If your plugin is long-running, see [P
 
 ## Important Limitations
 
-- The v1.3.0 GitHub Release includes a downloadable `AceLib-1.3.0.jar`. Operators can download it directly, or [build from source](docs/operator/README.md) at the `v1.3.0` tag with `./gradlew clean build --no-daemon --console=plain`.
+- The v1.3.1 GitHub Release includes a downloadable `AceLib-1.3.1.jar`. Operators can download it directly, or [build from source](docs/operator/README.md) at the `v1.3.1` tag with `./gradlew clean build --no-daemon --console=plain`.
 - AceLib does not support Bukkit `/reload`. The reload documented in AceLib is the library's own lifecycle operation — not the same as `/reload`.
 - MockBukkit tests cannot replace real region-scheduler verification on a Folia server.
 - External errors in logs use the `ACELIB-<AREA>-<CODE>` format — see the [error codes](docs/reference/error-codes.md).

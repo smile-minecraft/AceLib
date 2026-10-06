@@ -7,51 +7,51 @@
 
 ## 插件開發者：從 JitPack 取得 API
 
-Gradle repository 是 `https://jitpack.io`，`compileOnly` 座標是 `com.github.smile-minecraft:AceLib:v1.3.0`（此 checkout 的原始碼版本為 1.3.0；該座標對應 `v1.3.0` tag，在本機驗證請用 `publishToMavenLocal` 搭配 `com.smile:acelib:1.3.0`）。可直接複製的完整設定與 Paper API dependency 請看[快速開始](../consumer/quickstart.md)。
+Gradle repository 是 `https://jitpack.io`，`compileOnly` 座標是 `com.github.smile-minecraft:AceLib:v1.3.1`（此 checkout 的原始碼版本為 1.3.1；該座標對應 `v1.3.1` tag，在本機驗證請用 `publishToMavenLocal` 搭配 `com.smile:acelib:1.3.1`）。可直接複製的完整設定與 Paper API dependency 請看[快速開始](../consumer/quickstart.md)。
 
-JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.0` 對應 `v1.3.0` tag，提供編譯用 API；其 artifact 命名如下：
+JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag，提供編譯用 API；其 artifact 命名如下：
 
-- `AceLib-v1.3.0.jar`
-- `AceLib-v1.3.0-sources.jar`
-- `AceLib-v1.3.0-javadoc.jar`
+- `AceLib-v1.3.1.jar`
+- `AceLib-v1.3.1-sources.jar`
+- `AceLib-v1.3.1-javadoc.jar`
 
-主 JAR 包含 `AceLibApi`、`AceLibApi.AceLibProvider` 與 `AceLibVersion`。POM 座標為 `com.github.smile-minecraft:AceLib:v1.3.0`（對應 v1.3.0 Git tag），沒有 transitive dependencies；Gradle module metadata 要求 Java 25。
+主 JAR 包含 `AceLibApi`、`AceLibApi.AceLibProvider` 與 `AceLibVersion`。POM 座標為 `com.github.smile-minecraft:AceLib:v1.3.1`（對應 v1.3.1 Git tag），沒有 transitive dependencies；Gradle module metadata 要求 Java 25。
 
 JitPack 舊的建置紀錄可能與目前可下載檔案不同，請以本頁座標與實際解析結果為準。
 
 ## 伺服器管理員：取得 plugin JAR
 
-GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 的 v1.3.0 Release 提供可直接放入 `plugins/` 的 runtime asset：
+GitHub repository [`smile-minecraft/AceLib`](https://github.com/smile-minecraft/AceLib) 的 v1.3.1 Release 提供可直接放入 `plugins/` 的 runtime asset：
 
 ```text
-https://github.com/smile-minecraft/AceLib/releases/download/v1.3.0/AceLib-1.3.0.jar
+https://github.com/smile-minecraft/AceLib/releases/download/v1.3.1/AceLib-1.3.1.jar
 ```
 
 下載後請驗證 SHA-256：
 
 ```bash
-shasum -a 256 AceLib-1.3.0.jar
+shasum -a 256 AceLib-1.3.1.jar
 ```
 
-預期值為（v1.3.0 GitHub Release 資產 `AceLib-1.3.0.jar` 的 SHA-256；與 Release 資產頁公告值一致）：
+預期值為（以 v1.3.1 GitHub Release 資產頁公告的 SHA-256 為準；實際值於 Release 建立後補上）：
 
 ```text
-363871a3f38081105603243e0996946bf4f7bd3181cdd47d66ae13fc3b097f8d
+（待補：填入已發布 `AceLib-1.3.1.jar` 的實際 SHA-256）
 ```
 
-不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.3.0` 對應 v1.3.0 tag）：
+不要把 `-sources.jar` 或 `-javadoc.jar` 放進 server。若 Release asset 暫時無法取得，才 checkout 對應版本後從原始碼建置（`git checkout v1.3.1` 對應 v1.3.1 tag）：
 
 ```bash
 git clone https://github.com/smile-minecraft/AceLib.git
 cd AceLib
-git checkout v1.3.0  # v1.3.0 tag
+git checkout v1.3.1  # v1.3.1 tag
 ./gradlew clean build --no-daemon --console=plain
 ```
 
 成功後使用：
 
 ```text
-build/libs/AceLib-1.3.0.jar
+build/libs/AceLib-1.3.1.jar
 ```
 
 完整步驟請看[伺服器管理員指南](../operator/README.md)。
@@ -66,7 +66,7 @@ Git tag `v1.0.0` 指向 commit `cbf4a80f69c83bf3095258b42321c5b6b359f8cf`。<!--
 ./gradlew publishToMavenLocal
 ```
 
-這會在本機提供 `com.smile:acelib:1.3.0`。它不是 Maven Central 座標，也不應作為一般 plugin 開發者的安裝方式。
+這會在本機提供 `com.smile:acelib:1.3.1`。它不是 Maven Central 座標，也不應作為一般 plugin 開發者的安裝方式。
 
 ## 相關頁面
 

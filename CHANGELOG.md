@@ -2,6 +2,28 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.3.1] - 2026-10-06
+
+v1.3.1 是修補版，修正排程、資料、事件、冷卻、設定、世界、生命週期與玩家資料的已知缺陷；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.3.1`）取得。
+
+### 修補內容
+
+- 排程：轉發平台任務 handle，取消與實體退休通知真正生效；一次性任務即時解除追蹤；位置排程只讀取載入狀態，未載入時記 `ACELIB-SCHED-004`；停用與派送競態下晚回的 handle 仍會取消。
+- 資料：巢狀 `remove` 走訪修正；含 `null` 的資料可正常快照存檔；JSON store 關閉時寫入失敗留下紀錄；遷移完整取代舊內容；寫入失敗清理暫存檔（清理失敗掛 suppressed）；migration 在巢狀節點隔離寫入；`getRecord` 對空白路徑回報 `ACELIB-DATA-003`；暫存檔在取代前先強制落盤；JDBC store 主鍵改用雜湊，舊表於初始化時升級。
+- 事件：父類事件註冊能收到子類事件；同一型別重複註冊不再重複觸發。
+- 冷卻：並行呼叫原子化；過期紀錄可清理。
+- 設定與語系：reload 失敗記錄；設定檔寫入原子化；設定檔版本較新時拒絕降版；缺訊息 key 只警告一次；不存在的語系檔不再每次讀磁碟。
+- 世界：鄰近實體查詢改用範圍 API；未實作的效果明確回報不支援。
+- 生命週期與上下文：reload 先解除舊 GUI／世界服務與 listener 再重建；`SafeExecutor` 共用 plugin 排程器。
+- 玩家資料：reload 後為線上玩家補建 session；載入與保存失敗記錄錯誤碼；快速重連與保存失敗後可重建 session；停用時批次寫回後再一次性保存。
+- GUI：確認操作的回呼在離開鎖後執行，並行 confirm／cancel 不再被回呼阻塞。
+
+### 版本與限制
+
+- API 為加法性變更：新增 `PlayerCooldownService#pruneExpired()` 與 `CooldownTracker#pruneExpired()`（冷卻過期清理）；未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步。
+- API surface 文件調整：改為宣告公開 API 得於版本之間變更；不再使用 v1 永久相容的表述（見 `docs/reference/api-surface.md`）。
+- 本版修補經真實 MySQL 8.4 與 MariaDB 11.4 驗證資料層；Folia 26.2-7 與 Paper 26.2-120 完成實機確認。
+
 ## [1.3.0] - 2026-09-28
 
 v1.3.0 以 GitHub Release 發布，提供可下載的 `AceLib-1.3.0.jar`；管理員可直接下載，或從 `v1.3.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者如需驗證目前原始碼，請用 `./gradlew publishToMavenLocal` 取得本機座標 `com.smile:acelib:1.3.0`。
