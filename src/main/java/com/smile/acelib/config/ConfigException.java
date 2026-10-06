@@ -13,6 +13,7 @@ import java.util.Objects;
  *   <li>{@code ACELIB-CFG-004}：設定遷移失敗</li>
  *   <li>{@code ACELIB-CFG-005}：必填欄位缺失（不允許重載）</li>
  *   <li>{@code ACELIB-CFG-006}：磁碟上的設定版本比當前版本新（拒絕降版覆寫）</li>
+ *   <li>{@code ACELIB-CFG-007}：設定綁定失敗（型別／範圍／列舉／缺失，帶完整欄位路徑）</li>
  *   <li>{@code ACELIB-LANG-001}：訊息 key 缺失（記錄 warning，不中斷）</li>
  *   <li>{@code ACELIB-LANG-002}：語言檔格式錯誤或無法寫入</li>
  *   <li>{@code ACELIB-LANG-003}：語言檔不存在（記錄 warning 並負向快取）</li>

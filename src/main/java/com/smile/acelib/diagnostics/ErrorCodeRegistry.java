@@ -74,6 +74,8 @@ public final class ErrorCodeRegistry {
             "必填欄位缺失"));
         m.put("ACELIB-CFG-006", new ErrorCodeInfo(ErrorCategory.CONFIG,
             "磁碟上的設定版本比當前版本新，已拒絕降版覆寫"));
+        m.put("ACELIB-CFG-007", new ErrorCodeInfo(ErrorCategory.CONFIG,
+            "設定綁定失敗（型別／範圍／列舉／缺失，帶完整欄位路徑）"));
         // LANG
         m.put("ACELIB-LANG-001", new ErrorCodeInfo(ErrorCategory.LANGUAGE,
             "訊息 key 缺失"));

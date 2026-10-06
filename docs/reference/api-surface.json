@@ -275,6 +275,33 @@
       "mainCallers": "AceLibPlugin；消費者。"
     },
     {
+      "fqcn": "com.smile.acelib.config.ConfigBindingException",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigBindingException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "設定綁定例外（ACELIB-CFG-007），攜帶完整欄位路徑；v1 契約。",
+      "mainCallers": "ConfigBinder；ConfigManager.bind。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigBinder",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigBinder",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "快照到 record／一般類別的綁定器（型別／範圍／列舉驗證，註解以 nested 承載）；v1 穩定。",
+      "mainCallers": "ConfigManager.bind；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigChangeListener",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigChangeListener",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "設定檔監看回呼（自動重載成功／無效診斷）；v1 穩定。",
+      "mainCallers": "ConfigManager.startWatching；消費者實作。"
+    },
+    {
       "fqcn": "com.smile.acelib.config.ConfigException",
       "package": "com.smile.acelib.config",
       "simpleName": "ConfigException",
@@ -309,6 +336,15 @@
       "classification": "Supported",
       "reason": "配置結構描述值型別；v1 穩定。",
       "mainCallers": "AceLibConfig.withConfigSchema；ConfigManager。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigSnapshot",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigSnapshot",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "設定不可變快照值型別（深層凍結，同輪一致）；v1 穩定。",
+      "mainCallers": "ConfigManager.snapshot；ConfigBinder；ConfigChangeListener。"
     },
     {
       "fqcn": "com.smile.acelib.config.ConfigVersion",
@@ -354,6 +390,15 @@
       "classification": "Supported",
       "reason": "配置遷移結果值型別；v1 穩定。",
       "mainCallers": "ConfigMigration；MigrationChain。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.StartupResult",
+      "package": "com.smile.acelib.config",
+      "simpleName": "StartupResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "設定啟動四分類結果值型別（分類＋快照＋診斷；狀態以 nested 列舉承載）；v1 穩定。",
+      "mainCallers": "ConfigManager.startup；消費者。"
     },
     {
       "fqcn": "com.smile.acelib.context.ContextCheckResult",

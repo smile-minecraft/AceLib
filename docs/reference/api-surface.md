@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：155 個 public 頂層型別
-- Supported：123
+- 總數：160 個 public 頂層型別
+- Supported：128
 - SPI：12
 - Internal：20
 
@@ -67,15 +67,20 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.config.AceLibConfig` | class | Supported | 配置綁定工廠（bind/get/unbind）與 ConfigManager/LangManager 存取；v1 穩定入口。 |  | AceLibPlugin；消費者。 |
+| `com.smile.acelib.config.ConfigBindingException` | class | Supported | 設定綁定例外（ACELIB-CFG-007），攜帶完整欄位路徑；v1 契約。 |  | ConfigBinder；ConfigManager.bind。 |
+| `com.smile.acelib.config.ConfigBinder` | class | Supported | 快照到 record／一般類別的綁定器（型別／範圍／列舉驗證，註解以 nested 承載）；v1 穩定。 |  | ConfigManager.bind；消費者。 |
+| `com.smile.acelib.config.ConfigChangeListener` | interface | Supported | 設定檔監看回呼（自動重載成功／無效診斷）；v1 穩定。 |  | ConfigManager.startWatching；消費者實作。 |
 | `com.smile.acelib.config.ConfigException` | class | Supported | 配置載入/遷移例外；v1 契約。 |  | ConfigManager；ConfigMigration。 |
 | `com.smile.acelib.config.ConfigManager` | class | Supported | 配置管理服務（載入/遷移/儲存）；v1 穩定。 |  | AceLibConfig；AceLibPlugin。 |
 | `com.smile.acelib.config.ConfigMigration` | interface | SPI | 消費者實作的配置遷移介面（extension point）；寫明冪等與相容性責任。 |  | ConfigManager.registerMigration；消費者實作。 |
 | `com.smile.acelib.config.ConfigSchema` | record | Supported | 配置結構描述值型別；v1 穩定。 |  | AceLibConfig.withConfigSchema；ConfigManager。 |
+| `com.smile.acelib.config.ConfigSnapshot` | class | Supported | 設定不可變快照值型別（深層凍結，同輪一致）；v1 穩定。 |  | ConfigManager.snapshot；ConfigBinder；ConfigChangeListener。 |
 | `com.smile.acelib.config.ConfigVersion` | record | Supported | 配置版本值型別（major.minor），可比較；v1 凍結結構。 |  | ConfigSchema；ConfigManager；ConfigMigration。 |
 | `com.smile.acelib.config.FieldSpec` | record | Supported | 配置欄位規格值型別；v1 穩定。 |  | ConfigSchema。 |
 | `com.smile.acelib.config.LangManager` | class | Supported | 多語系訊息管理服務；v1 穩定。 |  | AceLibConfig；MessageService。 |
 | `com.smile.acelib.config.MigrationChain` | class | Supported | 配置遷移鏈值型別，串接 ConfigMigration；v1 穩定。 |  | ConfigManager；ConfigMigration。 |
 | `com.smile.acelib.config.MigrationResult` | record | Supported | 配置遷移結果值型別；v1 穩定。 |  | ConfigMigration；MigrationChain。 |
+| `com.smile.acelib.config.StartupResult` | record | Supported | 設定啟動四分類結果值型別（分類＋快照＋診斷；狀態以 nested 列舉承載）；v1 穩定。 |  | ConfigManager.startup；消費者。 |
 
 ### com.smile.acelib.context
 

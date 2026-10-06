@@ -175,4 +175,15 @@ public final class AceLibConfig {
             langManager.reload();
         }
     }
+
+    /**
+     * 釋放本 facade 持有的資源（目前即 config 的檔案監看器）。
+     *
+     * <p>冪等，可重複呼叫。plugin disable 時應呼叫，避免監看執行緒殘留。</p>
+     */
+    public void close() {
+        if (configManager != null) {
+            configManager.close();
+        }
+    }
 }

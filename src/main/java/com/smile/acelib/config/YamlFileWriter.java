@@ -110,6 +110,20 @@ final class YamlFileWriter {
     }
 
     /**
+     * 把已渲染好的文字內容原子寫入目標檔（保註解合併後的落盤走這條，
+     * 不再經 {@code YamlConfiguration} 重新序列化）。
+     *
+     * @param text      完整檔案文字；不可為 null
+     * @param target    目標檔案；不可為 null
+     * @param errorCode 失敗時使用的 {@code ACELIB-<AREA>-<CODE>}
+     * @param label     失敗訊息中的檔案種類描述
+     * @throws ConfigException 當建立 temp、寫入或 move 失敗
+     */
+    static void writeTextAtomically(String text, Path target, String errorCode, String label) {
+        writeTextAtomically(text, target, errorCode, label, FileOps.defaultOps());
+    }
+
+    /**
      * 同上，但檔案操作可注入（測試接縫）。
      *
      * @param ops 檔案操作實作；正式環境傳 {@link FileOps#defaultOps()}
@@ -125,6 +139,19 @@ final class YamlFileWriter {
             text = config.saveToString();
         } catch (RuntimeException ex) {
             throw writeFailure(target, errorCode, label, "序列化失敗", ex);
+        }
+        writeTextAtomically(text, target, errorCode, label, ops);
+    }
+
+    /**
+     * 同上，但寫入已渲染好的文字（測試接縫）。
+     *
+     * @param ops 檔案操作實作；正式環境傳 {@link FileOps#defaultOps()}
+     */
+    static void writeTextAtomically(String text, Path target, String errorCode, String label,
+                                    FileOps ops) {
+        if (text == null) {
+            throw new ConfigException(errorCode, "寫入內容不可為 null：" + target);
         }
 
         Path parent = target.toAbsolutePath().getParent();
@@ -153,6 +180,11 @@ final class YamlFileWriter {
             throw failure;
         }
 
+        // 替換前先記下目標檔的權限：temp 搬過去後 inode 換新，權限會變成
+        // temp 建立時的預設值；成功後盡力還原（最佳努力，失敗不影響寫入成功）。
+        java.util.Set<java.nio.file.attribute.PosixFilePermission> previousPermissions =
+            readPosixPermissions(target);
+
         try {
             ops.move(tmp, target);
         } catch (IOException ex) {
@@ -160,6 +192,38 @@ final class YamlFileWriter {
             ConfigException failure = writeFailure(target, errorCode, label, "無法把 temp 檔移到目標位置", ex);
             deleteQuietly(tmp, failure, ops);
             throw failure;
+        }
+
+        restorePosixPermissions(target, previousPermissions);
+    }
+
+    /**
+     * 讀取目標檔既有 POSIX 權限；檔案不存在或檔案系統不支援時回傳 null
+     *（呼叫端據此跳過還原，不視為錯誤）。
+     */
+    private static java.util.Set<java.nio.file.attribute.PosixFilePermission> readPosixPermissions(
+            Path target) {
+        try {
+            return Files.getPosixFilePermissions(target);
+        } catch (UnsupportedOperationException | IOException | SecurityException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 盡力把目標檔權限還原為替換前的值；還原失敗靜默略過
+     *（寫入本身已成功，不因權限還原把成功翻成失敗）。
+     */
+    private static void restorePosixPermissions(
+            Path target,
+            java.util.Set<java.nio.file.attribute.PosixFilePermission> previousPermissions) {
+        if (previousPermissions == null) {
+            return;
+        }
+        try {
+            Files.setPosixFilePermissions(target, previousPermissions);
+        } catch (UnsupportedOperationException | IOException | SecurityException ignored) {
+            // 最佳努力：還原不了就維持 temp 預設權限，文件據實說明
         }
     }
 

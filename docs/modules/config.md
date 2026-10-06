@@ -5,7 +5,7 @@
 
 `ConfigManager` 管理 YAML 設定、預設值、版本與遷移。它由 consumer 自行建立，不是從 `AceLibApi` 取得。
 
-## 建立並載入
+## 建立並啟動
 
 ```java
 ConfigSchema schema = new ConfigSchema(
@@ -21,10 +21,22 @@ ConfigManager config = new ConfigManager(
     schema,
     new ConfigVersion(1, 0));
 
-config.load();
+StartupResult result = config.startup();
 ```
 
-檔案不存在時，`load()` 會依 schema 建立預設設定。`load()` 可重複呼叫；第一次成功後，後續呼叫不會再次載入。
+`startup()` 把「檔案不存在」拆成四類：`FRESH_INSTALL`（首次安裝，剛生成預設檔）、`LOADED`（有效設定）、`CORRUPT`（損壞設定，原檔不動）、`MISSING_AFTER_USE`（用過之後被刪，已用最後成功副本或預設值重建）。識別依據是安裝狀態 sidecar（只在驗證成功後寫入），不是檔案是否存在。損壞時禁止哪些操作由下游依 `result.status()` 與 `result.snapshot()`（是否為 null）自行決定。
+
+損壞時快照依序取用：最後驗證成功副本 → 呼叫端指定的保守後備 → 無可用時為 null（診斷帶 `ACELIB-CFG-003`）：
+
+```java
+YamlConfiguration fallback = new YamlConfiguration();
+fallback.set("locale", "zh_TW");
+StartupResult result = config.startup(fallback);
+```
+
+使用後缺檔的重建同樣受版本政策約束：最後成功副本比當前版本新時拒絕還原（`ACELIB-CFG-006`），副本不動，改用預設值重建。
+
+`load()` 保留舊語意（損壞時直接拋 `ConfigException`）；需要分類或損壞時繼續跑請用 `startup()`。`load()` 可重複呼叫，每次都會重新驗證並寫回。
 
 ## 讀寫與重載
 
@@ -38,9 +50,62 @@ boolean reloaded = config.reload();
 
 必須先 `load()` 才能 `set()` 或 `save()`。`reload()` 失敗時會保留舊值，不會用部分讀取的內容覆寫目前設定。
 
-成功的 `reload()` 會把補齊欄位、執行遷移並收斂版本之後的內容重新序列化回寫磁碟；即使磁碟上的版本與當前版本相同、內容其實沒有變動，一樣會寫回。`load()` 走的是同一條路徑，兩邊行為一致。
+成功的 `reload()` 會把補齊欄位、執行遷移並收斂版本之後的內容做保註解合併寫回磁碟；即使磁碟上的版本與當前版本相同、內容其實沒有變動，一樣會寫回。`load()` 走的是同一條路徑，兩邊行為一致。
 
-> **設定檔裡的註解不會保留（目前實作）**：解析後的設定只保留鍵與值，回寫時是從這些值重新輸出一份新的 YAML，原檔的註解不會寫回去。管理員寫在設定檔裡的說明文字，會在成功的 `load()` 或 `reload()` 回寫之後消失（版本較新被拒絕、或替換開始前的失敗不動目標檔；取代開始後的保證見下一節「原子寫入與暫存檔清理」）；需要長期存在的說明應放在文件或 schema 的欄位說明，不要只寫在設定檔註解裡。
+## 不可變快照
+
+整份設定驗證通過後一次發布 `ConfigSnapshot`，同輪操作（`get`／`set`／`save`）固定用同一個實例，只有 `load`／`reload`／`startup` 成功才換新實例。快照深層不可變，任何修改都會拋 `UnsupportedOperationException`；`reload` 失敗保留舊快照實例。
+
+```java
+ConfigSnapshot snapshot = config.snapshot();
+String locale = snapshot.getString("locale", "zh_TW");
+```
+
+## 型別綁定
+
+`ConfigBinder.bind` 把快照綁定到 record 或一般類別（無參建構＋欄位注入），載入時驗證型別、數值範圍與列舉值，失敗拋 `ACELIB-CFG-007` 並帶完整欄位路徑：
+
+```java
+public record ServerSettings(
+    @ConfigBinder.ConfigKey("server.host") String host,
+    @ConfigBinder.ConfigKey("server.port")
+    @ConfigBinder.ConfigRange(min = 1, max = 65535) int port,
+    @ConfigBinder.ConfigKey("server.mode") Mode mode) {}
+
+ServerSettings settings = config.bind(ServerSettings.class);
+```
+
+不寫 `@ConfigKey` 時以 component／欄位名為路徑；含點的 `@ConfigKey` 視為從根起的絕對路徑。缺失語意：缺失的基本型別報錯，缺失的參考型別（`String`／`Integer`／列舉／`List`／巢狀型別）為 null，由呼叫端決定是否接受；`int`／`long` 嚴格轉換（小數、NaN／無限大、超出範圍一律報錯，不靜默截斷或溢位）；`List` 元素逐個轉字串，不做元素型別檢查，null 元素保留為 null；列舉按名稱精確比對（大小寫敏感），失敗訊息列出全部合法選項。
+
+## 檔案監看
+
+```java
+config.startWatching(new ConfigChangeListener() {
+    @Override public void onReload(ConfigSnapshot snapshot) { /* 新快照已發布 */ }
+    @Override public void onInvalidReload(String code, String detail) { /* 舊快照保留 */ }
+});
+// ...
+config.close(); // plugin disable 時呼叫，不殘留監看執行緒
+```
+
+外部修改且驗證通過時自動重載；新內容無效時保留舊快照、原檔不動，並以錯誤碼診斷。自己的寫回不會觸發重載迴圈（內容雜湊比對＋去抖動）。`reload()` 不影響監看；重複 `startWatching` 會先停掉舊監看器，不洩漏執行緒。監看執行緒為 daemon，不擋 JVM 退出；回呼內不得修改遊戲物件。
+
+> **平台延遲差異**：JDK 的 `WatchService` 在 macOS 上以輪詢實作（靈敏度分級的設計即為此而來，預設約 10 秒），外部修改的觀測可能延遲數秒；Linux（inotify）近即時。去抖動（200ms）是事件到達後才起算，不含平台本身的觀測延遲。
+
+> **併發寫入互斥**：`load`／`reload`／`save`／`startup`／`set` 以 manager 實例為鎖互斥，監看執行緒的重載與主執行緒的寫入不會併發落盤。監看回呼在鎖外執行，回呼內再呼叫寫入方法不會死鎖，但應避免耗時工作。
+
+## 寫回保留註解
+
+> **設定檔裡的註解會保留**：寫回走行級合併，只改值真的變了的行內值段、只補缺的 key（含 `setFieldDescription` 設定的欄位說明），其餘行逐位元保留。`set(path, null)` 明確刪除的 key 會真的刪行（含因此變空的祖先節頭），migration 移除的 key 同理；原檔有但新值沒有、且非明確刪除的 key 一律保留，不刪除使用者資料；整段變更的清單／節點內部註解不保留，前後註解保留。
+
+> **多行字串退回全量序列化**：值含多行字串（或合併後語意比對不一致）時，合併器退回全量序列化以保證語意正確，該次寫回的註解不保留。純量值（含單行字串、數字、布林）的寫回不受影響。
+
+```java
+config.setFieldDescription("maxPlayers", "同時在線人數上限");
+config.load(); // 缺的 maxPlayers 會連同說明一起補進檔案
+```
+
+版本較新被拒絕、或替換開始前的失敗不動目標檔；取代開始後的保證見下一節「原子寫入與暫存檔清理」。需要長期存在的說明仍建議放在文件或 schema 欄位說明，不要只依賴設定檔註解。
 
 ## 版本較新時拒絕降版
 
@@ -56,7 +121,7 @@ boolean reloaded = config.reload();
 
 取代時先要求 `ATOMIC_MOVE`；只有當底層明確回報不支援原子搬移時，才改用 `REPLACE_EXISTING` 重試一次。降級只是多一次機會，不是保證：取代本身仍可能失敗（此時拋 `ACELIB-CFG-001`；原子搬移的檔案系統上舊檔保留，降級取代的檔案系統上一旦取代開始後失敗，不保證舊檔完整），所以寫入流程**不保證在各平台都完成**，**原子性也不是保證**：只有在支援原子搬移的檔案系統上，取代才真的具備「要嘛整份換成新檔、要嘛完全不動」的性質。在只能降級的檔案系統上，取代是覆寫原項目，寫入期間目標檔可能短暫處於不完整狀態；這條限制無法從 API 層消除，只能靠選擇支援原子搬移的檔案系統來避免。
 
-> **目標檔的檔案權限可能改變（尚未實測）**：取代動作把新檔案掛到原來的路徑，因此檔案權限可能改為暫存檔建立時的權限，而不是保留目標檔原有的權限。目前沒有測試或實機觀察確認實際結果，也沒有測試涵蓋權限被改動後的後果；需要固定權限的環境應自行在部署後確認，或在檔案系統層設定預設權限。
+> **目標檔的檔案權限會盡力保留（已實測）**：取代前先記下目標檔的 POSIX 權限，成功後還原；還原失敗（非 POSIX 檔案系統、權限不足）時靜默維持 temp 檔預設權限，不把寫入成功翻成失敗。需要固定權限的環境仍應在部署後確認，或在檔案系統層設定預設權限。
 
 ## 遷移舊設定
 

@@ -19,11 +19,20 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - `TaskScope#pipeline` 把讀取、背景計算、回玩家／實體所在執行緒回覆串成單一流程（Folia 下回覆跟著跨區後的玩家）；任一階段失敗、取消或拒派即為整條流程的終態。
 
 ### 本階段內容（事件處理完成後的操作）
-
 - 延後傳送（`WorldService#teleportPlayerDeferred`）：排到事件處理後的 tick，在玩家所在執行緒傳送，完成時確認玩家真的到達目的地（同世界＋每軸誤差在容差內，預設 0.5 格、可覆寫）；平台回報成功但位置被還原時回報 `FAILED + ACELIB-WORLD-018`（診斷含期望與實際位置）。
 - 通用延後操作（`WorldService#deferForPlayer`）：同樣的延後方式可用在傳送以外的操作，終態語意重用排程作用域的 `TaskTicket`。
 - 新增錯誤碼 `ACELIB-WORLD-017`（延後派送無法安排）與 `ACELIB-WORLD-018`（到達確認失敗）。
 - 傳送後端改為真正的非同步呼叫（`Entity#teleportAsync`，`keepPassengers` 以 `RETAIN_PASSENGERS` 旗標表達）：移除過去永遠生效的同步 fallback；目標 chunk 未載入時改由平台非同步語意處理。呼叫端本就以 future 等待結果，無需改動。
+
+### 本階段內容（設定的啟動、快照與型別綁定）
+
+- 啟動四分類（`ConfigManager#startup`）：首次安裝、有效設定、損壞設定、使用後缺檔；識別依據是安裝狀態 sidecar（只在驗證成功後寫入），不是檔案是否存在。
+- 保留最後驗證成功副本（`.last-good`）；損壞時原檔逐位元不動，快照依序取用副本、呼叫端後備或 null（無可用時診斷帶 `ACELIB-CFG-003`，下游據此禁用操作）。
+- 整份驗證通過後一次發布不可變 `ConfigSnapshot`（深層凍結，同輪操作固定同一實例）。
+- 型別綁定（`ConfigBinder`）：record／一般類別綁定，型別、範圍、列舉在載入時驗證，失敗拋 `ACELIB-CFG-007` 並帶完整欄位路徑。
+- 檔案監看自動重載（`startWatching`）：無效新內容保留舊快照並診斷；自己的寫回不觸發迴圈；`reload` 不殺監看器，`close()` 徹底清理（daemon 執行緒）。
+- 寫回保留註解：行級合併，只改值變了的行、只補缺的 key（含欄位說明），其餘逐位元保留；原子替換後盡力還原 POSIX 權限（已實測）。
+- API 為加法性變更：新增 `StartupResult`、`ConfigSnapshot`、`ConfigBinder`（含 nested `ConfigKey`／`ConfigRange`）、`ConfigBindingException`、`ConfigChangeListener`，`ConfigManager`／`AceLibConfig` 新增方法；未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步。
 
 ## [1.3.1] - 2026-10-06
 

@@ -21,7 +21,15 @@
  *
  * <h2>主要型別</h2>
  * <ul>
- *   <li>{@link com.smile.acelib.config.ConfigManager}（Supported）— 載入 / 遷移 / 儲存</li>
+ *   <li>{@link com.smile.acelib.config.ConfigManager}（Supported）— 載入 / 遷移 / 儲存 /
+ *       啟動分類 / 快照發布 / 檔案監看</li>
+ *   <li>{@link com.smile.acelib.config.StartupResult}（Supported）— 啟動四分類結果值型別</li>
+ *   <li>{@link com.smile.acelib.config.ConfigSnapshot}（Supported）— 不可變快照值型別</li>
+ *   <li>{@link com.smile.acelib.config.ConfigBinder}（Supported）— record／類別綁定
+ *      （型別／範圍／列舉驗證）</li>
+ *   <li>{@link com.smile.acelib.config.ConfigBindingException}（Supported）— 綁定例外
+ *      （ACELIB-CFG-007，帶完整欄位路徑）</li>
+ *   <li>{@link com.smile.acelib.config.ConfigChangeListener}（Supported）— 監看回呼</li>
  *   <li>{@link com.smile.acelib.config.LangManager}（Supported）— 多語系訊息</li>
  *   <li>{@link com.smile.acelib.config.AceLibConfig}（Supported）— 設定綁定工廠</li>
  *   <li>{@link com.smile.acelib.config.ConfigSchema} /
@@ -38,7 +46,8 @@
  * <p>reload 時以新 schema 重新呼叫載入流程即可：AceLib 依
  * {@link com.smile.acelib.config.ConfigVersion} 比較既有版本，套用
  * {@link com.smile.acelib.config.MigrationChain} 中符合 from→to 的遷移；
- * 任一失敗回傳失敗結果且<strong>不覆寫既有設定</strong>。disable 不需特殊處理，
+ * 任一失敗回傳失敗結果且<strong>不覆寫既有設定</strong>。有啟動檔案監看時，
+ * disable 必須呼叫 {@link com.smile.acelib.config.ConfigManager#close()} 停止監看器；
  * 未儲存的變更由 caller 決定是否寫回。</p>
  *
  * <h2>執行緒安全</h2>

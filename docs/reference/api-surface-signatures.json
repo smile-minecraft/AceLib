@@ -241,6 +241,7 @@
     ],
     "com.smile.acelib.config.AceLibConfig": [
       "method bind(org.bukkit.plugin.java.JavaPlugin) : com.smile.acelib.config.AceLibConfig",
+      "method close() : void",
       "method get(org.bukkit.plugin.java.JavaPlugin) : com.smile.acelib.config.AceLibConfig",
       "method getConfig() : com.smile.acelib.config.ConfigManager",
       "method getLang() : com.smile.acelib.config.LangManager",
@@ -248,6 +249,17 @@
       "method unbind(org.bukkit.plugin.java.JavaPlugin) : void",
       "method withConfigSchema(com.smile.acelib.config.ConfigSchema,com.smile.acelib.config.ConfigVersion) : com.smile.acelib.config.AceLibConfig",
       "method withLang(java.util.Locale) : com.smile.acelib.config.AceLibConfig"
+    ],
+    "com.smile.acelib.config.ConfigBinder": [
+      "method bind(com.smile.acelib.config.ConfigSnapshot,java.lang.Class<T>) : T"
+    ],
+    "com.smile.acelib.config.ConfigBindingException": [
+      "ctor(java.lang.String,java.lang.String)",
+      "method getPath() : java.lang.String"
+    ],
+    "com.smile.acelib.config.ConfigChangeListener": [
+      "method onInvalidReload(java.lang.String,java.lang.String) : void",
+      "method onReload(com.smile.acelib.config.ConfigSnapshot) : void"
     ],
     "com.smile.acelib.config.ConfigException": [
       "ctor(java.lang.String,java.lang.String)",
@@ -257,16 +269,25 @@
     "com.smile.acelib.config.ConfigManager": [
       "ctor(org.bukkit.plugin.java.JavaPlugin,java.lang.String,com.smile.acelib.config.ConfigSchema,com.smile.acelib.config.ConfigVersion)",
       "field VERSION_KEY : java.lang.String",
+      "method bind(java.lang.Class<T>) : T",
+      "method close() : void",
       "method get(java.lang.String) : java.lang.Object",
       "method getConfiguration() : org.bukkit.configuration.file.YamlConfiguration",
       "method getCurrentVersion() : com.smile.acelib.config.ConfigVersion",
       "method getSchema() : com.smile.acelib.config.ConfigSchema",
       "method isReady() : boolean",
+      "method isWatching() : boolean",
       "method load() : void",
       "method registerMigration(com.smile.acelib.config.ConfigMigration) : com.smile.acelib.config.ConfigManager",
       "method reload() : boolean",
       "method save() : void",
       "method set(java.lang.String,java.lang.Object) : void",
+      "method setFieldDescription(java.lang.String,java.lang.String) : void",
+      "method snapshot() : com.smile.acelib.config.ConfigSnapshot",
+      "method startWatching(com.smile.acelib.config.ConfigChangeListener) : void",
+      "method startup() : com.smile.acelib.config.StartupResult",
+      "method startup(org.bukkit.configuration.file.YamlConfiguration) : com.smile.acelib.config.StartupResult",
+      "method stopWatching() : void",
       "method validate(org.bukkit.configuration.file.YamlConfiguration) : void"
     ],
     "com.smile.acelib.config.ConfigMigration": [
@@ -282,6 +303,18 @@
       "method requiredFields() : java.util.List<com.smile.acelib.config.FieldSpec>",
       "method toString() : java.lang.String",
       "method validate(org.bukkit.configuration.file.YamlConfiguration) : java.util.List<java.lang.String>",
+      "method version() : com.smile.acelib.config.ConfigVersion"
+    ],
+    "com.smile.acelib.config.ConfigSnapshot": [
+      "ctor(java.util.Map<java.lang.String, java.lang.Object>)",
+      "method asMap() : java.util.Map<java.lang.String, java.lang.Object>",
+      "method contains(java.lang.String) : boolean",
+      "method empty() : com.smile.acelib.config.ConfigSnapshot",
+      "method get(java.lang.String) : java.lang.Object",
+      "method getBoolean(java.lang.String,boolean) : boolean",
+      "method getInt(java.lang.String,int) : int",
+      "method getString(java.lang.String,java.lang.String) : java.lang.String",
+      "method getStringList(java.lang.String) : java.util.List<java.lang.String>",
       "method version() : com.smile.acelib.config.ConfigVersion"
     ],
     "com.smile.acelib.config.ConfigVersion": [
@@ -337,6 +370,16 @@
       "method to() : com.smile.acelib.config.ConfigVersion",
       "method toString() : java.lang.String",
       "method warnings() : java.util.List<java.lang.String>"
+    ],
+    "com.smile.acelib.config.StartupResult": [
+      "ctor(com.smile.acelib.config.StartupResult$Status,com.smile.acelib.config.ConfigSnapshot,java.lang.String)",
+      "method detail() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method isUsable() : boolean",
+      "method snapshot() : com.smile.acelib.config.ConfigSnapshot",
+      "method status() : com.smile.acelib.config.StartupResult$Status",
+      "method toString() : java.lang.String"
     ],
     "com.smile.acelib.context.ContextCheckResult": [
       "ctor(boolean,java.lang.String,java.lang.String)",

@@ -69,7 +69,7 @@ class ApiBoundaryRegressionTest {
         // v1 canonical inventory：119 Supported + 12 SPI + 20 Internal = 151。
         // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），表單圖示任務再 +1（→ 144），
         // 表單文字任務再 +2（→ 146），指令目錄任務再 +5（→ 151），
-        // 任務完成語意與作用域任務再 +4（→ 155），新增二十三個頂層型別：
+        // 任務完成語意與作用域任務再 +4（→ 155），設定啟動／快照／型別綁定任務再 +5（→ 160），新增二十八個頂層型別：
         //   Supported +13：
         //     - com.smile.acelib.bedrock.BedrockService（interface）— 基岩玩家查詢 facade，
         //       缺席環境以 absent lookup 零影響
@@ -121,17 +121,28 @@ class ApiBoundaryRegressionTest {
         //       作用域任務群組（退服／退休／停用自動取消；讀取→計算→回覆流程）
         //     - com.smile.acelib.scheduler.TaskTicket（interface）— 可觀察終態的
         //       任務票據（沿用 ScheduledTask 句柄語意＋等待／串接）
+        //   Supported +5（設定啟動／快照／型別綁定）：
+        //     - com.smile.acelib.config.StartupResult（record）— 啟動四分類
+        //       （首次安裝／有效／損壞／使用後缺檔；狀態以 nested Status 列舉承載）
+        //     - com.smile.acelib.config.ConfigSnapshot（class）— 不可變快照
+        //       （深層凍結、同輪一致）
+        //     - com.smile.acelib.config.ConfigBinder（class）— record／一般類別
+        //       綁定（型別／範圍／列舉驗證；路徑與範圍註解以 nested 承載）
+        //     - com.smile.acelib.config.ConfigBindingException（class）—
+        //       綁定例外（ACELIB-CFG-007，帶完整欄位路徑）
+        //     - com.smile.acelib.config.ConfigChangeListener（interface）—
+        //       監看回呼（自動重載成功／無效診斷）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 123,
-            "Supported 數量偏離 canonical 123，實際=" + supported);
+        assertTrue(supported == 128,
+            "Supported 數量偏離 canonical 128，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
         assertTrue(internal == 20,
             "Internal 數量偏離 canonical 20，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 155,
-            "top-level inventory 偏離 canonical 155，實際=" + types.size());
+        assertTrue(types.size() == 160,
+            "top-level inventory 偏離 canonical 160，實際=" + types.size());
     }
 
     @Test

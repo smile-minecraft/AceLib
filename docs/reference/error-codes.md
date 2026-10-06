@@ -63,6 +63,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-CFG-004` | 設定檔版本遷移失敗 | 設定 migration chain 中任一步驟失敗 |
 | `ACELIB-CFG-005` | 必填欄位缺失 | 設定檔缺少必要欄位 |
 | `ACELIB-CFG-006` | on-disk 設定版本比當前版本新 | 拒絕降版覆寫既有設定檔（load 與 reload 都適用） |
+| `ACELIB-CFG-007` | 設定綁定失敗 | `ConfigBinder` 型別／範圍／列舉／缺失驗證失敗，訊息帶完整欄位路徑 |
 
 ### 訊息服務（MSG）
 
