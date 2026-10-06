@@ -18,6 +18,13 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 玩家退服、實體退休、plugin 停用時群組任務自動取消並通知呼叫端；退服後不執行使用者程式。
 - `TaskScope#pipeline` 把讀取、背景計算、回玩家／實體所在執行緒回覆串成單一流程（Folia 下回覆跟著跨區後的玩家）；任一階段失敗、取消或拒派即為整條流程的終態。
 
+### 本階段內容（事件處理完成後的操作）
+
+- 延後傳送（`WorldService#teleportPlayerDeferred`）：排到事件處理後的 tick，在玩家所在執行緒傳送，完成時確認玩家真的到達目的地（同世界＋每軸誤差在容差內，預設 0.5 格、可覆寫）；平台回報成功但位置被還原時回報 `FAILED + ACELIB-WORLD-018`（診斷含期望與實際位置）。
+- 通用延後操作（`WorldService#deferForPlayer`）：同樣的延後方式可用在傳送以外的操作，終態語意重用排程作用域的 `TaskTicket`。
+- 新增錯誤碼 `ACELIB-WORLD-017`（延後派送無法安排）與 `ACELIB-WORLD-018`（到達確認失敗）。
+- 傳送後端改為真正的非同步呼叫（`Entity#teleportAsync`，`keepPassengers` 以 `RETAIN_PASSENGERS` 旗標表達）：移除過去永遠生效的同步 fallback；目標 chunk 未載入時改由平台非同步語意處理。呼叫端本就以 future 等待結果，無需改動。
+
 ## [1.3.1] - 2026-10-06
 
 v1.3.1 是修補版，修正排程、資料、事件、冷卻、設定、世界、生命週期與玩家資料的已知缺陷；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.3.1`）取得。

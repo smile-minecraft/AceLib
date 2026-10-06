@@ -17,7 +17,9 @@
  *   <li>傳送（{@link com.smile.acelib.world.WorldService#teleportPlayer} /
  *       {@link com.smile.acelib.world.WorldService#teleportEntity}）為非同步操作，
  *       透過 {@link java.util.concurrent.CompletionStage} 回傳最終
- *       {@link com.smile.acelib.world.TeleportResult}，不得假設立即完成。</li>
+ *       {@link com.smile.acelib.world.TeleportResult}，不得假設立即完成。
+ *       事件處理後需要傳送時改用延後傳送（同介面的 {@code teleportPlayerDeferred}），
+ *       傳送排到事件處理結束之後，並在完成時確認玩家真的到達目的地。</li>
  * </ul>
  *
  * <h2>錯誤處理</h2>

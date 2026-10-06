@@ -17,10 +17,12 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.Plugin;
 
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformDetector;
+import io.papermc.paper.entity.TeleportFlag;
 
 /**
  * 預設的 {@link WorldBackend} 實作：直接呼叫 Bukkit/Paper API（Internal）。
@@ -28,11 +30,14 @@ import com.smile.acelib.platform.PlatformDetector;
  * <p>所有方法皆 <strong>立即</strong> 在呼叫端執行緒執行（不跨 region 切換）；
  * region 切換由 facade 層透過既有 {@code SafeScheduler} 安排。</p>
  *
- * <p>{@link #teleportAsync} 委派給 Bukkit {@code Entity#teleportAsync(Location, boolean)}
- * （Paper 26.1 API），回傳的 future 完成時 true/false 直接對應 ACCEPT/REJECT。
- * 若執行環境不支援 {@code teleportAsync}（例如部分 Spigot 版本）—
- * 退而求其次 fallback 為 {@link Entity#teleport(Location)} 同步結果，包進
- * {@link CompletableFuture#completedFuture} 回傳。</p>
+ * <p>{@link #teleportAsync} 直接呼叫 Bukkit {@code Entity#teleportAsync(Location,
+ * TeleportCause, TeleportFlag...)}（Paper 26.1 API），回傳的 future 完成時
+ * true/false 直接對應 ACCEPT/REJECT。{@code keepPassengers} 映射為
+ * {@link io.papermc.paper.entity.TeleportFlag.EntityState#RETAIN_PASSENGERS}
+ * 旗標；{@code false} 不攜帶任何旗標。同步 {@code Entity#teleport} 在 Folia
+ * region 執行緒會被平台拒絕，因此本方法<strong>絕不</strong>以後備方式走同步路徑；
+ * 平台呼叫本身拋錯時以異常 future 透出，由 facade 層映為
+ * {@code ACELIB-WORLD-015}。</p>
  *
  * <p>本類別為 Internal 實作細節，下游不得直接依賴；僅供
  * {@link WorldServiceImpl} 內部使用。</p>
@@ -322,26 +327,22 @@ public final class BukkitWorldBackend implements WorldBackend {
                                                   boolean keepPassengers) {
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(target, "target");
-        // Paper 26.1 提供 teleportAsync；fallback 為同步 teleport 包進 completed future
+        // Paper 26.1 的 teleportAsync 沒有 (Location, boolean) overload；
+        // keepPassengers 以 RETAIN_PASSENGERS 旗標表達。同步 teleport 在 Folia
+        // region 執行緒會被平台拒絕（UnsupportedOperationException），因此不在此
+        // fallback：方法不可用或平台拋錯一律以異常 future 透出。
         try {
-            // Paper path：透過 reflection 確認 teleportAsync 可用 — 編譯期不可依賴
-            // specific Paper method；MockBukkit 沒有 teleportAsync 必須 fallback。
-            java.lang.reflect.Method m;
-            try {
-                m = Entity.class.getMethod("teleportAsync", Location.class, boolean.class);
-            } catch (NoSuchMethodException nsme) {
-                // fallback: sync teleport 同步返回
-                boolean syncResult = subject.teleport(target);
-                return CompletableFuture.completedFuture(syncResult);
+            TeleportFlag[] flags = keepPassengers
+                ? new TeleportFlag[] {TeleportFlag.EntityState.RETAIN_PASSENGERS}
+                : new TeleportFlag[0];
+            CompletionStage<Boolean> stage =
+                subject.teleportAsync(target, TeleportCause.PLUGIN, flags);
+            if (stage == null) {
+                // 平台實作違反契約回傳 null：按舊語意視為拒絕（false），
+                // 由 facade 層映為 ACELIB-WORLD-014。
+                return CompletableFuture.completedFuture(Boolean.FALSE);
             }
-            Object raw = m.invoke(subject, target, keepPassengers);
-            if (raw instanceof CompletionStage<?> stage) {
-                @SuppressWarnings("unchecked")
-                CompletionStage<Boolean> casted = (CompletionStage<Boolean>) raw;
-                return casted;
-            }
-            // Paper 的回傳型別為 CompletableFuture<Boolean>，理論上不會走到這。
-            return CompletableFuture.completedFuture(Boolean.FALSE);
+            return stage;
         } catch (Throwable t) {
             return CompletableFuture.failedFuture(t);
         }

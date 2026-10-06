@@ -1,8 +1,13 @@
 package com.smile.acelib.world;
 
+import com.smile.acelib.scheduler.SafeScheduler;
+import com.smile.acelib.scheduler.TaskErrorRecord;
+import com.smile.acelib.scheduler.TaskTicket;
+import com.smile.acelib.scheduler.TaskType;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
 
 /**
  * 未啟用 / 已停用狀態下的可診斷 facade（Internal）。
@@ -127,6 +132,59 @@ public final class WorldServiceUnavailableImpl implements WorldService {
             TeleportResult.failure(WorldState.REJECTED, code,
                 "world service is unavailable: " + code,
                 entityId, target, keepPassengers));
+    }
+
+    // ----- deferred (after event handling) -----
+
+    @Override
+    public <T> TaskTicket<T> deferForPlayer(UUID playerId,
+                                            Supplier<T> action,
+                                            SafeScheduler scheduler) {
+        requireNonNull(playerId, "playerId");
+        requireNonNull(action, "action");
+        requireNonNull(scheduler, "scheduler");
+        return TerminalTaskTicket.rejected(TaskType.PLAYER,
+            TaskErrorRecord.cancelled(TaskType.PLAYER, code,
+                "world service is unavailable: " + code),
+            null);
+    }
+
+    @Override
+    public CompletionStage<TeleportResult> teleportPlayerDeferred(UUID playerId,
+                                                                  LocationSnapshot target,
+                                                                  boolean keepPassengers,
+                                                                  SafeScheduler scheduler) {
+        requireNonNull(playerId, "playerId");
+        requireNonNull(target, "target");
+        requireNonNull(scheduler, "scheduler");
+        return CompletableFuture.completedFuture(
+            TeleportResult.failure(WorldState.REJECTED, code,
+                "world service is unavailable: " + code,
+                playerId, target, keepPassengers));
+    }
+
+    @Override
+    public CompletionStage<TeleportResult> teleportPlayerDeferred(UUID playerId,
+                                                                  LocationSnapshot target,
+                                                                  boolean keepPassengers,
+                                                                  double tolerance,
+                                                                  SafeScheduler scheduler) {
+        requireNonNull(playerId, "playerId");
+        requireNonNull(target, "target");
+        requireNonNull(scheduler, "scheduler");
+        requireValidTolerance(tolerance);
+        return CompletableFuture.completedFuture(
+            TeleportResult.failure(WorldState.REJECTED, code,
+                "world service is unavailable: " + code,
+                playerId, target, keepPassengers));
+    }
+
+    private static void requireValidTolerance(double tolerance) {
+        if (Double.isNaN(tolerance) || Double.isInfinite(tolerance) || tolerance < 0) {
+            throw new IllegalArgumentException(
+                "[" + WorldErrorCode.INVALID_INPUT + "] tolerance must be a finite"
+                    + " non-negative number (was " + tolerance + ")");
+        }
     }
 
     // ----- lifecycle -----

@@ -4,6 +4,13 @@ import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformDetector;
+import com.smile.acelib.scheduler.SafeScheduler;
+import com.smile.acelib.scheduler.TaskErrorRecord;
+import com.smile.acelib.scheduler.TaskOutcome;
+import com.smile.acelib.scheduler.TaskResult;
+import com.smile.acelib.scheduler.TaskScope;
+import com.smile.acelib.scheduler.TaskTicket;
+import com.smile.acelib.scheduler.TaskType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -13,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Server;
@@ -46,6 +54,13 @@ public final class WorldServiceImpl implements WorldService {
 
     /** Diagnostics 模組名稱（用於 registerModuleState 與 buildReport）。 */
     static final String MODULE_NAME = "world";
+
+    /**
+     * 排程錯誤碼字面值（scheduler package 未公開常數；延後派送的拒派紀錄沿用
+     * {@code ACELIB-SCHED-*} 語意，字面值與生產／假排程器一致）。
+     */
+    private static final String SCHED_PLAYER_OFFLINE = "ACELIB-SCHED-002";
+    private static final String SCHED_PLATFORM_UNSUPPORTED = "ACELIB-SCHED-005";
 
     private final WorldBackend backend;
     private final DiagnosticsService diagnostics;
@@ -474,6 +489,386 @@ public final class WorldServiceImpl implements WorldService {
             }
         });
         return resultFuture;
+    }
+
+    // -----------------------------------------------------------------
+    // Deferred operations (after event handling)
+    // -----------------------------------------------------------------
+
+    /**
+     * 派送期共用的玩家解析：離線或不存在即為拒派。
+     *
+     * @return 在線玩家；離線或不存在時為 null
+     */
+    private Player resolveOnlinePlayer(UUID playerId) {
+        Player player = backend.resolvePlayer(playerId);
+        return (player != null && player.isOnline()) ? player : null;
+    }
+
+    @Override
+    public <T> TaskTicket<T> deferForPlayer(UUID playerId,
+                                            Supplier<T> action,
+                                            SafeScheduler scheduler) {
+        requireNonNull(playerId, "playerId");
+        requireNonNull(action, "action");
+        requireNonNull(scheduler, "scheduler");
+        Player player = resolveOnlinePlayer(playerId);
+        if (player == null) {
+            return TerminalTaskTicket.rejected(TaskType.PLAYER,
+                TaskErrorRecord.cancelled(TaskType.PLAYER, SCHED_PLAYER_OFFLINE,
+                    "player " + playerId + " is offline"),
+                null);
+        }
+        TaskScope scope;
+        try {
+            scope = scheduler.scopeFor(player);
+        } catch (RuntimeException scopeFailure) {
+            return TerminalTaskTicket.rejected(TaskType.PLAYER,
+                TaskErrorRecord.cancelled(TaskType.PLAYER, SCHED_PLATFORM_UNSUPPORTED,
+                    "deferred dispatch refused: scope creation failed: " + scopeFailure),
+                null);
+        }
+        if (!running.get()) {
+            return TerminalTaskTicket.rejected(TaskType.PLAYER,
+                TaskErrorRecord.cancelled(TaskType.PLAYER, WorldErrorCode.SHUTDOWN,
+                    "world service is shutdown"),
+                scope.plugin());
+        }
+        return scope.supply(action);
+    }
+
+    @Override
+    public CompletionStage<TeleportResult> teleportPlayerDeferred(
+        UUID playerId, LocationSnapshot target, boolean keepPassengers,
+        SafeScheduler scheduler) {
+        return teleportPlayerDeferred(playerId, target, keepPassengers,
+            WorldService.DEFAULT_ARRIVAL_TOLERANCE, scheduler);
+    }
+
+    @Override
+    public CompletionStage<TeleportResult> teleportPlayerDeferred(
+        UUID playerId, LocationSnapshot target, boolean keepPassengers,
+        double tolerance, SafeScheduler scheduler) {
+        requireNonNull(playerId, "playerId");
+        requireNonNull(target, "target");
+        requireNonNull(scheduler, "scheduler");
+        requireValidTolerance(tolerance);
+        if (!running.get()) {
+            return CompletableFuture.completedFuture(
+                TeleportResult.failure(WorldState.REJECTED, WorldErrorCode.SHUTDOWN,
+                    "world service is shutdown",
+                    playerId, target, keepPassengers));
+        }
+        Player player = resolveOnlinePlayer(playerId);
+        if (player == null) {
+            return CompletableFuture.completedFuture(
+                TeleportResult.failure(WorldState.REJECTED, WorldErrorCode.PLAYER_OFFLINE,
+                    "player " + playerId + " is offline",
+                    playerId, target, keepPassengers));
+        }
+        Location expected = resolveLocation(target);
+        if (expected == null || expected.getWorld() == null) {
+            return CompletableFuture.completedFuture(
+                TeleportResult.failure(WorldState.REJECTED, WorldErrorCode.WORLD_NOT_FOUND,
+                    "world not found: " + target.worldIdString(),
+                    playerId, target, keepPassengers));
+        }
+        TaskScope scope;
+        try {
+            scope = scheduler.scopeFor(player);
+        } catch (RuntimeException scopeFailure) {
+            return CompletableFuture.completedFuture(
+                TeleportResult.failure(WorldState.REJECTED,
+                    WorldErrorCode.DEFERRED_UNAVAILABLE,
+                    "deferred dispatch refused: scope creation failed: " + scopeFailure,
+                    playerId, target, keepPassengers));
+        }
+        inFlightTeleports.incrementAndGet();
+        CompletableFuture<TeleportResult> outcome = new CompletableFuture<>();
+        outcome.whenComplete((ignored, ignoredFailure) -> inFlightTeleports.decrementAndGet());
+        TaskTicket<CompletionStage<TeleportResult>> hop;
+        try {
+            hop = scope.supply(() -> teleportPlayer(playerId, target, keepPassengers));
+        } catch (Throwable dispatchFailure) {
+            // 最後防線：派送期未預期錯誤不得把例外丟給呼叫端，
+            // 也不得留下永不完成的 future 與 in-flight 計數。
+            completeDefensive(outcome, playerId, target, keepPassengers,
+                dispatchFailure, "dispatch");
+            return outcome;
+        }
+        hop.stage().whenComplete((hopResult, hopFailure) -> {
+            try {
+                completeHop(outcome, scope, playerId, target, keepPassengers,
+                    tolerance, hopResult);
+            } catch (Throwable callbackFailure) {
+                completeDefensive(outcome, playerId, target, keepPassengers,
+                    callbackFailure, "teleport completion");
+            }
+        });
+        return outcome;
+    }
+
+    /**
+     * 第一跳完成後的串接（第一跳票據 → 內層傳送 → 到達確認派送）。
+     *
+     * <p>抽成獨立方法，讓外層回呼的防禦性 {@code try/catch} 只包一層；
+     * 本方法內仍以明確分支處理所有預期終態，防禦分支只接未預期的拋錯。</p>
+     */
+    private void completeHop(CompletableFuture<TeleportResult> outcome,
+                             TaskScope scope,
+                             UUID playerId,
+                             LocationSnapshot target,
+                             boolean keepPassengers,
+                             double tolerance,
+                             TaskResult<CompletionStage<TeleportResult>> hopResult) {
+        if (hopResult == null || hopResult.outcome() != TaskOutcome.COMPLETED) {
+            outcome.complete(mapScopeTerminal(hopResult, playerId, target, keepPassengers));
+            return;
+        }
+        CompletionStage<TeleportResult> inner = hopResult.value();
+        if (inner == null) {
+            outcome.complete(
+                TeleportResult.failure(WorldState.FAILED, WorldErrorCode.OPERATION_FAILED,
+                    "deferred teleport dispatch returned null stage",
+                    playerId, target, keepPassengers));
+            return;
+        }
+        inner.whenComplete((teleported, teleportFailure) -> {
+            try {
+                completeTeleport(outcome, scope, playerId, target, keepPassengers,
+                    tolerance, teleported, teleportFailure);
+            } catch (Throwable callbackFailure) {
+                completeDefensive(outcome, playerId, target, keepPassengers,
+                    callbackFailure, "teleport completion");
+            }
+        });
+    }
+
+    /**
+     * 內層傳送完成後的串接（結果透出 → 到達確認派送 → 確認完成）。
+     */
+    private void completeTeleport(CompletableFuture<TeleportResult> outcome,
+                                  TaskScope scope,
+                                  UUID playerId,
+                                  LocationSnapshot target,
+                                  boolean keepPassengers,
+                                  double tolerance,
+                                  TeleportResult teleported,
+                                  Throwable teleportFailure) {
+        if (teleportFailure != null) {
+            outcome.complete(
+                TeleportResult.failure(WorldState.FAILED,
+                    WorldErrorCode.TELEPORT_EXCEPTION,
+                    "teleport threw: " + teleportFailure.getClass().getSimpleName()
+                        + ": " + teleportFailure.getMessage(),
+                    playerId, target, keepPassengers));
+            return;
+        }
+        if (teleported == null) {
+            outcome.complete(
+                TeleportResult.failure(WorldState.FAILED,
+                    WorldErrorCode.OPERATION_FAILED,
+                    "teleport completed with null result",
+                    playerId, target, keepPassengers));
+            return;
+        }
+        if (teleported.state() != WorldState.SUCCESS) {
+            outcome.complete(teleported);
+            return;
+        }
+        if (!running.get()) {
+            outcome.complete(
+                TeleportResult.cancelled(playerId, target, keepPassengers));
+            return;
+        }
+        TaskTicket<TeleportResult> verify;
+        try {
+            verify = scope.supply(
+                () -> verifyArrival(playerId, target, tolerance, keepPassengers));
+        } catch (Throwable verifyDispatchFailure) {
+            completeDefensive(outcome, playerId, target, keepPassengers,
+                verifyDispatchFailure, "arrival-check dispatch");
+            return;
+        }
+        verify.stage().whenComplete((verifyResult, verifyFailure) -> {
+            try {
+                if (verifyResult == null) {
+                    outcome.complete(
+                        TeleportResult.failure(WorldState.FAILED,
+                            WorldErrorCode.OPERATION_FAILED,
+                            "arrival check completed without a result",
+                            playerId, target, keepPassengers));
+                } else if (verifyResult.outcome() == TaskOutcome.COMPLETED) {
+                    TeleportResult arrival = verifyResult.value();
+                    outcome.complete(arrival != null ? arrival
+                        : TeleportResult.failure(WorldState.FAILED,
+                            WorldErrorCode.OPERATION_FAILED,
+                            "arrival check completed with null result",
+                            playerId, target, keepPassengers));
+                } else {
+                    outcome.complete(
+                        mapScopeTerminal(verifyResult, playerId, target, keepPassengers));
+                }
+            } catch (Throwable callbackFailure) {
+                completeDefensive(outcome, playerId, target, keepPassengers,
+                    callbackFailure, "arrival-check completion");
+            }
+        });
+    }
+
+    /**
+     * 最後防線：串接中任何未預期錯誤都讓 {@code outcome} 以
+     * {@code FAILED + ACELIB-WORLD-010} 完成。
+     *
+     * <p>in-flight 計數掛在 {@code outcome} 完成上遞減，完成即歸零，不另處理。
+     * 本方法自身不拋錯（訊息只取例外類別名，不呼叫 {@code toString}）。</p>
+     */
+    private static void completeDefensive(CompletableFuture<TeleportResult> outcome,
+                                          UUID subjectId,
+                                          LocationSnapshot target,
+                                          boolean keepPassengers,
+                                          Throwable failure,
+                                          String phase) {
+        String name;
+        try {
+            name = failure == null ? "<null>" : failure.getClass().getName();
+        } catch (Throwable ignored) {
+            name = "<unprintable>";
+        }
+        outcome.complete(
+            TeleportResult.failure(WorldState.FAILED, WorldErrorCode.OPERATION_FAILED,
+                "deferred " + phase + " failed unexpectedly (" + name
+                    + "); keep this detail for the AceLib maintainer",
+                subjectId, target, keepPassengers));
+    }
+
+    /**
+     * 容差合法性：有限非負數。
+     */
+    private static void requireValidTolerance(double tolerance) {
+        if (Double.isNaN(tolerance) || Double.isInfinite(tolerance) || tolerance < 0) {
+            throw new IllegalArgumentException(
+                "[" + WorldErrorCode.INVALID_INPUT + "] tolerance must be a finite"
+                    + " non-negative number (was " + tolerance + ")");
+        }
+    }
+
+    /**
+     * 作用域終態轉傳送結果：取消沿用取消，拒派／失敗保留原始錯誤碼與訊息。
+     */
+    private static TeleportResult mapScopeTerminal(TaskResult<?> terminal,
+                                                   UUID subjectId,
+                                                   LocationSnapshot target,
+                                                   boolean keepPassengers) {
+        if (terminal == null) {
+            return TeleportResult.failure(WorldState.FAILED, WorldErrorCode.OPERATION_FAILED,
+                "deferred dispatch completed without a result",
+                subjectId, target, keepPassengers);
+        }
+        return switch (terminal.outcome()) {
+            case COMPLETED -> TeleportResult.failure(WorldState.FAILED,
+                WorldErrorCode.OPERATION_FAILED,
+                "deferred dispatch completed without a teleport result",
+                subjectId, target, keepPassengers);
+            case CANCELLED -> TeleportResult.cancelled(subjectId, target, keepPassengers);
+            case REJECTED -> {
+                TaskErrorRecord record = terminal.errorRecord();
+                yield TeleportResult.failure(WorldState.REJECTED,
+                    record == null ? WorldErrorCode.OPERATION_FAILED : record.code(),
+                    "deferred dispatch refused: "
+                        + (record == null ? "no record" : record.detail()),
+                    subjectId, target, keepPassengers);
+            }
+            case FAILED -> {
+                TaskErrorRecord record = terminal.errorRecord();
+                yield TeleportResult.failure(WorldState.FAILED,
+                    record == null ? WorldErrorCode.OPERATION_FAILED : record.code(),
+                    "deferred dispatch failed: "
+                        + (record == null ? "no record" : record.detail()),
+                    subjectId, target, keepPassengers);
+            }
+        };
+    }
+
+    /**
+     * 到達確認（必須在玩家所在執行緒執行）。
+     *
+     * <p>先比世界（UUID 相等才算同世界），同世界再逐軸比座標；
+     * 平台回報成功但實際未到達時回 {@code FAILED + ACELIB-WORLD-018}，
+     * 診斷含期望與實際位置。</p>
+     */
+    private TeleportResult verifyArrival(UUID playerId,
+                                         LocationSnapshot target,
+                                         double tolerance,
+                                         boolean keepPassengers) {
+        Player current;
+        try {
+            current = backend.resolvePlayer(playerId);
+        } catch (RuntimeException resolveFailure) {
+            return TeleportResult.failure(WorldState.FAILED, WorldErrorCode.OPERATION_FAILED,
+                "arrival check could not resolve player " + playerId + ": " + resolveFailure,
+                playerId, target, keepPassengers);
+        }
+        if (current == null || !current.isOnline()) {
+            return TeleportResult.failure(WorldState.FAILED, WorldErrorCode.PLAYER_OFFLINE,
+                "player " + playerId + " went offline before the arrival check;"
+                    + " expected=" + describeTarget(target)
+                    + "; the teleport outcome can no longer be confirmed",
+                playerId, target, keepPassengers);
+        }
+        Location actual;
+        try {
+            actual = current.getLocation();
+        } catch (RuntimeException locationFailure) {
+            return TeleportResult.failure(WorldState.FAILED, WorldErrorCode.OPERATION_FAILED,
+                "arrival check could not read location of player " + playerId + ": "
+                    + locationFailure,
+                playerId, target, keepPassengers);
+        }
+        if (actual == null || actual.getWorld() == null
+            || !target.worldId().equals(actual.getWorld().getUID())) {
+            return TeleportResult.failure(WorldState.FAILED,
+                WorldErrorCode.TELEPORT_NOT_ARRIVED,
+                "teleport reported success but the player did not arrive:"
+                    + " expected=" + describeTarget(target)
+                    + " actual=" + describeActual(actual)
+                    + " tolerance=" + tolerance
+                    + "; the position may have been restored by a later event handler;"
+                    + " wait for event handling to finish and retry teleportPlayerDeferred",
+                playerId, target, keepPassengers);
+        }
+        double dx = Math.abs(actual.getX() - target.blockX());
+        double dy = Math.abs(actual.getY() - target.blockY());
+        double dz = Math.abs(actual.getZ() - target.blockZ());
+        if (dx <= tolerance && dy <= tolerance && dz <= tolerance) {
+            return TeleportResult.success(playerId, target, keepPassengers);
+        }
+        return TeleportResult.failure(WorldState.FAILED,
+            WorldErrorCode.TELEPORT_NOT_ARRIVED,
+            "teleport reported success but the player did not arrive:"
+                + " expected=" + describeTarget(target)
+                + " actual=" + describeActual(actual)
+                + " tolerance=" + tolerance
+                + "; the position may have been restored by a later event handler;"
+                + " wait for event handling to finish and retry teleportPlayerDeferred",
+            playerId, target, keepPassengers);
+    }
+
+    private static String describeTarget(LocationSnapshot target) {
+        return "world=" + target.worldIdString()
+            + " x=" + target.blockX() + " y=" + target.blockY() + " z=" + target.blockZ();
+    }
+
+    private static String describeActual(Location actual) {
+        if (actual == null) {
+            return "<null location>";
+        }
+        World world = actual.getWorld();
+        String worldPart = world == null
+            ? "<null world>"
+            : world.getName() + "/" + world.getUID();
+        return "world=" + worldPart
+            + " x=" + actual.getX() + " y=" + actual.getY() + " z=" + actual.getZ();
     }
 
     // -----------------------------------------------------------------

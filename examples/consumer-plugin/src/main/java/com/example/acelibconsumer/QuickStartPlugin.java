@@ -10,6 +10,8 @@ import com.smile.acelib.scheduler.AceLibScheduler;
 import com.smile.acelib.scheduler.SafeScheduler;
 import com.smile.acelib.scheduler.TaskScope;
 import com.smile.acelib.scheduler.TaskTicket;
+import com.smile.acelib.world.LocationSnapshot;
+import com.smile.acelib.world.WorldService;
 import java.util.List;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -70,9 +72,13 @@ public class QuickStartPlugin extends JavaPlugin {
         //    只用 Supported 型別；SafeSchedulerImpl 等 Internal 型別不可引用。
         SafeScheduler scheduler =
             AceLibScheduler.create(this, api.getPlatform(), api.getPlatformCapability());
+        WorldService world = api.getWorldService();
         getServer().getOnlinePlayers().stream()
             .findFirst()
-            .ifPresent(player -> demonstrateScopedTasks(scheduler, player));
+            .ifPresent(player -> {
+                demonstrateScopedTasks(scheduler, player);
+                demonstrateDeferredOperations(scheduler, world, player);
+            });
     }
 
     /**
@@ -92,6 +98,41 @@ public class QuickStartPlugin extends JavaPlugin {
             upper -> player.sendMessage(Component.text("computed: " + upper)));
         ticket.whenComplete(
             result -> getLogger().info("scoped pipeline settled: " + result.outcome()));
+    }
+
+    /**
+     * 事件處理後的延後操作示範（本版新 API）。
+     *
+     * <p>取消移動事件後不要在事件處理內直接傳送（位置可能被還原）；
+     * 延後傳送排到之後的 tick 並確認到達，未到達時回報失敗而非謊報成功。
+     * 為避免範例在啟用時搬動玩家，此處以玩家目前位置為目標
+     * （原地傳送仍完整走過延後派送與到達確認）。</p>
+     *
+     * @param scheduler 本 plugin 擁有的排程器；不可為 null
+     * @param world 世界操作服務；不可為 null
+     * @param player 作用域擁有者；不可為 null
+     */
+    private void demonstrateDeferredOperations(SafeScheduler scheduler,
+                                               WorldService world,
+                                               Player player) {
+        LocationSnapshot stay = LocationSnapshot.of(
+            player.getWorld().getUID(),
+            player.getLocation().getBlockX(),
+            player.getLocation().getBlockY(),
+            player.getLocation().getBlockZ());
+        world.teleportPlayerDeferred(player.getUniqueId(), stay, false, scheduler)
+            .thenAccept(result -> {
+                if (result.isSuccess()) {
+                    getLogger().info("deferred teleport arrived");
+                } else {
+                    getLogger().warning("deferred teleport did not arrive: "
+                        + result.detail());
+                }
+            });
+        TaskTicket<String> ticket = world.deferForPlayer(
+            player.getUniqueId(), () -> "done", scheduler);
+        ticket.whenComplete(done ->
+            getLogger().info("deferred action settled: " + done.outcome()));
     }
 
     /**

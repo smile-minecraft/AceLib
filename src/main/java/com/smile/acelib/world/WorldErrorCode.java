@@ -23,6 +23,8 @@ package com.smile.acelib.world;
  *   <li>{@link #TELEPORT_REJECTED} — 傳送被 Bukkit 拒絕（{@code teleport()} 回傳 false）</li>
  *   <li>{@link #TELEPORT_EXCEPTION} — 傳送拋例外（CompletionStage 異常完成）</li>
  *   <li>{@link #PARTIAL_COMPLETION} — 跨 region/玩家傳送部分完成</li>
+ *   <li>{@link #DEFERRED_UNAVAILABLE} — 延後操作無法安排派送</li>
+ *   <li>{@link #TELEPORT_NOT_ARRIVED} — 傳送回報成功但到達確認失敗</li>
  * </ul>
  *
  * <p>設計原則：</p>
@@ -74,4 +76,8 @@ public final class WorldErrorCode {
     public static final String TELEPORT_EXCEPTION = "ACELIB-WORLD-015";
     /** 016 — 跨 region/玩家傳送部分完成（第一步成功但第二步失敗）。 */
     public static final String PARTIAL_COMPLETION = "ACELIB-WORLD-016";
+    /** 017 — 延後操作無法安排派送（作用域建立失敗等派送期拒絕）。 */
+    public static final String DEFERRED_UNAVAILABLE = "ACELIB-WORLD-017";
+    /** 018 — 傳送回報成功，但到達確認發現玩家不在目的地。 */
+    public static final String TELEPORT_NOT_ARRIVED = "ACELIB-WORLD-018";
 }

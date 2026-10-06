@@ -152,6 +152,8 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-WORLD-014` | 傳送被 Bukkit 拒絕 | `teleport()` 回傳 false |
 | `ACELIB-WORLD-015` | 傳送拋例外 | CompletionStage 異常完成 |
 | `ACELIB-WORLD-016` | 跨區域／玩家傳送部分完成 | 第一步成功但第二步失敗 |
+| `ACELIB-WORLD-017` | 延後操作無法安排派送 | 作用域建立失敗等派送期拒絕 |
+| `ACELIB-WORLD-018` | 傳送回報成功但到達確認失敗 | 平台回成功、玩家實際不在目的地 |
 
 ### GUI（GUI）
 

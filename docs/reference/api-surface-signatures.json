@@ -1364,6 +1364,7 @@
       "field BLOCK_OPERATION_FAILED : java.lang.String",
       "field CHUNK_UNLOADED : java.lang.String",
       "field CONTEXT_UNSAFE : java.lang.String",
+      "field DEFERRED_UNAVAILABLE : java.lang.String",
       "field EFFECT_REJECTED : java.lang.String",
       "field ENTITY_GONE : java.lang.String",
       "field INVALID_INPUT : java.lang.String",
@@ -1375,6 +1376,7 @@
       "field PLAYER_OFFLINE : java.lang.String",
       "field SHUTDOWN : java.lang.String",
       "field TELEPORT_EXCEPTION : java.lang.String",
+      "field TELEPORT_NOT_ARRIVED : java.lang.String",
       "field TELEPORT_REJECTED : java.lang.String",
       "field WORLD_NOT_FOUND : java.lang.String"
     ],
@@ -1386,6 +1388,8 @@
       "method state() : com.smile.acelib.world.WorldState"
     ],
     "com.smile.acelib.world.WorldService": [
+      "field DEFAULT_ARRIVAL_TOLERANCE : double",
+      "method deferForPlayer(java.util.UUID,java.util.function.Supplier<T>,com.smile.acelib.scheduler.SafeScheduler) : com.smile.acelib.scheduler.TaskTicket<T>",
       "method findNearbyEntities(com.smile.acelib.world.LocationSnapshot,double,java.lang.String) : com.smile.acelib.world.NearbyQueryResult",
       "method findNearbyPlayers(com.smile.acelib.world.LocationSnapshot,double) : com.smile.acelib.world.NearbyQueryResult",
       "method getModuleStatus() : java.lang.String",
@@ -1396,6 +1400,8 @@
       "method spawnEntity(com.smile.acelib.world.LocationSnapshot,java.lang.String) : com.smile.acelib.world.EntityResult",
       "method teleportEntity(java.util.UUID,com.smile.acelib.world.LocationSnapshot,boolean) : java.util.concurrent.CompletionStage<com.smile.acelib.world.TeleportResult>",
       "method teleportPlayer(java.util.UUID,com.smile.acelib.world.LocationSnapshot,boolean) : java.util.concurrent.CompletionStage<com.smile.acelib.world.TeleportResult>",
+      "method teleportPlayerDeferred(java.util.UUID,com.smile.acelib.world.LocationSnapshot,boolean,com.smile.acelib.scheduler.SafeScheduler) : java.util.concurrent.CompletionStage<com.smile.acelib.world.TeleportResult>",
+      "method teleportPlayerDeferred(java.util.UUID,com.smile.acelib.world.LocationSnapshot,boolean,double,com.smile.acelib.scheduler.SafeScheduler) : java.util.concurrent.CompletionStage<com.smile.acelib.world.TeleportResult>",
       "method writeBlock(com.smile.acelib.world.LocationSnapshot,java.lang.String) : com.smile.acelib.world.BlockResult"
     ],
     "com.smile.acelib.world.WorldState": [

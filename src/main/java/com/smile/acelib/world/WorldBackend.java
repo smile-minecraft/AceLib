@@ -26,7 +26,8 @@ import org.bukkit.entity.EntityType;
  *   <li>每次操作即時解析目標，不得長期保存 Bukkit 物件 reference</li>
  *   <li>失敗時回傳對應 {@code ACELIB-WORLD-*} 錯誤代碼的
  *       {@link WorldBackendResult#failed(String, String)}，不丟例外</li>
- *   <li>teleport 委派給 Bukkit 非同步 API；環境不支援時 fallback 為同步結果</li>
+ *   <li>teleport 委派給 Bukkit 非同步 API（同步傳送在 Folia region 執行緒會被平台拒絕，
+ *       不得以 fallback 方式走同步路徑；平台呼叫本身失敗時以異常 future 透出）</li>
  * </ul>
  *
  * @since 1.0.0
