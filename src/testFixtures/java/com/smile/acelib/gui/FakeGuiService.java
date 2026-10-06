@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import com.smile.acelib.diagnostics.Clock;
 
 /**
  * 標準 GUI 假實作（下游單元測試用）。
@@ -36,17 +38,37 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>非執行緒安全：僅供單執行緒單元測試使用。</p>
  *
+ * <p>同時實作 {@link ScopedGuiOperations} 橋接：作用域導航、輸入提示與
+ * 聊天路由與 production 語意對齊（派送為同步直接執行，回 {@code SUCCESS}）。</p>
+ *
  * @since 1.4.0
  */
-public final class FakeGuiService implements GuiService {
+public final class FakeGuiService
+        implements GuiService, GuiServiceControl, ScopedGuiOperations {
 
     private final Map<UUID, GuiSession> sessions = new HashMap<>();
     private final Map<String, PendingAction> actions = new HashMap<>();
     private final Map<UUID, AtomicLong> requestGenerations = new HashMap<>();
+    private final Map<UUID, PendingInput> pendingInputs = new HashMap<>();
     private final Set<UUID> offline = new HashSet<>();
     private final AtomicLong generationSequence = new AtomicLong();
     private final AtomicBoolean running = new AtomicBoolean(true);
+    private final Clock clock;
     private boolean failNextClose;
+
+    /** 主要建構子（系統時鐘）。 */
+    public FakeGuiService() {
+        this(Clock.system());
+    }
+
+    /**
+     * 注入式建構子（輸入逾時測試 seam：傳入可手動推進的時鐘）。
+     *
+     * @param clock 時間來源；不可為 null
+     */
+    public FakeGuiService(Clock clock) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
 
     /**
      * 讓下一次 {@link #closeInventory} 失敗（回 {@code FAILED + OPERATION_FAILED}，
@@ -85,22 +107,276 @@ public final class FakeGuiService implements GuiService {
     @Override
     public GuiResult openInventory(GuiArgument argument) {
         requireNonNull(argument, "argument");
+        OwnedOpenOutcome outcome = openInternal("fake", argument.playerUuid(),
+            argument.title(), GuiView.Kind.CHEST, argument.size(),
+            argument.protectedSlots(), false);
+        return outcome.result();
+    }
+
+    private OwnedOpenOutcome openInternal(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting) {
         if (!running.get()) {
-            return GuiResult.rejected(GuiErrorCode.SHUTDOWN, "gui service is shutdown");
+            return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null);
         }
-        if (offline.contains(argument.playerUuid())) {
+        if (offline.contains(playerUuid)) {
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "player offline or not found: uuid=" + playerUuid), null);
+        }
+        int slots = kind == GuiView.Kind.ANVIL ? 3 : size;
+        GuiSession replaced = null;
+        if (sessions.containsKey(playerUuid)) {
+            if (!replaceExisting) {
+                return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
+                    "session already exists for uuid=" + playerUuid), null);
+            }
+            replaced = sessions.remove(playerUuid);
+            invalidatePendingActions(playerUuid);
+            requestGenerations.remove(playerUuid);
+            invalidatePlayerInputs(playerUuid);
+        }
+        Set<Integer> normalized = protectedSlots == null || protectedSlots.isEmpty()
+            ? Set.of()
+            : Set.copyOf(new HashSet<>(protectedSlots));
+        GuiSession session = new GuiSession(playerUuid,
+            generationSequence.incrementAndGet(), owner, title, slots, normalized);
+        sessions.put(playerUuid, session);
+        return new OwnedOpenOutcome(
+            GuiResult.success(session, "opened fake gui session"), replaced);
+    }
+
+    @Override
+    public OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        Objects.requireNonNull(kind, "kind");
+        return openInternal(owner, playerUuid, title, kind, size, protectedSlots,
+            replaceExisting);
+    }
+
+    @Override
+    public GuiResult closeOwned(String owner, UUID playerUuid, long generation) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        GuiSession session = sessions.get(playerUuid);
+        if (session == null) {
+            return GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid);
+        }
+        if (!session.owner().equals(owner)) {
+            return GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "session owned by " + session.owner() + ", not " + owner);
+        }
+        return closeInventory(playerUuid, generation);
+    }
+
+    @Override
+    public OwnedOpenOutcome openFormSessionOwned(String owner, UUID playerUuid,
+            String title) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        if (!running.get()) {
+            return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null);
+        }
+        if (offline.contains(playerUuid)) {
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "player offline or not found: uuid=" + playerUuid), null);
+        }
+        GuiSession replaced = sessions.remove(playerUuid);
+        if (replaced != null) {
+            invalidatePendingActions(playerUuid);
+            requestGenerations.remove(playerUuid);
+            invalidatePlayerInputs(playerUuid);
+        }
+        GuiSession session = new GuiSession(playerUuid,
+            generationSequence.incrementAndGet(), owner, title, 9,
+            Set.of(0, 1, 2, 3, 4, 5, 6, 7, 8));
+        sessions.put(playerUuid, session);
+        return new OwnedOpenOutcome(
+            GuiResult.success(session, "opened fake form session"), replaced);
+    }
+
+    @Override
+    public GuiSession currentSession(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        return sessions.get(playerUuid);
+    }
+
+    @Override
+    public InputPromptOutcome promptInputOwned(String owner, UUID playerUuid,
+            long generation, GuiInputPrompt prompt, Consumer<GuiInputResult> consumer) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(prompt, "prompt");
+        Objects.requireNonNull(consumer, "consumer");
+        if (!running.get()) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null, null);
+        }
+        GuiSession session = sessions.get(playerUuid);
+        if (session == null) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid), null, null);
+        }
+        if (!session.owner().equals(owner)) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "session owned by " + session.owner() + ", not " + owner), null, null);
+        }
+        if (session.generation() != generation) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.GENERATION_MISMATCH,
+                "expected generation=" + session.generation()
+                    + " but got " + generation), null, null);
+        }
+        pruneExpiredInputs(playerUuid);
+        if (prompt.kind() == GuiInputKind.CHAT) {
+            UUID token = UUID.randomUUID();
+            pendingInputs.put(token, new PendingInput(token, owner, playerUuid,
+                generation, prompt, consumer, clock.currentTimeMillis()));
+            return new InputPromptOutcome(GuiResult.success(session),
+                new GuiInputTicket(token, playerUuid, generation, prompt.kind()), null);
+        }
+        OwnedOpenOutcome opened = openInternal(owner, playerUuid, prompt.title(),
+            GuiView.Kind.ANVIL, 3, Set.of(0, 1, 2), true);
+        if (!opened.result().isSuccess()) {
+            return new InputPromptOutcome(opened.result(), null, opened.replaced());
+        }
+        GuiSession anvilSession = opened.result().session();
+        UUID token = UUID.randomUUID();
+        pendingInputs.put(token, new PendingInput(token, owner, playerUuid,
+            anvilSession.generation(), prompt, consumer, clock.currentTimeMillis()));
+        return new InputPromptOutcome(GuiResult.success(anvilSession),
+            new GuiInputTicket(token, playerUuid, anvilSession.generation(),
+                prompt.kind()),
+            opened.replaced());
+    }
+
+    @Override
+    public GuiResult submitInputOwned(String owner, UUID token, String text) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(token, "token");
+        Objects.requireNonNull(text, "text");
+        if (!running.get()) {
+            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown");
+        }
+        PendingInput entry = pendingInputs.get(token);
+        if (entry == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "unknown or expired input token=" + token);
+        }
+        if (!entry.owner.equals(owner)) {
+            return GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "input owned by " + entry.owner + ", not " + owner);
+        }
+        return deliverInput(entry, text);
+    }
+
+    @Override
+    public GuiResult routeChatInput(UUID playerUuid, String text) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(text, "text");
+        if (!running.get()) {
+            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown");
+        }
+        GuiSession session = sessions.get(playerUuid);
+        if (session == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "no active session for uuid=" + playerUuid);
+        }
+        PendingInput latest = null;
+        for (PendingInput candidate : pendingInputs.values()) {
+            if (candidate.kind != GuiInputKind.CHAT
+                    || !candidate.playerUuid.equals(playerUuid)
+                    || !candidate.owner.equals(session.owner())
+                    || candidate.generation != session.generation()) {
+                continue;
+            }
+            if (latest == null || candidate.createdAtMillis > latest.createdAtMillis) {
+                latest = candidate;
+            }
+        }
+        if (latest == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "no pending chat prompt for uuid=" + playerUuid);
+        }
+        return deliverInput(latest, text);
+    }
+
+    private GuiResult deliverInput(PendingInput entry, String text) {
+        UUID playerUuid = entry.playerUuid;
+        GuiSession session = sessions.get(playerUuid);
+        if (session == null) {
+            pendingInputs.remove(entry.token);
+            return GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid);
+        }
+        if (session.generation() != entry.generation) {
+            pendingInputs.remove(entry.token);
+            return GuiResult.rejected(GuiErrorCode.GENERATION_MISMATCH,
+                "session generation changed: expected " + entry.generation
+                    + " but current " + session.generation());
+        }
+        if (entry.prompt.timeoutMillis() > 0L
+                && clock.currentTimeMillis() - entry.createdAtMillis
+                    > entry.prompt.timeoutMillis()) {
+            pendingInputs.remove(entry.token);
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "input prompt expired for uuid=" + playerUuid);
+        }
+        if (text.length() > entry.prompt.maxLength()) {
+            return GuiResult.rejected(GuiErrorCode.INVALID_INPUT,
+                "input text too long: " + text.length()
+                    + " (max=" + entry.prompt.maxLength() + ")");
+        }
+        if (offline.contains(playerUuid)) {
+            return GuiResult.rejected(GuiErrorCode.PLAYER_OFFLINE,
+                "player offline when input submitted: uuid=" + playerUuid);
+        }
+        if (!entry.handled.compareAndSet(false, true)) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "input already submitted for uuid=" + playerUuid);
+        }
+        try {
+            entry.consumer.accept(new GuiInputResult(playerUuid, entry.generation,
+                entry.kind, text));
+        } catch (RuntimeException | Error consumerFailure) {
             return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
-                "player offline or not found: uuid=" + argument.playerUuid());
+                "input consumer failed: " + consumerFailure.getMessage());
+        } finally {
+            pendingInputs.remove(entry.token);
         }
-        if (sessions.containsKey(argument.playerUuid())) {
-            return GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
-                "session already exists for uuid=" + argument.playerUuid());
-        }
-        GuiSession session = new GuiSession(argument.playerUuid(),
-            generationSequence.incrementAndGet(), "fake",
-            argument.title(), argument.size(), argument.protectedSlots());
-        sessions.put(argument.playerUuid(), session);
-        return GuiResult.success(session, "opened fake gui session");
+        return GuiResult.success(session, "input delivered");
+    }
+
+    private void invalidatePlayerInputs(UUID playerUuid) {
+        pendingInputs.entrySet().removeIf(e -> e.getValue().playerUuid.equals(playerUuid));
+    }
+
+    private void pruneExpiredInputs(UUID playerUuid) {
+        long now = clock.currentTimeMillis();
+        pendingInputs.entrySet().removeIf(e -> {
+            PendingInput entry = e.getValue();
+            return entry.playerUuid.equals(playerUuid)
+                && entry.prompt.timeoutMillis() > 0L
+                && now - entry.createdAtMillis > entry.prompt.timeoutMillis();
+        });
+    }
+
+    @Override
+    public void handleQuit(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        sessions.remove(playerUuid);
+        actions.entrySet().removeIf(e -> e.getValue().playerUuid.equals(playerUuid));
+        requestGenerations.remove(playerUuid);
+        invalidatePlayerInputs(playerUuid);
+        GuiScopes.dropPlayer(playerUuid);
     }
 
     @Override
@@ -126,6 +402,7 @@ public final class FakeGuiService implements GuiService {
         sessions.remove(playerUuid);
         invalidatePendingActions(playerUuid);
         requestGenerations.remove(playerUuid);
+        invalidatePlayerInputs(playerUuid);
         return GuiResult.success(session, "closed fake gui session");
     }
 
@@ -318,11 +595,19 @@ public final class FakeGuiService implements GuiService {
     }
 
     @Override
-    public void shutdown() {
+    public void shutdownService() {
         running.set(false);
         sessions.clear();
         actions.clear();
         requestGenerations.clear();
+        pendingInputs.clear();
+    }
+
+    /**
+     * 停用假服務（測試便利方法，等同 {@link #shutdownService()}）。
+     */
+    public void shutdown() {
+        shutdownService();
     }
 
     private void invalidatePendingActions(UUID playerUuid) {
@@ -351,6 +636,31 @@ public final class FakeGuiService implements GuiService {
             this.actionId = actionId;
             this.callback = callback;
             this.session = session;
+        }
+    }
+
+    private static final class PendingInput {
+        final UUID token;
+        final String owner;
+        final UUID playerUuid;
+        final long generation;
+        final GuiInputKind kind;
+        final GuiInputPrompt prompt;
+        final Consumer<GuiInputResult> consumer;
+        final long createdAtMillis;
+        final AtomicBoolean handled = new AtomicBoolean(false);
+
+        PendingInput(UUID token, String owner, UUID playerUuid, long generation,
+                GuiInputPrompt prompt, Consumer<GuiInputResult> consumer,
+                long createdAtMillis) {
+            this.token = token;
+            this.owner = owner;
+            this.playerUuid = playerUuid;
+            this.generation = generation;
+            this.kind = prompt.kind();
+            this.prompt = prompt;
+            this.consumer = consumer;
+            this.createdAtMillis = createdAtMillis;
         }
     }
 }

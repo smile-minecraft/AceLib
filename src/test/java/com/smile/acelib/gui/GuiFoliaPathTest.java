@@ -166,7 +166,7 @@ class GuiFoliaPathTest {
         assertEquals(GuiState.REJECTED, query.state());
         assertEquals(GuiErrorCode.SESSION_NOT_FOUND, query.errorCode());
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test
@@ -192,7 +192,7 @@ class GuiFoliaPathTest {
         assertEquals(GuiState.REJECTED, query.state());
         assertEquals(GuiErrorCode.SESSION_NOT_FOUND, query.errorCode());
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     // -----------------------------------------------------------------
@@ -249,6 +249,6 @@ class GuiFoliaPathTest {
                 && player.getOpenInventory().getTopInventory().getSize() == 9,
             "FOLIA + online player 的 renderer 不應在 executor 回傳前同步執行（無 false renderer execution）");
 
-        service.shutdown();
+        service.shutdownService();
     }
 }

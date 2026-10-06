@@ -62,7 +62,7 @@ class GuiAsyncUpdateDeferredTest {
     @AfterEach
     void tearDown() {
         if (service != null && service.isRunning()) {
-            service.shutdown();
+            service.shutdownService();
         }
         MockBukkit.unmock();
     }
@@ -151,7 +151,7 @@ class GuiAsyncUpdateDeferredTest {
         assertEquals(GuiState.ACCEPTED, enqueued.state());
 
         // enqueue 與執行窗口之間：服務停用
-        service.shutdown();
+        service.shutdownService();
         assertFalse(service.isRunning(), "shutdown 後服務必須停止");
 
         deferred.runPending();

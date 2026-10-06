@@ -50,7 +50,7 @@ class GuiServiceImplTest {
     @AfterEach
     void tearDown() {
         if (service != null) {
-            service.shutdown();
+            service.shutdownService();
         }
         MockBukkit.unmock();
     }
@@ -320,7 +320,7 @@ class GuiServiceImplTest {
     @DisplayName("getModuleStatus 啟用後回 READY，shutdown 後回 FAILED")
     void getModuleStatus_lifecycle() {
         assertEquals("READY", service.getModuleStatus());
-        service.shutdown();
+        service.shutdownService();
         assertEquals("FAILED", service.getModuleStatus());
     }
 
@@ -332,7 +332,7 @@ class GuiServiceImplTest {
         long generation = opened.session().generation();
         assertEquals(GuiState.SUCCESS, opened.state());
 
-        service.shutdown();
+        service.shutdownService();
 
         // 所有後續 operation 必須回 SHUTDOWN
         assertEquals(GuiState.REJECTED, service.openInventory(arg).state());
@@ -346,7 +346,7 @@ class GuiServiceImplTest {
             service.closeInventory(uuid, generation).errorCode());
 
         // shutdown 為 idempotent
-        service.shutdown();
+        service.shutdownService();
         assertEquals("FAILED", service.getModuleStatus());
     }
 

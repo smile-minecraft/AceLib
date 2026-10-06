@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs151() throws IOException {
+    void canonicalTopLevelInventoryIs179() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -144,17 +144,44 @@ class ApiBoundaryRegressionTest {
         //       玩家語系解析器（可替換；預設跟隨 Player.locale；不強制偏好儲存）
         //     - com.smile.acelib.message.RenderedMessage（record）— 單次渲染結果
         //       （component／text／formText 三視圖＋缺 key／渲染失敗診斷）
+        //   Supported +13（插件隔離的介面流程與元件）：
+        //     - com.smile.acelib.gui.GuiButton（record）— 按鈕描述
+        //       （識別字＋點擊冷卻；點擊走專屬回呼，不以 SLOT_PROTECTED 冒充）
+        //     - com.smile.acelib.gui.GuiButtonClick（record）— 按鈕點擊事件快照
+        //       （玩家／世代／欄位／按鈕識別字／鐵砧文字）
+        //     - com.smile.acelib.gui.GuiFlow（class）— Java GUI／基岩表單共用流程
+        //       （有序步驟＋起始＋結束回呼）
+        //     - com.smile.acelib.gui.GuiFlowStep（record）— 流程步驟
+        //       （Java 視圖＋可選基岩表單＋按鈕轉移表）
+        //     - com.smile.acelib.gui.GuiInputKind（enum）— 輸入種類（CHAT／ANVIL）
+        //     - com.smile.acelib.gui.GuiInputPrompt（record）— 輸入提示描述
+        //       （種類／標題／提示／長度上限／逾時）
+        //     - com.smile.acelib.gui.GuiInputResult（record）— 玩家輸入結果
+        //       （region 內恰好一次交付）
+        //     - com.smile.acelib.gui.GuiInputTicket（record）— 不透明一次性票券
+        //     - com.smile.acelib.gui.GuiReplacementListener（interface）—
+        //       GUI 被取代通知回呼
+        //     - com.smile.acelib.gui.GuiRevalidation（interface）— 送出前重新驗證
+        //     - com.smile.acelib.gui.GuiScope（class）— 單一 plugin 的 GUI 作用域
+        //       handle（導航／按鈕／票券／輸入；close 具冪等性）
+        //     - com.smile.acelib.gui.GuiScopes（class）— 統一工廠
+        //       （重複建立以 ACELIB-GUI-020 拒絕）
+        //     - com.smile.acelib.gui.GuiView（class）— 視圖描述
+        //       （預設全擋、只開放指定欄位）
+        //   Internal +1（介面流程）：
+        //     - com.smile.acelib.gui.GuiServiceControl — 內部生命週期入口
+        //       （AceLibPlugin 跨 package 停用；公開 shutdown 已於 1.4.0 移除）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 133,
-            "Supported 數量偏離 canonical 133，實際=" + supported);
+        assertTrue(supported == 146,
+            "Supported 數量偏離 canonical 146，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
-        assertTrue(internal == 20,
-            "Internal 數量偏離 canonical 20，實際=" + internal
+        assertTrue(internal == 21,
+            "Internal 數量偏離 canonical 21，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 165,
-            "top-level inventory 偏離 canonical 165，實際=" + types.size());
+        assertTrue(types.size() == 179,
+            "top-level inventory 偏離 canonical 179，實際=" + types.size());
     }
 
     @Test

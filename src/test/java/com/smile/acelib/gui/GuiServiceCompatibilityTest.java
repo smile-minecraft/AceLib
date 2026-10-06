@@ -52,11 +52,6 @@ class GuiServiceCompatibilityTest {
         public String getModuleStatus() {
             return "NOT_INITIALIZED";
         }
-
-        @Override
-        public void shutdown() {
-            // no-op for legacy stub
-        }
     }
 
     private final LegacyGuiServiceStub stub = new LegacyGuiServiceStub();

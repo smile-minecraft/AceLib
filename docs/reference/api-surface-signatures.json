@@ -890,6 +890,25 @@
       "method sessionGeneration() : long",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.gui.GuiButton": [
+      "ctor(java.lang.String,long)",
+      "method cooldownMillis() : long",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method id() : java.lang.String",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.gui.GuiButtonClick": [
+      "ctor(java.util.UUID,long,int,java.lang.String,java.util.Optional<java.lang.String>)",
+      "method anvilText() : java.util.Optional<java.lang.String>",
+      "method buttonId() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method generation() : long",
+      "method hashCode() : int",
+      "method playerUuid() : java.util.UUID",
+      "method slot() : int",
+      "method toString() : java.lang.String"
+    ],
     "com.smile.acelib.gui.GuiConfirmation": [
       "method actionId() : java.lang.String",
       "method actionToken() : java.lang.String",
@@ -900,19 +919,85 @@
     ],
     "com.smile.acelib.gui.GuiErrorCode": [
       "field ACTION_ALREADY_RESOLVED : java.lang.String",
+      "field COOLDOWN_ACTIVE : java.lang.String",
       "field GENERATION_MISMATCH : java.lang.String",
+      "field INPUT_EXPIRED : java.lang.String",
       "field INVALID_INPUT : java.lang.String",
       "field INVENTORY_MISMATCH : java.lang.String",
+      "field NOT_OWNER : java.lang.String",
       "field NOT_READY : java.lang.String",
+      "field NO_PREVIOUS_VIEW : java.lang.String",
       "field OPERATION_FAILED : java.lang.String",
       "field PLAYER_OFFLINE : java.lang.String",
       "field SCHEDULER_REJECTED : java.lang.String",
+      "field SCOPE_CLOSED : java.lang.String",
       "field SESSION_EXISTS : java.lang.String",
       "field SESSION_NOT_FOUND : java.lang.String",
       "field SHUTDOWN : java.lang.String",
       "field SLOT_PROTECTED : java.lang.String",
       "field STALE_REQUEST : java.lang.String",
       "field UNKNOWN_ACTION : java.lang.String"
+    ],
+    "com.smile.acelib.gui.GuiFlow": [
+      "method linearNext(java.lang.String) : com.smile.acelib.gui.GuiFlowStep",
+      "method of(java.util.List<com.smile.acelib.gui.GuiFlowStep>,java.lang.String) : com.smile.acelib.gui.GuiFlow",
+      "method of(java.util.List<com.smile.acelib.gui.GuiFlowStep>,java.lang.String,java.util.function.Consumer<java.util.UUID>) : com.smile.acelib.gui.GuiFlow",
+      "method onComplete() : java.util.function.Consumer<java.util.UUID>",
+      "method startStepId() : java.lang.String",
+      "method step(java.lang.String) : com.smile.acelib.gui.GuiFlowStep",
+      "method steps() : java.util.List<com.smile.acelib.gui.GuiFlowStep>",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.gui.GuiFlowStep": [
+      "ctor(java.lang.String,com.smile.acelib.gui.GuiView)",
+      "ctor(java.lang.String,com.smile.acelib.gui.GuiView,com.smile.acelib.form.FormSpec)",
+      "ctor(java.lang.String,com.smile.acelib.gui.GuiView,com.smile.acelib.form.FormSpec,java.util.Map<java.lang.Integer, java.lang.String>)",
+      "method equals(java.lang.Object) : boolean",
+      "method form() : com.smile.acelib.form.FormSpec",
+      "method hashCode() : int",
+      "method id() : java.lang.String",
+      "method toString() : java.lang.String",
+      "method transitions() : java.util.Map<java.lang.Integer, java.lang.String>",
+      "method view() : com.smile.acelib.gui.GuiView"
+    ],
+    "com.smile.acelib.gui.GuiInputKind": [
+      "field ANVIL : com.smile.acelib.gui.GuiInputKind",
+      "field CHAT : com.smile.acelib.gui.GuiInputKind",
+      "method valueOf(java.lang.String) : com.smile.acelib.gui.GuiInputKind",
+      "method values() : com.smile.acelib.gui.GuiInputKind[]"
+    ],
+    "com.smile.acelib.gui.GuiInputPrompt": [
+      "ctor(com.smile.acelib.gui.GuiInputKind,java.lang.String,java.lang.String,int,long)",
+      "method anvil(java.lang.String,int,long) : com.smile.acelib.gui.GuiInputPrompt",
+      "method chat(java.lang.String,int,long) : com.smile.acelib.gui.GuiInputPrompt",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method hint() : java.lang.String",
+      "method kind() : com.smile.acelib.gui.GuiInputKind",
+      "method maxLength() : int",
+      "method timeoutMillis() : long",
+      "method title() : java.lang.String",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.gui.GuiInputResult": [
+      "ctor(java.util.UUID,long,com.smile.acelib.gui.GuiInputKind,java.lang.String)",
+      "method equals(java.lang.Object) : boolean",
+      "method generation() : long",
+      "method hashCode() : int",
+      "method kind() : com.smile.acelib.gui.GuiInputKind",
+      "method playerUuid() : java.util.UUID",
+      "method text() : java.lang.String",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.gui.GuiInputTicket": [
+      "ctor(java.util.UUID,java.util.UUID,long,com.smile.acelib.gui.GuiInputKind)",
+      "method equals(java.lang.Object) : boolean",
+      "method generation() : long",
+      "method hashCode() : int",
+      "method kind() : com.smile.acelib.gui.GuiInputKind",
+      "method playerUuid() : java.util.UUID",
+      "method toString() : java.lang.String",
+      "method token() : java.util.UUID"
     ],
     "com.smile.acelib.gui.GuiPage": [
       "method content(int,int,java.util.List<T>) : com.smile.acelib.gui.GuiPage<T>",
@@ -931,6 +1016,9 @@
       "method pageIndex() : int",
       "method toString() : java.lang.String",
       "method totalPages() : int"
+    ],
+    "com.smile.acelib.gui.GuiReplacementListener": [
+      "method onReplaced(java.util.UUID,com.smile.acelib.gui.GuiSession,com.smile.acelib.gui.GuiSession) : void"
     ],
     "com.smile.acelib.gui.GuiResult": [
       "method accepted(com.smile.acelib.gui.GuiSession,java.lang.String) : com.smile.acelib.gui.GuiResult",
@@ -955,6 +1043,46 @@
       "method success(com.smile.acelib.gui.GuiSession,java.lang.String) : com.smile.acelib.gui.GuiResult",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.gui.GuiRevalidation": [
+      "method revalidate(java.util.UUID,long) : com.smile.acelib.gui.GuiResult"
+    ],
+    "com.smile.acelib.gui.GuiScope": [
+      "method applyAsyncUpdate(com.smile.acelib.gui.GuiAsyncRequest,com.smile.acelib.gui.GuiPage<T>,java.lang.Runnable) : com.smile.acelib.gui.GuiResult",
+      "method back(java.util.UUID) : com.smile.acelib.gui.GuiResult",
+      "method beginAsyncUpdate(java.util.UUID,long,int) : com.smile.acelib.gui.GuiResult",
+      "method cancel(java.util.UUID,long,java.lang.String) : com.smile.acelib.gui.GuiResult",
+      "method close() : void",
+      "method close(java.util.UUID) : com.smile.acelib.gui.GuiResult",
+      "method confirm(java.util.UUID,long,java.lang.String) : com.smile.acelib.gui.GuiResult",
+      "method confirmWithRevalidation(java.util.UUID,long,java.lang.String,com.smile.acelib.gui.GuiRevalidation) : com.smile.acelib.gui.GuiResult",
+      "method createConfirmation(java.util.UUID,long,java.lang.String,java.lang.Runnable) : com.smile.acelib.gui.GuiResult",
+      "method dispatchClick(java.util.UUID,long,int,java.util.Optional<java.lang.String>) : com.smile.acelib.gui.GuiResult",
+      "method goTo(java.util.UUID,java.lang.String) : com.smile.acelib.gui.GuiResult",
+      "method handleClick(java.util.UUID,long,int) : com.smile.acelib.gui.GuiResult",
+      "method handleClick(java.util.UUID,long,int,java.util.Optional<java.lang.String>) : com.smile.acelib.gui.GuiResult",
+      "method handlePlayerQuit(java.util.UUID) : void",
+      "method isClosed() : boolean",
+      "method onReplaced(com.smile.acelib.gui.GuiReplacementListener) : void",
+      "method openFlow(java.util.UUID,com.smile.acelib.gui.GuiFlow) : com.smile.acelib.gui.GuiResult",
+      "method openView(java.util.UUID,com.smile.acelib.gui.GuiView) : com.smile.acelib.gui.GuiResult",
+      "method ownerName() : java.lang.String",
+      "method plugin() : org.bukkit.plugin.java.JavaPlugin",
+      "method promptAnvil(java.util.UUID,com.smile.acelib.gui.GuiInputPrompt,java.util.function.Consumer<com.smile.acelib.gui.GuiInputResult>) : com.smile.acelib.gui.GuiInputTicket",
+      "method promptChat(java.util.UUID,long,com.smile.acelib.gui.GuiInputPrompt,java.util.function.Consumer<com.smile.acelib.gui.GuiInputResult>) : com.smile.acelib.gui.GuiInputTicket",
+      "method pushView(java.util.UUID,com.smile.acelib.gui.GuiView) : com.smile.acelib.gui.GuiResult",
+      "method reopen(java.util.UUID) : com.smile.acelib.gui.GuiResult",
+      "method replaceView(java.util.UUID,com.smile.acelib.gui.GuiView) : com.smile.acelib.gui.GuiResult",
+      "method submitInput(java.util.UUID,java.lang.String) : com.smile.acelib.gui.GuiResult",
+      "method viewOf(java.util.UUID) : java.util.Optional<com.smile.acelib.gui.GuiView>"
+    ],
+    "com.smile.acelib.gui.GuiScopes": [
+      "method close(org.bukkit.plugin.java.JavaPlugin) : boolean",
+      "method create(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.gui.GuiService) : com.smile.acelib.gui.GuiScope",
+      "method create(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.gui.GuiService,com.smile.acelib.diagnostics.Clock) : com.smile.acelib.gui.GuiScope",
+      "method create(org.bukkit.plugin.java.JavaPlugin,java.util.function.Supplier<com.smile.acelib.gui.GuiService>,com.smile.acelib.diagnostics.Clock,com.smile.acelib.form.FormService,java.util.function.Predicate<java.util.UUID>) : com.smile.acelib.gui.GuiScope",
+      "method get(org.bukkit.plugin.java.JavaPlugin) : java.util.Optional<com.smile.acelib.gui.GuiScope>",
+      "method handlePluginDisable(org.bukkit.plugin.Plugin) : void"
+    ],
     "com.smile.acelib.gui.GuiService": [
       "method applyAsyncUpdate(com.smile.acelib.gui.GuiAsyncRequest,com.smile.acelib.gui.GuiPage<T>,java.lang.Runnable) : com.smile.acelib.gui.GuiResult",
       "method beginAsyncUpdate(java.util.UUID,long,int) : com.smile.acelib.gui.GuiResult",
@@ -968,7 +1096,6 @@
       "method getListener() : org.bukkit.event.Listener",
       "method getModuleStatus() : java.lang.String",
       "method openInventory(com.smile.acelib.gui.GuiArgument) : com.smile.acelib.gui.GuiResult",
-      "method shutdown() : void",
       "method validateClick(java.util.UUID,long,int) : com.smile.acelib.gui.GuiResult"
     ],
     "com.smile.acelib.gui.GuiSession": [
@@ -992,6 +1119,17 @@
       "field SUCCESS : com.smile.acelib.gui.GuiState",
       "method valueOf(java.lang.String) : com.smile.acelib.gui.GuiState",
       "method values() : com.smile.acelib.gui.GuiState[]"
+    ],
+    "com.smile.acelib.gui.GuiView": [
+      "method allowedSlots() : java.util.Set<java.lang.Integer>",
+      "method anvil(java.lang.String) : com.smile.acelib.gui.GuiView$Builder",
+      "method buttons() : java.util.Map<java.lang.Integer, com.smile.acelib.gui.GuiButton>",
+      "method chest(java.lang.String,int) : com.smile.acelib.gui.GuiView$Builder",
+      "method handlers() : java.util.Map<java.lang.String, java.util.function.Consumer<com.smile.acelib.gui.GuiButtonClick>>",
+      "method kind() : com.smile.acelib.gui.GuiView$Kind",
+      "method size() : int",
+      "method title() : java.lang.String",
+      "method toString() : java.lang.String"
     ],
     "com.smile.acelib.item.AceItemFactory": [
       "method create(com.smile.acelib.item.AceItemFactory$ItemSpec) : org.bukkit.inventory.ItemStack",

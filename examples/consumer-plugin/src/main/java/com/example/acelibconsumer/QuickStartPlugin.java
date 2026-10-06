@@ -3,7 +3,14 @@ package com.example.acelibconsumer;
 import com.smile.acelib.AceLibApi;
 import com.smile.acelib.command.CommandCatalog;
 import com.smile.acelib.command.CommandDoc;
+import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.form.FormImage;
+import com.smile.acelib.form.FormSpec;
+import com.smile.acelib.gui.GuiFlow;
+import com.smile.acelib.gui.GuiFlowStep;
+import com.smile.acelib.gui.GuiScope;
+import com.smile.acelib.gui.GuiScopes;
+import com.smile.acelib.gui.GuiView;
 import com.smile.acelib.message.FormText;
 import com.smile.acelib.message.FormTextOptions;
 import com.smile.acelib.message.MessageLabel;
@@ -38,6 +45,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class QuickStartPlugin extends JavaPlugin {
 
     private MessageScope messageScope;
+    private GuiScope guiScope;
 
     @Override
     public void onEnable() {
@@ -79,6 +87,20 @@ public class QuickStartPlugin extends JavaPlugin {
         messageScope = MessageScopes.create(this, java.util.Locale.US);
         messageScope.syncBuiltinDefaults();
         demonstrateMessageScope(messageScope);
+
+        // 5c. 插件隔離 GUI 作用域：服務以 supplier 包裝（reload 後自動讀到新實例），
+        //     結束只關自己的作用域。公開介面沒有全服務 shutdown。
+        AceLibApi guiApi = registration.getProvider().api();
+        guiScope = GuiScopes.create(this,
+            () -> registration.getProvider().api().getGuiService(),
+            Clock.system(),
+            guiApi.getBedrockService().forms(),
+            guiApi.getBedrockService()::isBedrockPlayer);
+        guiScope.onReplaced((uuid, oldSession, newSession) ->
+            getLogger().info("gui replaced for " + uuid));
+        getServer().getOnlinePlayers().stream()
+            .findFirst()
+            .ifPresent(player -> demonstrateGuiScope(guiScope, player));
 
         // 6. 作用域任務群組（本版新 API）：讀取→背景計算→回玩家執行緒回覆。
         //    只用 Supported 型別；SafeSchedulerImpl 等 Internal 型別不可引用。
@@ -168,6 +190,36 @@ public class QuickStartPlugin extends JavaPlugin {
             messageScope.close();
             messageScope = null;
         }
+        GuiScopes.close(this);
+        guiScope = null;
+    }
+
+    /**
+     * 插件隔離 GUI 示範：預設全擋的視圖、按鈕回呼與冷卻、跨呈現共用流程。
+     *
+     * <p>只用 Supported 型別；`GuiServiceControl` 等 Internal 型別不可引用。
+     * 結束 GUI 請關自己的作用域（見 {@code onDisable}），不要找全服務 shutdown。</p>
+     *
+     * @param gui 本 plugin 的 GUI 作用域；不可為 null
+     * @param player 作用域擁有者；不可為 null
+     */
+    private void demonstrateGuiScope(GuiScope gui, Player player) {
+        GuiView shop = GuiView.chest("商店", 27)
+            .allow(10, 11, 12)
+            .button(13, "buy", 5_000L,
+                click -> getLogger().info("buy pressed by " + click.playerUuid()))
+            .build();
+        gui.openView(player.getUniqueId(), shop);
+
+        GuiFlow flow = GuiFlow.of(java.util.List.of(
+            new GuiFlowStep("menu", shop,
+                FormSpec.simple("選單").content("請選擇").button("商店").build(),
+                java.util.Map.of(0, "shop")),
+            new GuiFlowStep("shop", shop,
+                FormSpec.simple("商店").content("買賣").button("買").button("賣").build())),
+            "menu",
+            uuid -> getLogger().info("flow finished for " + uuid));
+        gui.openFlow(player.getUniqueId(), flow);
     }
 
     /**

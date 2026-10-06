@@ -1,20 +1,26 @@
 package com.smile.acelib.gui;
 
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.smile.acelib.diagnostics.Clock;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.inventory.AnvilInventory;
 import org.bukkit.inventory.Inventory;
 
 /**
@@ -31,8 +37,8 @@ import org.bukkit.inventory.Inventory;
  *   <li>Bukkit 事件（{@link InventoryClickEvent} / {@link InventoryDragEvent} /
  *       {@link InventoryCloseEvent}）由內部 listener 統一處理，listener
  *       透過 {@link #validateClick} 等服務層契約保證一致行為</li>
- *   <li>{@link #shutdown()} 標記 stopped 並清除所有 active session；既有
- *       session 不再可被 close（會回 SHUTDOWN）</li>
+ *   <li>{@link GuiServiceControl#shutdownService()} 標記 stopped 並清除所有
+ *       active session；既有的 session 不再可被 close（會回 SHUTDOWN）</li>
  * </ul>
  *
  * <h2>Player reference 處理</h2>
@@ -43,12 +49,15 @@ import org.bukkit.inventory.Inventory;
  *
  * <p>本類別為 Internal 實作細節，下游不得直接依賴；透過
  * {@link GuiService#forProduction(com.smile.acelib.scheduler.SafeScheduler)}
- * 或 {@link com.smile.acelib.AceLibApi} 取得 {@link GuiService} 介面。</p>
+ * 或 {@link com.smile.acelib.AceLibApi} 取得 {@link GuiService} 介面。
+ * 插件隔離的作用域操作（開啟取代、輸入提示）走同套件
+ * {@link ScopedGuiOperations} 橋接，不經公開介面。</p>
  *
  * @see GuiService
  * @since 1.0.0
  */
-final class GuiServiceImpl implements GuiService {
+final class GuiServiceImpl
+        implements GuiService, GuiServiceControl, ScopedGuiOperations {
 
     private static final Logger LOGGER = Logger.getLogger("AceLib");
 
@@ -71,6 +80,18 @@ final class GuiServiceImpl implements GuiService {
     private final ConcurrentMap<UUID, AtomicLong> requestGenerations
         = new ConcurrentHashMap<>();
     /**
+     * 待輸入提示表（聊天／鐵砧）。
+     * key 為服務產生的不透明票券；value 為對應 {@link PendingInput}。
+     * 不持有 {@code Player} reference — 僅保存 UUID 與回呼。
+     */
+    private final ConcurrentMap<UUID, PendingInput> pendingInputs
+        = new ConcurrentHashMap<>();
+    /**
+     * 時間來源（輸入逾時判斷用）。production 與預設建構走系統時鐘；
+     * 測試可經注入式建構子傳入可手動推進的時鐘，全程不需 sleep。
+     */
+    private final Clock clock;
+    /**
      * 預先建立的 Bukkit listener；實際註冊延後到
      * {@link #registerListeners(Server, org.bukkit.plugin.Plugin)} 呼叫，
      * 通常由 {@link com.smile.acelib.AceLibPlugin#onPluginReady()} 觸發。
@@ -92,7 +113,7 @@ final class GuiServiceImpl implements GuiService {
      * {@link #forProduction(com.smile.acelib.scheduler.SafeScheduler)} 注入 executor。</p>
      */
     GuiServiceImpl() {
-        this(PlayerContextExecutor.noop());
+        this(PlayerContextExecutor.noop(), Clock.system());
     }
 
     /**
@@ -102,7 +123,18 @@ final class GuiServiceImpl implements GuiService {
      * @param executor 派送 adapter；不可為 null
      */
     GuiServiceImpl(PlayerContextExecutor executor) {
+        this(executor, Clock.system());
+    }
+
+    /**
+     * 注入式建構子：同時注入派送 adapter 與時間來源（輸入逾時測試 seam）。
+     *
+     * @param executor 派送 adapter；不可為 null
+     * @param clock 時間來源；不可為 null
+     */
+    GuiServiceImpl(PlayerContextExecutor executor, Clock clock) {
         this.playerContextExecutor = Objects.requireNonNull(executor, "executor");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     /**
@@ -148,51 +180,93 @@ final class GuiServiceImpl implements GuiService {
     @Override
     public GuiResult openInventory(GuiArgument argument) {
         requireNonNull(argument, "argument");
+        // Legacy 路徑：擁有者固定為內部標記，既有 session 時拒絕（SESSION_EXISTS），
+        // 行為與 1.3.x 一致；作用域導航改走 openOwned（取代語意）。
+        OwnedOpenOutcome outcome = openInternal("acelib", argument.playerUuid(),
+            argument.title(), GuiView.Kind.CHEST, argument.size(),
+            argument.protectedSlots(), false);
+        return outcome.result();
+    }
+
+    /**
+     * 統一開啟入口（legacy 與作用域共用）。
+     *
+     * @param owner 擁有者標記；不可為 null
+     * @param playerUuid 目標玩家；不可為 null
+     * @param title 視圖標題；不可為 null
+     * @param kind inventory 種類；不可為 null
+     * @param size 總格數（CHEST 用；ANVIL 忽略，固定 3 格）
+     * @param protectedSlots 受保護集合；可為 null（視為空集合）
+     * @param replaceExisting 已有 session 時取代或拒絕
+     * @return 開啟結果＋被取代的舊 session（無取代時為 null）
+     */
+    private OwnedOpenOutcome openInternal(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting) {
         if (!running.get()) {
-            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
-                "gui service is shutdown");
+            return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null);
         }
         // 先透過 UUID 取得當下 Player reference；caller 不持有，內部使用完即釋放。
-        Player player = Bukkit.getPlayer(argument.playerUuid());
+        Player player = Bukkit.getPlayer(playerUuid);
         if (player == null) {
-            return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
-                "player offline or not found: uuid=" + argument.playerUuid());
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "player offline or not found: uuid=" + playerUuid), null);
         }
+        int slots = kind == GuiView.Kind.ANVIL ? 3 : size;
         // 先註冊 session — listener 透過 generation 與 UUID 識別 ownership
         GuiSession session;
+        GuiSession replaced = null;
         try {
-            session = registry.startSession(argument.playerUuid(), "acelib",
-                argument.size(), argument.protectedSlots(), argument.title());
-        } catch (IllegalStateException ex) {
-            return GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
-                ex.getMessage());
+            session = registry.startSession(playerUuid, owner, slots,
+                protectedSlots, title);
+        } catch (IllegalStateException exists) {
+            if (!replaceExisting) {
+                return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
+                    exists.getMessage()), null);
+            }
+            // 取代：先結束舊 session（含票券／非同步序號／輸入提示），再建新 session。
+            // 取代具破壞性 — 開啟失敗時舊 session 無法復原，呼叫端（作用域）負責通知。
+            replaced = registry.endSession(playerUuid);
+            invalidatePendingActions(playerUuid);
+            requestGenerations.remove(playerUuid);
+            invalidatePlayerInputs(playerUuid);
+            try {
+                session = registry.startSession(playerUuid, owner, slots,
+                    protectedSlots, title);
+            } catch (IllegalStateException raced) {
+                return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
+                    raced.getMessage()), replaced);
+            }
         }
         final long generation = session.generation();
+        final int openSize = slots;
         // 透過 player context 開 inventory + link + 實際開啟視窗；
         // Folia 下由 entity scheduler 派送，Paper 下走 main thread。
         boolean dispatched;
         try {
             dispatched = playerContextExecutor.runOnPlayerRegion(player, () -> {
                 try {
-                    Inventory inv = Bukkit.createInventory(null,
-                        argument.size(), argument.title());
+                    Inventory inv = kind == GuiView.Kind.ANVIL
+                        ? Bukkit.createInventory(null, InventoryType.ANVIL, title)
+                        : Bukkit.createInventory(null, openSize, title);
                     GuiInventoryLink.link(inv, generation);
                     player.openInventory(inv);
                 } catch (Throwable t) {
                     LOGGER.log(Level.WARNING,
                         "GuiService: failed to open inventory for uuid={0}: {1}",
-                        new Object[] { argument.playerUuid(), t.getMessage() });
+                        new Object[] { playerUuid, t.getMessage() });
                     // 建立失敗時移除 session，避免殘留
-                    registry.endSession(argument.playerUuid());
+                    registry.endSession(playerUuid);
                 }
             });
         } catch (Throwable t) {
             // executor 派送丟例外（極少見，通常代表 dispatcher 本身失敗）
             LOGGER.log(Level.WARNING,
                 "GuiService: player context executor failed: {0}", t.getMessage());
-            registry.endSession(argument.playerUuid());
-            return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
-                "executor failed: " + t.getMessage());
+            registry.endSession(playerUuid);
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "executor failed: " + t.getMessage()), replaced);
         }
         if (!dispatched) {
             // player context executor 拒絕派送時：清理 session 並回報 scheduler rejection
@@ -200,16 +274,83 @@ final class GuiServiceImpl implements GuiService {
             // player offline、平台不支援等）時，舊實作仍回 SUCCESS 但實際未開 inventory，
             // 留下 stale session 與 player reference。
             // 修正：清理 session、回 FAILED + ACELIB-GUI-013 SCHEDULER_REJECTED。
-            registry.endSession(argument.playerUuid());
+            registry.endSession(playerUuid);
             LOGGER.log(Level.WARNING,
                 "GuiService: player context executor refused dispatch for uuid={0} "
                     + "(scheduler disabled, player offline, or platform unsupported)",
-                argument.playerUuid());
-            return GuiResult.failed(GuiErrorCode.SCHEDULER_REJECTED,
+                playerUuid);
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.SCHEDULER_REJECTED,
                 "player context executor refused dispatch for uuid="
-                    + argument.playerUuid());
+                    + playerUuid), replaced);
         }
-        return GuiResult.success(session, "opened gui session");
+        return new OwnedOpenOutcome(GuiResult.success(session, "opened gui session"),
+            replaced);
+    }
+
+    @Override
+    public OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        Objects.requireNonNull(kind, "kind");
+        return openInternal(owner, playerUuid, title, kind, size,
+            protectedSlots, replaceExisting);
+    }
+
+    @Override
+    public GuiResult closeOwned(String owner, UUID playerUuid, long generation) {        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        GuiSession session = registry.getSession(playerUuid);
+        if (session == null) {
+            return GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid);
+        }
+        if (!session.owner().equals(owner)) {
+            return GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "session owned by " + session.owner() + ", not " + owner);
+        }
+        return closeInventory(playerUuid, generation);
+    }
+
+    @Override
+    public OwnedOpenOutcome openFormSessionOwned(String owner, UUID playerUuid,
+            String title) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        if (!running.get()) {
+            return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null);
+        }
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null) {
+            return new OwnedOpenOutcome(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "player offline or not found: uuid=" + playerUuid), null);
+        }
+        GuiSession replaced = registry.endSession(playerUuid);
+        if (replaced != null) {
+            invalidatePendingActions(playerUuid);
+            requestGenerations.remove(playerUuid);
+            invalidatePlayerInputs(playerUuid);
+        }
+        GuiSession session;
+        try {
+            session = registry.startSession(playerUuid, owner, 9,
+                Set.of(0, 1, 2, 3, 4, 5, 6, 7, 8), title);
+        } catch (IllegalStateException | IllegalArgumentException raced) {
+            return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SESSION_EXISTS,
+                raced.getMessage()), replaced);
+        }
+        return new OwnedOpenOutcome(GuiResult.success(session, "opened form session"),
+            replaced);
+    }
+
+    @Override
+    public GuiSession currentSession(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        return registry.getSession(playerUuid);
     }
 
     @Override
@@ -239,6 +380,8 @@ final class GuiServiceImpl implements GuiService {
         invalidatePendingActions(playerUuid);
         // 同時失效該玩家的非同步更新請求序號，避免關閉後舊請求仍被視為有效
         requestGenerations.remove(playerUuid);
+        // 同時失效該玩家的待輸入提示，避免關閉後送出仍執行 consumer
+        invalidatePlayerInputs(playerUuid);
         // 透過 player context 實際關閉 Bukkit inventory
         Player player = Bukkit.getPlayer(playerUuid);
         if (player != null) {
@@ -599,13 +742,258 @@ final class GuiServiceImpl implements GuiService {
         pendingActions.entrySet().removeIf(e -> e.getValue().playerUuid.equals(playerUuid));
     }
 
+    // -----------------------------------------------------------------
+    // 輸入提示（聊天／鐵砧）
+    // -----------------------------------------------------------------
+
+    @Override
+    public InputPromptOutcome promptInputOwned(String owner, UUID playerUuid,
+            long generation, GuiInputPrompt prompt, Consumer<GuiInputResult> consumer) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(prompt, "prompt");
+        Objects.requireNonNull(consumer, "consumer");
+        if (!running.get()) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown"), null, null);
+        }
+        GuiSession session = registry.getSession(playerUuid);
+        if (session == null) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid), null, null);
+        }
+        if (!session.owner().equals(owner)) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "session owned by " + session.owner() + ", not " + owner), null, null);
+        }
+        if (session.generation() != generation) {
+            return new InputPromptOutcome(GuiResult.rejected(GuiErrorCode.GENERATION_MISMATCH,
+                "expected generation=" + session.generation()
+                    + " but got " + generation), null, null);
+        }
+        pruneExpiredInputs(playerUuid);
+        if (prompt.kind() == GuiInputKind.CHAT) {
+            UUID token = UUID.randomUUID();
+            PendingInput entry = new PendingInput(token, owner, playerUuid, generation,
+                prompt, consumer, clock.currentTimeMillis());
+            pendingInputs.put(token, entry);
+            GuiInputTicket ticket = new GuiInputTicket(token, playerUuid, generation,
+                prompt.kind());
+            return new InputPromptOutcome(GuiResult.success(session), ticket, null);
+        }
+        // ANVIL：開啟鐵砧視圖（取代語意），再登記輸入提示。
+        OwnedOpenOutcome opened = openInternal(owner, playerUuid, prompt.title(),
+            GuiView.Kind.ANVIL, 3, Set.of(0, 1, 2), true);
+        if (!opened.result().isSuccess()) {
+            return new InputPromptOutcome(opened.result(), null, opened.replaced());
+        }
+        GuiSession anvilSession = opened.result().session();
+        UUID token = UUID.randomUUID();
+        PendingInput entry = new PendingInput(token, owner, playerUuid,
+            anvilSession.generation(), prompt, consumer, clock.currentTimeMillis());
+        pendingInputs.put(token, entry);
+        GuiInputTicket ticket = new GuiInputTicket(token, playerUuid,
+            anvilSession.generation(), prompt.kind());
+        return new InputPromptOutcome(GuiResult.success(anvilSession), ticket,
+            opened.replaced());
+    }
+
+    @Override
+    public GuiResult submitInputOwned(String owner, UUID token, String text) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(token, "token");
+        Objects.requireNonNull(text, "text");
+        if (!running.get()) {
+            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown");
+        }
+        PendingInput entry = pendingInputs.get(token);
+        if (entry == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "unknown or expired input token=" + token);
+        }
+        if (!entry.owner.equals(owner)) {
+            return GuiResult.rejected(GuiErrorCode.NOT_OWNER,
+                "input owned by " + entry.owner + ", not " + owner);
+        }
+        return deliverInput(entry, text);
+    }
+
+    @Override
+    public GuiResult routeChatInput(UUID playerUuid, String text) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(text, "text");
+        if (!running.get()) {
+            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown");
+        }
+        GuiSession session = registry.getSession(playerUuid);
+        if (session == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "no active session for uuid=" + playerUuid);
+        }
+        // 聊天路由給目前 session 擁有者的最新待處理聊天提示；
+        // 多個 plugin 同時提示同一玩家時，以畫面上 GUI 的擁有者為準。
+        PendingInput latest = null;
+        for (PendingInput candidate : pendingInputs.values()) {
+            if (candidate.kind != GuiInputKind.CHAT
+                    || !candidate.playerUuid.equals(playerUuid)
+                    || !candidate.owner.equals(session.owner())
+                    || candidate.generation != session.generation()) {
+                continue;
+            }
+            if (latest == null || candidate.createdAtMillis > latest.createdAtMillis) {
+                latest = candidate;
+            }
+        }
+        if (latest == null) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "no pending chat prompt for uuid=" + playerUuid);
+        }
+        return deliverInput(latest, text);
+    }
+
+    /**
+     * 派送輸入文字到 consumer（一次性）。
+     *
+     * <p>先做同步預檢（session／generation／逾時／長度／在線），再經 player context
+     * executor 派送並於執行前重新驗證（deferred race 防護，比照
+     * {@link #applyAsyncUpdate}）。超長文字被拒時票券保留，可重試。</p>
+     */
+    private GuiResult deliverInput(PendingInput entry, String text) {
+        UUID playerUuid = entry.playerUuid;
+        GuiSession session = registry.getSession(playerUuid);
+        if (session == null) {
+            pendingInputs.remove(entry.token, entry);
+            return GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                "no active session for uuid=" + playerUuid);
+        }
+        if (session.generation() != entry.generation) {
+            pendingInputs.remove(entry.token, entry);
+            return GuiResult.rejected(GuiErrorCode.GENERATION_MISMATCH,
+                "session generation changed: expected " + entry.generation
+                    + " but current " + session.generation());
+        }
+        if (entry.prompt.timeoutMillis() > 0L
+                && clock.currentTimeMillis() - entry.createdAtMillis
+                    > entry.prompt.timeoutMillis()) {
+            pendingInputs.remove(entry.token, entry);
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "input prompt expired for uuid=" + playerUuid);
+        }
+        if (text.length() > entry.prompt.maxLength()) {
+            return GuiResult.rejected(GuiErrorCode.INVALID_INPUT,
+                "input text too long: " + text.length()
+                    + " (max=" + entry.prompt.maxLength() + ")");
+        }
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null) {
+            return GuiResult.rejected(GuiErrorCode.PLAYER_OFFLINE,
+                "player offline when input submitted: uuid=" + playerUuid);
+        }
+        if (!entry.handled.compareAndSet(false, true)) {
+            return GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                "input already submitted for uuid=" + playerUuid);
+        }
+        GuiInputResult delivered = new GuiInputResult(playerUuid, entry.generation,
+            entry.kind, text);
+        AtomicReference<GuiResult> outcome = new AtomicReference<>();
+        boolean dispatched;
+        try {
+            dispatched = playerContextExecutor.runOnPlayerRegion(player, () -> {
+                try {
+                    if (!running.get()) {
+                        outcome.set(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                            "gui service is shutdown before input delivered: uuid="
+                                + playerUuid));
+                        return;
+                    }
+                    GuiSession current = registry.getSession(playerUuid);
+                    if (current == null) {
+                        outcome.set(GuiResult.rejected(GuiErrorCode.SESSION_NOT_FOUND,
+                            "no active session for uuid=" + playerUuid
+                                + " before input delivered"));
+                        return;
+                    }
+                    if (current.generation() != entry.generation) {
+                        outcome.set(GuiResult.rejected(GuiErrorCode.GENERATION_MISMATCH,
+                            "session generation changed before input delivered"));
+                        return;
+                    }
+                    if (pendingInputs.get(entry.token) != entry) {
+                        outcome.set(GuiResult.rejected(GuiErrorCode.INPUT_EXPIRED,
+                            "input no longer pending before delivery: uuid="
+                                + playerUuid));
+                        return;
+                    }
+                    if (Bukkit.getPlayer(playerUuid) == null) {
+                        outcome.set(GuiResult.rejected(GuiErrorCode.PLAYER_OFFLINE,
+                            "player offline before input delivered: uuid="
+                                + playerUuid));
+                        return;
+                    }
+                    entry.consumer.accept(delivered);
+                    outcome.set(GuiResult.success(current, "input delivered"));
+                } catch (Throwable t) {
+                    LOGGER.log(Level.WARNING,
+                        "GuiService: input consumer failed for uuid={0}: {1}",
+                        new Object[] { playerUuid, t.getMessage() });
+                    outcome.set(GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                        "input consumer failed: " + t.getMessage()));
+                } finally {
+                    pendingInputs.remove(entry.token, entry);
+                }
+            });
+        } catch (Throwable t) {
+            LOGGER.log(Level.WARNING,
+                "GuiService: input executor dispatch failed: {0}", t.getMessage());
+            pendingInputs.remove(entry.token, entry);
+            return GuiResult.failed(GuiErrorCode.OPERATION_FAILED,
+                "executor failed: " + t.getMessage());
+        }
+        if (!dispatched) {
+            pendingInputs.remove(entry.token, entry);
+            return GuiResult.failed(GuiErrorCode.SCHEDULER_REJECTED,
+                "player context executor refused dispatch for uuid=" + playerUuid);
+        }
+        GuiResult result = outcome.get();
+        if (result != null) {
+            return result;
+        }
+        return GuiResult.accepted(session,
+            "input dispatched; consumer will run on player region after revalidation");
+    }
+
+    /**
+     * 使指定玩家的所有待輸入提示失效（session 結束時呼叫）。
+     *
+     * <p>失效後送出會因票券不存在而回 {@code INPUT_EXPIRED}，
+     * consumer 永不執行。</p>
+     */
+    private void invalidatePlayerInputs(UUID playerUuid) {
+        pendingInputs.entrySet().removeIf(e -> e.getValue().playerUuid.equals(playerUuid));
+    }
+
+    /**
+     * 清除該玩家已逾時的輸入提示（提示建立與送出時的順手清理，避免長期殘留）。
+     */
+    private void pruneExpiredInputs(UUID playerUuid) {
+        long now = clock.currentTimeMillis();
+        pendingInputs.entrySet().removeIf(e -> {
+            PendingInput entry = e.getValue();
+            return entry.playerUuid.equals(playerUuid)
+                && entry.prompt.timeoutMillis() > 0L
+                && now - entry.createdAtMillis > entry.prompt.timeoutMillis();
+        });
+    }
+
     @Override
     public String getModuleStatus() {
         return running.get() ? "READY" : "FAILED";
     }
 
     @Override
-    public void shutdown() {
+    public void shutdownService() {
         if (!running.compareAndSet(true, false)) {
             return; // idempotent
         }
@@ -615,6 +1003,7 @@ final class GuiServiceImpl implements GuiService {
         registry.clear();
         pendingActions.clear();
         requestGenerations.clear();
+        pendingInputs.clear();
     }
 
     // -----------------------------------------------------------------
@@ -636,6 +1025,14 @@ final class GuiServiceImpl implements GuiService {
         registry.endSession(playerUuid);
         invalidatePendingActions(playerUuid);
         requestGenerations.remove(playerUuid);
+        invalidatePlayerInputs(playerUuid);
+    }
+
+    @Override
+    public void handleQuit(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        internalCleanup(playerUuid);
+        GuiScopes.dropPlayer(playerUuid);
     }
 
     /**
@@ -662,6 +1059,10 @@ final class GuiServiceImpl implements GuiService {
      * <p>僅在該 inventory 屬於 active session 時介入；其他 GUI 行為不受影響。
      * 對應「受保護 slot 點擊被阻擋」契約。</p>
      *
+     * <p>作用域視圖（經 {@link GuiScope} 開啟）的點擊改走視圖規則
+     * （按鈕回呼／放行欄位／預設全擋），不再經 legacy
+     * {@link #validateClick}；legacy session 維持原行為。</p>
+     *
      * @param event Bukkit 派送的 click event；不可為 null
      */
     public void handleClick(InventoryClickEvent event) {
@@ -678,6 +1079,25 @@ final class GuiServiceImpl implements GuiService {
         if (!(whoClicked instanceof Player p)) {
             return;
         }
+        GuiSession session = registry.getSession(p.getUniqueId());
+        GuiScope scope = session == null ? null
+            : GuiScopes.findByOwner(session.owner());
+        if (scope != null && scope.hasViewState(p.getUniqueId(), generation)) {
+            GuiResult result = scope.dispatchClick(p.getUniqueId(), generation,
+                event.getRawSlot(), readAnvilText(top));
+            // 只有 ALLOWED（放行欄位、由遊戲邏輯繼續處理）不取消；
+            // 按鈕已處理／被拒一律取消，避免物品被拿走或放入。
+            if (!result.isAllowed()) {
+                event.setCancelled(true);
+            }
+            if (result.isRejected()) {
+                LOGGER.log(Level.FINE,
+                    "GuiService: blocked scoped click (slot={0}, code={1}, detail={2})",
+                    new Object[] { event.getRawSlot(), result.errorCode(),
+                        result.detail() });
+            }
+            return;
+        }
         GuiResult result = validateClick(p.getUniqueId(), generation, event.getRawSlot());
         if (result.isRejected()) {
             event.setCancelled(true);
@@ -685,6 +1105,24 @@ final class GuiServiceImpl implements GuiService {
                 "GuiService: blocked click (slot={0}, code={1}, detail={2})",
                 new Object[] { event.getRawSlot(), result.errorCode(), result.detail() });
         }
+    }
+
+    /**
+     * 讀取鐵砧視圖當下的更名文字（供作用域按鈕回呼）。
+     *
+     * @return 更名文字；非鐵砧視圖或讀取失敗時為 empty
+     */
+    private static Optional<String> readAnvilText(Inventory top) {
+        if (top instanceof AnvilInventory anvil) {
+            try {
+                return Optional.ofNullable(anvil.getRenameText());
+            } catch (Throwable t) {
+                LOGGER.log(Level.FINE,
+                    "GuiService: failed to read anvil rename text (ignored): {0}",
+                    t.getMessage());
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -749,7 +1187,30 @@ final class GuiServiceImpl implements GuiService {
             if (current == null || closingOwnedByCurrent) {
                 internalCleanup(p.getUniqueId());
             }
+            // 通知各作用域：該 generation 的視圖狀態失效（手動關閉）。
+            // 取代導航產生的舊視窗關閉事件 generation 與目前不同，會被忽略。
+            GuiScopes.notifyInventoryClosed(p.getUniqueId(), closingGeneration);
         }
+    }
+
+    /**
+     * 路由玩家聊天訊息到待處理的聊天輸入提示（供聊天 listener）。
+     *
+     * <p>成功（SUCCESS／ACCEPTED）表示訊息已被某個提示消耗，
+     * 呼叫端應取消事件；其餘狀態表示無命中，放行。</p>
+     *
+     * @param playerUuid 發訊玩家；不可為 null
+     * @param message 聊天訊息；不可為 null
+     * @return 路由結果
+     */
+    public GuiResult handleChatInput(UUID playerUuid, String message) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(message, "message");
+        if (!running.get()) {
+            return GuiResult.rejected(GuiErrorCode.SHUTDOWN,
+                "gui service is shutdown");
+        }
+        return routeChatInput(playerUuid, message);
     }
 
     /**
@@ -837,6 +1298,39 @@ final class GuiServiceImpl implements GuiService {
             this.actionToken = actionToken;
             this.callback = callback;
             this.session = session;
+        }
+    }
+
+    /**
+     * 待輸入提示內部狀態。
+     *
+     * <p>不可變欄位記錄綁定資訊；{@link #handled} 以 CAS 保證 consumer
+     * 恰好執行一次（聊天路由與票券送出的競爭由該旗標線性化）。
+     * consumer 本身在玩家 region context 內、經重新驗證後才執行。
+     * 本物件不持有 {@code Player} reference。</p>
+     */
+    private static final class PendingInput {
+        final UUID token;
+        final String owner;
+        final UUID playerUuid;
+        final long generation;
+        final GuiInputKind kind;
+        final GuiInputPrompt prompt;
+        final Consumer<GuiInputResult> consumer;
+        final long createdAtMillis;
+        final AtomicBoolean handled = new AtomicBoolean(false);
+
+        PendingInput(UUID token, String owner, UUID playerUuid, long generation,
+                GuiInputPrompt prompt, Consumer<GuiInputResult> consumer,
+                long createdAtMillis) {
+            this.token = token;
+            this.owner = owner;
+            this.playerUuid = playerUuid;
+            this.generation = generation;
+            this.kind = prompt.kind();
+            this.prompt = prompt;
+            this.consumer = consumer;
+            this.createdAtMillis = createdAtMillis;
         }
     }
 }

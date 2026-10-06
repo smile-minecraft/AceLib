@@ -54,7 +54,7 @@ class GuiConfirmationTest {
     @AfterEach
     void tearDown() {
         if (service != null) {
-            service.shutdown();
+            service.shutdownService();
         }
         MockBukkit.unmock();
     }
@@ -101,7 +101,7 @@ class GuiConfirmationTest {
     @DisplayName("createConfirmation 對 shutdown 服務回 REJECTED + ACELIB-GUI-002")
     void createConfirmation_shutdown_isRejected() {
         long generation = openSession();
-        service.shutdown();
+        service.shutdownService();
         GuiResult result = service.createConfirmation(uuid, generation, "x", () -> { });
         assertEquals(GuiState.REJECTED, result.state());
         assertEquals(GuiErrorCode.SHUTDOWN, result.errorCode());
@@ -266,7 +266,7 @@ class GuiConfirmationTest {
         GuiConfirmation confirmation = createConfirmation(generation,
             "act", counter::incrementAndGet);
 
-        service.shutdown();
+        service.shutdownService();
 
         GuiResult result = service.confirm(uuid, generation, confirmation.actionToken());
         assertEquals(GuiState.REJECTED, result.state());

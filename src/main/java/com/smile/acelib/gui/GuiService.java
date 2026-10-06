@@ -365,10 +365,4 @@ public interface GuiService {
             "GuiService implementation does not override applyAsyncUpdate; "
                 + "async update is not supported by this implementation");
     }
-
-    /**
-     * 取消所有 active session 並標記 stopped。測試 seam；正常 reload/disable
-     * 不應直接呼叫。
-     */
-    void shutdown();
 }

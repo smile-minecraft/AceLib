@@ -175,6 +175,11 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-GUI-016` | 非同步更新請求已過時 | 舊 request 取代新 request |
 | `ACELIB-GUI-017` | 非同步更新結果回來時玩家已離線 | 不得對離線玩家執行 inventory mutation |
 | `ACELIB-GUI-018` | 非同步更新結果回來時 inventory 已不匹配 | link generation 不符 |
+| `ACELIB-GUI-019` | 跨 plugin 操作他人擁有的 GUI | 只能經自己的作用域操作自己開的 GUI |
+| `ACELIB-GUI-020` | GUI 作用域生命週期違規 | 同一 plugin 重複建立作用域，或已關閉的作用域被使用 |
+| `ACELIB-GUI-021` | 按鈕仍在點擊冷卻中 | 回呼不執行 |
+| `ACELIB-GUI-022` | 輸入票券不存在、已使用、已逾時或已失效 | session 結束／退服／停用後送出 |
+| `ACELIB-GUI-023` | 導航歷史已空 | back 無上一頁可回 |
 
 ### Item（ITEM）
 

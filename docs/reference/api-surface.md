@@ -12,10 +12,10 @@
 
 ## 統計
 
-- 總數：165 個 public 頂層型別
-- Supported：133
+- 總數：179 個 public 頂層型別
+- Supported：146
 - SPI：12
-- Internal：20
+- Internal：21
 
 ## 分類明細
 
@@ -179,13 +179,27 @@
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.gui.GuiArgument` | class | Supported | GUI 開啟參數值型別（玩家/標題/保護格）；v1 穩定。 |  | GuiService.open；GuiSession。 |
 | `com.smile.acelib.gui.GuiAsyncRequest` | class | Supported | GUI 非同步請求值型別；v1 穩定。 |  | GuiService；GuiSession。 |
+| `com.smile.acelib.gui.GuiButton` | record | Supported | GUI 按鈕描述值型別（識別字＋點擊冷卻；點擊走專屬回呼，不以 SLOT_PROTECTED 冒充） |  | GuiView.button；GuiScope 按鈕分派。 |
+| `com.smile.acelib.gui.GuiButtonClick` | record | Supported | 按鈕點擊事件快照值型別（玩家／世代／欄位／按鈕識別字／鐵砧文字）；v1 穩定。 |  | GuiScope 按鈕回呼。 |
 | `com.smile.acelib.gui.GuiConfirmation` | class | Supported | GUI 確認流程值型別；v1 穩定。 |  | GuiService；GuiResult。 |
 | `com.smile.acelib.gui.GuiErrorCode` | class | Supported | GUI 錯誤碼常數表；v1 穩定。 |  | GuiService；GuiResult。 |
+| `com.smile.acelib.gui.GuiFlow` | class | Supported | Java GUI／基岩表單共用流程值型別（有序步驟＋起始＋結束回呼）；v1 穩定。 |  | GuiScope.openFlow／goTo。 |
+| `com.smile.acelib.gui.GuiFlowStep` | record | Supported | 共用流程步驟值型別（Java 視圖＋可選基岩表單＋按鈕轉移表）；v1 穩定。 |  | GuiFlow.of；Cumulus 外部型別不外洩。 |
+| `com.smile.acelib.gui.GuiInputKind` | enum | Supported | 輸入提示種類列舉（CHAT／ANVIL）；v1 凍結常數順序。 |  | GuiInputPrompt；GuiScope 輸入流程。 |
+| `com.smile.acelib.gui.GuiInputPrompt` | record | Supported | 輸入提示描述值型別（種類／標題／提示／長度上限／逾時）；v1 穩定。 |  | GuiScope.promptChat／promptAnvil。 |
+| `com.smile.acelib.gui.GuiInputResult` | record | Supported | 玩家輸入結果值型別（玩家／世代／種類／文字；region 內恰好一次交付）；v1 穩定。 |  | GuiScope 輸入 consumer。 |
+| `com.smile.acelib.gui.GuiInputTicket` | record | Supported | 輸入票券值型別（不透明一次性票券，綁定玩家與世代）；v1 穩定。 |  | GuiScope.promptChat／submitInput。 |
 | `com.smile.acelib.gui.GuiPage` | class | Supported | GUI 分頁結果值型別；v1 穩定。 |  | GuiService；GuiResult。 |
+| `com.smile.acelib.gui.GuiReplacementListener` | interface | Supported | GUI 被取代通知回呼（原擁有者接 listener；v1 穩定）。 |  | GuiScope.onReplaced。 |
 | `com.smile.acelib.gui.GuiResult` | class | Supported | GUI 操作結果值型別（accepted/success/rejected/failed）；v1 穩定。 |  | GuiService；GuiSession。 |
+| `com.smile.acelib.gui.GuiRevalidation` | interface | Supported | 送出前重新驗證回呼（僅 SUCCESS 繼續執行 domain action；v1 穩定）。 |  | GuiScope.confirmWithRevalidation。 |
+| `com.smile.acelib.gui.GuiScope` | class | Supported | 單一 plugin 的 GUI 作用域 handle（導航／按鈕／票券／輸入；共用 session 登記；close 具冪等性）。 |  | GuiScopes.create；消費者 onEnable／onDisable。 |
+| `com.smile.acelib.gui.GuiScopes` | class | Supported | 插件隔離 GUI 作用域統一工廠（per-plugin 隔離建立與清理；重複建立以 ACELIB-GUI-020 拒絕）。 |  | 消費者 onEnable／onDisable；AceLibPlugin 停用分派。 |
 | `com.smile.acelib.gui.GuiService` | interface | Supported | GUI 服務介面。 |  | AceLibApi；消費者。 |
+| `com.smile.acelib.gui.GuiServiceControl` | interface | Internal | GUI 服務內部生命週期入口；下游不得依賴，公開 shutdown 已於 1.4.0 移除。 | AceLibPlugin（com.smile.acelib）跨 package 停用 GuiService；v1 前保留 public，下游不得依賴。 | AceLibPlugin 跨 package 執行內部停用。 |
 | `com.smile.acelib.gui.GuiSession` | class | Supported | GUI 會話值型別；v1 穩定。 |  | GuiService；GuiResult；GuiArgument。 |
 | `com.smile.acelib.gui.GuiState` | enum | Supported | GUI 狀態列舉；v1 凍結常數順序（只能追加）。 |  | GuiResult；GuiSession。 |
+| `com.smile.acelib.gui.GuiView` | class | Supported | GUI 視圖描述值型別（種類／標題／格數／放行欄位／按鈕；預設全擋；v1 穩定）。 |  | GuiScope 導航；下游 renderer 讀取。 |
 
 ### com.smile.acelib.item
 

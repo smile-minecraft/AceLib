@@ -1,7 +1,9 @@
 package com.smile.acelib.gui;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * 未啟用 / 已停用狀態下的可診斷 facade（Internal）。
@@ -20,7 +22,8 @@ import java.util.UUID;
  * @see GuiService
  * @since 1.0.0
  */
-final class GuiServiceUnavailableImpl implements GuiService {
+final class GuiServiceUnavailableImpl
+        implements GuiService, GuiServiceControl, ScopedGuiOperations {
 
     /** 標記本 facade 為「未啟用」或「已停用」。 */
     private final String code;
@@ -113,7 +116,76 @@ final class GuiServiceUnavailableImpl implements GuiService {
     }
 
     @Override
-    public void shutdown() {
+    public void shutdownService() {
         // no-op for unavailable facade: idempotent + 留 audit trail 只留於 status 字串
+    }
+
+    // ----- 作用域橋接：未啟用／已停用一律透出自身狀態碼 -----
+
+    @Override
+    public OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        Objects.requireNonNull(kind, "kind");
+        return new OwnedOpenOutcome(
+            GuiResult.rejected(code, "gui service is unavailable: " + code), null);
+    }
+
+    @Override
+    public GuiResult closeOwned(String owner, UUID playerUuid, long generation) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public OwnedOpenOutcome openFormSessionOwned(String owner, UUID playerUuid,
+            String title) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        return new OwnedOpenOutcome(
+            GuiResult.rejected(code, "gui service is unavailable: " + code), null);
+    }
+
+    @Override
+    public GuiSession currentSession(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        return null;
+    }
+
+    @Override
+    public InputPromptOutcome promptInputOwned(String owner, UUID playerUuid,
+            long generation, GuiInputPrompt prompt, Consumer<GuiInputResult> consumer) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(prompt, "prompt");
+        Objects.requireNonNull(consumer, "consumer");
+        return new InputPromptOutcome(
+            GuiResult.rejected(code, "gui service is unavailable: " + code), null, null);
+    }
+
+    @Override
+    public GuiResult submitInputOwned(String owner, UUID token, String text) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(token, "token");
+        Objects.requireNonNull(text, "text");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public GuiResult routeChatInput(UUID playerUuid, String text) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(text, "text");
+        return GuiResult.rejected(code, "gui service is unavailable: " + code);
+    }
+
+    @Override
+    public void handleQuit(UUID playerUuid) {
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        GuiScopes.dropPlayer(playerUuid);
     }
 }

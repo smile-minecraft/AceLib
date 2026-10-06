@@ -62,6 +62,26 @@ AceLib 停用時會從 `ServicesManager` 移除 registration：
 
 Provider 本身可從任何執行緒讀取，但這不代表所有服務操作都可在任何執行緒執行。Folia 上的玩家、實體、方塊與 inventory 操作仍須遵守各自的 region 限制；請看[排程](../modules/scheduler.md)與[上下文安全](../modules/context.md)。
 
+## GUI 作用域與公開 shutdown 移除
+
+`GuiService` 公開介面上不再有關閉整個服務的方法（AceLib 1.4.0 破壞性變更，
+路線圖待決事項第一項已決定）。過去若呼叫過 `guiService.shutdown()`，請改為關閉自己的作用域：
+
+```java
+// onEnable：以自己 plugin 建立作用域（服務以 supplier 包裝，reload 後自動讀到新實例）
+GuiScope gui = GuiScopes.create(this, () -> provider.api().getGuiService(),
+    Clock.system(), provider.api().getBedrockService().forms(),
+    provider.api().getBedrockService()::isBedrockPlayer);
+
+// onDisable：只結束自己的 GUI，不碰其他 plugin
+GuiScopes.close(this);
+```
+
+- 跨 plugin 操作他人 GUI 回 `NOT_OWNER`（`ACELIB-GUI-019`）；新 GUI 取代舊 GUI 時原擁有者收到通知。
+- 服務停用（AceLib reload／disable）走內部生命週期，舊實例操作回 `SHUTDOWN`；
+  舊 session 已失效，以 `GuiScope#reopen` 用目前視圖重開，不要繼續持有舊 reference。
+- `GuiService#getListener()` 保留（AceLib 內部接線用），不在移除範圍。
+
 ## 相關頁面
 
 - [快速開始](quickstart.md)

@@ -23,6 +23,12 @@ package com.smile.acelib.gui;
  *       cancel）的 action 重複呼叫；action 一次性失效後不可再觸發</li>
  *   <li>{@link #UNKNOWN_ACTION} — action token 不存在、已過期（session 關閉 / shutdown）
  *       或與玩家不符；無法綁定到有效 action</li>
+ *   <li>{@link #NOT_OWNER} — 跨 plugin 操作他人擁有的 GUI（只能經自己的
+ *       {@link GuiScope} 操作自己開的 GUI）</li>
+ *   <li>{@link #SCOPE_CLOSED} — GUI 作用域已關閉（重複建立／關閉後使用）</li>
+ *   <li>{@link #COOLDOWN_ACTIVE} — 按鈕仍在點擊冷卻中</li>
+ *   <li>{@link #INPUT_EXPIRED} — 輸入票券不存在、已使用、已逾時或已失效</li>
+ *   <li>{@link #NO_PREVIOUS_VIEW} — 導航歷史已空，back 無上一頁可回</li>
  * </ul>
  *
  * <p>設計原則與 {@code WorldErrorCode} 對齊：</p>
@@ -73,4 +79,14 @@ public final class GuiErrorCode {
     /** 018 — 非同步更新結果回來時，玩家當前開啟的 inventory 已不再是本 session 綁定的
      *  inventory（link generation 不符）；不得覆寫新的 inventory。 */
     public static final String INVENTORY_MISMATCH = "ACELIB-GUI-018";
+    /** 019 — 跨 plugin 操作他人擁有的 GUI；只能經自己的作用域操作自己開的 GUI。 */
+    public static final String NOT_OWNER = "ACELIB-GUI-019";
+    /** 020 — GUI 作用域生命週期違規：同一 plugin 重複建立作用域，或已關閉的作用域被使用。 */
+    public static final String SCOPE_CLOSED = "ACELIB-GUI-020";
+    /** 021 — 按鈕仍在點擊冷卻中；回呼不執行。 */
+    public static final String COOLDOWN_ACTIVE = "ACELIB-GUI-021";
+    /** 022 — 輸入票券不存在、已使用、已逾時或已隨 session 失效。 */
+    public static final String INPUT_EXPIRED = "ACELIB-GUI-022";
+    /** 023 — 導航歷史已空，back 無上一頁可回。 */
+    public static final String NO_PREVIOUS_VIEW = "ACELIB-GUI-023";
 }

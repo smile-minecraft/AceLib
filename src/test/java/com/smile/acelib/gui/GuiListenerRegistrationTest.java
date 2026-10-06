@@ -64,7 +64,7 @@ class GuiListenerRegistrationTest {
     @AfterEach
     void tearDown() {
         if (service != null && service.isRunning()) {
-            service.shutdown();
+            service.shutdownService();
         }
         HandlerList.unregisterAll(service.getListener());
         MockBukkit.unmock();

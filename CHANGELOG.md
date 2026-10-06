@@ -36,6 +36,17 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 新增錯誤碼 `ACELIB-MSG-006`（訊息作用域生命週期違規）。
 - API 為加法性變更：新增 `MessageScopes`、`MessageScope`、`PlayerLocaleResolver`、`RenderedMessage`、`MessageLabel`，`LangManager` 新增 `syncMissingBuiltinKeys`，`MessageService` 新增 `render` 與 `RenderedMessage` 發送多載；未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步。
 
+### 本階段內容（插件隔離的介面流程與元件）
+
+- 插件隔離 GUI 作用域（`GuiScopes`／`GuiScope`）：每 plugin 在 `onEnable` 建立、`onDisable` 關閉自己的 handle，只能操作自己開的 GUI；底層共用同一份 session 登記；新 GUI 取代其他 plugin 的 GUI 時原擁有者收到取代通知。跨 plugin 操作回 `NOT_OWNER`（`ACELIB-GUI-019`）。
+- 破壞性變更（路線圖待決事項第一項已決定）：公開 `GuiService` 介面上的全服務 `shutdown()` 移除；內部停用改走內部生命週期 `GuiServiceControl`（下游不得依賴），結束 GUI 請關自己的作用域。`getListener()` 保留。除此刪除外未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已精準同步。遷移說明見 `docs/consumer/provider-lifecycle.md`。
+- 五導航（`open`／`push`／`replace`／`back`／`close`）：每次切換畫面開啟新 session（generation 遞增），舊代操作回 `GENERATION_MISMATCH`；無歷史 `back` 回 `NO_PREVIOUS_VIEW`（`ACELIB-GUI-023`）；reload 後以 `reopen` 用目前視圖重開。
+- 共用流程（`GuiFlow`／`GuiFlowStep`）：同一份步驟同時描述 Java 視圖與基岩表單；基岩回應按轉移表自動推進（`VALID`）、關閉結束（`CLOSED`）、無效停留（`INVALID`）、過時忽略；需要讀 custom 元件答案時直接用 `FormService`（流程不做資料綁定）。
+- 一次性確認票券：`confirm`／`cancel` 競爭只解決一次（後到回 `ACTION_ALREADY_RESOLVED`）；送出前重新驗證（`confirmWithRevalidation`，僅 `SUCCESS` 執行 domain action，失敗自動取消且不執行，驗證器抛例外視為失敗）。
+- 元件：按鈕專屬回呼（禁止拿 `SLOT_PROTECTED` 當按鈕訊號）、欄位預設全擋只開放指定欄位、按鈕冷卻（冷卻中回 `COOLDOWN_ACTIVE`，`ACELIB-GUI-021`）、分頁（`GuiPage` 既有，CONTENT／EMPTY／LOADING／ERROR）、聊天輸入與鐵砧輸入（一次性票券，超長可重試，逾時／關閉／退服／停用失效）。
+- 玩家退服自動清理 session、票券與輸入；任一下游 plugin 停用自動關閉其作用域。新增錯誤碼 `ACELIB-GUI-019`～`ACELIB-GUI-023`。
+- API 為加法性變更（除上述已決定的 shutdown 移除）：新增 `GuiScope`、`GuiScopes`、`GuiView`、`GuiButton`、`GuiButtonClick`、`GuiFlow`、`GuiFlowStep`、`GuiInputKind`、`GuiInputPrompt`、`GuiInputTicket`、`GuiInputResult`、`GuiRevalidation`、`GuiReplacementListener`（Supported）與 `GuiServiceControl`（Internal）；`docs/reference/api-surface*.json`／`.md` 已同步。
+
 ### 本階段內容（設定的啟動、快照與型別綁定）
 
 - 啟動四分類（`ConfigManager#startup`）：首次安裝、有效設定、損壞設定、使用後缺檔；識別依據是安裝狀態 sidecar（只在驗證成功後寫入），不是檔案是否存在。

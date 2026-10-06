@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.abort;
 
 import com.smile.acelib.gui.GuiArgument;
 import com.smile.acelib.gui.GuiConfirmation;
@@ -12,6 +13,7 @@ import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiPage;
 import com.smile.acelib.gui.GuiResult;
 import com.smile.acelib.gui.GuiService;
+import com.smile.acelib.gui.GuiServiceControl;
 import com.smile.acelib.gui.GuiState;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +33,11 @@ import org.junit.jupiter.api.Test;
  *   <li>{@link #disconnect(UUID)} — 使玩家離線（生產側 {@code disconnect()}，
  *       假側離線標記）</li>
  * </ul>
+ *
+ * <p>停用案例（{@code shutdown_rejectsNewWork}）只對同時實作內部
+ * {@code GuiServiceControl} 的服務執行：只實作公開 {@link GuiService}
+ * 的下游服務沒有內部停用入口，該案例以 {@code abort} 跳過（其餘全跑）。
+ * 下游不得為了跑契約而依賴 {@code internal} 細節。</p>
  *
  * @since 1.4.0
  */
@@ -231,11 +238,18 @@ public abstract class GuiServiceContract {
     }
 
     @Test
-    @DisplayName("停用後開啟被拒 SHUTDOWN")
+    @DisplayName("經內部生命週期停用後開啟被拒 SHUTDOWN（僅具備內部生命週期的實作執行）")
     void shutdown_rejectsNewWork() {
         GuiService service = createService();
+        if (!(service instanceof GuiServiceControl)) {
+            // 純公開實作無內部停用入口：本案例不適用，標記跳過而非失敗。
+            abort("服務未實作內部 GuiServiceControl；停用案例不適用");
+        }
         UUID player = newPlayer();
-        service.shutdown();
+        // 公開契約不再提供 shutdown；停用走內部生命週期（1.4.0 破壞性變更）。
+        // 已由上方守衛確認具備內部生命週期，轉型安全。
+        GuiServiceControl control = (GuiServiceControl) service;
+        control.shutdownService();
 
         GuiResult result = service.openInventory(argument(player));
         assertEquals(GuiState.REJECTED, result.state());

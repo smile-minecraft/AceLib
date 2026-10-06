@@ -26,7 +26,9 @@ import com.smile.acelib.external.LuckPermsIntegrationAdapter;
 import com.smile.acelib.external.PlaceholderApiIntegrationAdapter;
 import com.smile.acelib.external.VaultIntegrationAdapter;
 import com.smile.acelib.gui.GuiErrorCode;
+import com.smile.acelib.gui.GuiScopes;
 import com.smile.acelib.gui.GuiService;
+import com.smile.acelib.gui.GuiServiceControl;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
@@ -1692,11 +1694,12 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * 任一插件停用時撤下該插件所有目錄描述的 listener。
+     * 任一插件停用時的集中分派 listener（MONITOR 觀察，不取消亦不修改事件）。
      *
-     * <p>只做觀察（MONITOR）：不取消亦不修改事件。事件處理委派給
-     * {@link #handleCatalogPluginDisable(CommandCatalog, Plugin)}，
-     * 永不拋例外中斷其他 listener。</p>
+     * <p>同時做兩件互不影響的事：撤下該插件的指令目錄描述，以及關閉該插件的
+     * GUI 作用域（結束其 GUI、移除登記）。兩條分派各自永不拋例外，
+     * 不中斷其他 listener。合併於單一註冊，避免 PluginDisableEvent
+     * 出現多個 AceLib 內部註冊。</p>
      */
     private final class CatalogDisableListener implements Listener {
 
@@ -1704,6 +1707,7 @@ public class AceLibPlugin extends JavaPlugin {
         void onPluginDisable(PluginDisableEvent event) {
             handleCatalogPluginDisable(commandCatalog,
                 event == null ? null : event.getPlugin());
+            GuiScopes.handlePluginDisable(event == null ? null : event.getPlugin());
         }
     }
 
@@ -2016,13 +2020,19 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * 解除並 shutdown GUI 服務。
+     * 解除並停用 GUI 服務。
      *
-     * <p>解除 listener 註冊（{@link HandlerList#unregisterAll(Listener)}），
-     * 然後呼叫現有 {@code guiService.shutdown()}（idempotent），最後把
+     * <p>解除 GUI listener 註冊（{@link HandlerList#unregisterAll(Listener)}），
+     * 然後經內部生命週期停用現有服務（idempotent），最後把
      * {@code this.guiService} 替換為 {@code SHUTDOWN} unavailable facade。
      * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
      * 也保證 AceLibApi 的 guiService 永不為 null。</p>
+     *
+     * <p>消費者作用域撤下 listener 由指令目錄的停用分派 listener 兼任，
+     * 不在此處處理；公開 {@code GuiService} 契約不再提供關閉整個服務的方法
+     * （1.4.0 破壞性變更），此處經 {@link GuiServiceControl} 停用，
+     * 下游不得依賴該內部入口 — 結束 GUI 請關閉自己的
+     * {@code GuiScope}。</p>
      */
     private void unbindGuiService() {
         org.bukkit.event.Listener oldListener = this.guiListener;
@@ -2037,11 +2047,11 @@ public class AceLibPlugin extends JavaPlugin {
         this.guiListener = null;
         this.guiListenerRegistered = false;
         GuiService old = this.guiService;
-        if (old != null) {
+        if (old instanceof GuiServiceControl control) {
             try {
-                old.shutdown();
+                control.shutdownService();
             } catch (Throwable t) {
-                logFine("guiService.shutdown failed during unbind (ignored): "
+                logFine("guiService.shutdownService failed during unbind (ignored): "
                     + t.getMessage());
             }
         }

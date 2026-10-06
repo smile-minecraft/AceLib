@@ -168,6 +168,13 @@ for (FormValue value : response.values()) {
 - **最多一次**——有效且屬於目前服務生命週期的結果最多執行一次；重複回呼、查無 token、已 shutdown 或生命週期代謝都會被丟棄。
 - **失效即清理**——玩家離線、發送被拒、服務 shutdown／reload／disable 時，consumer 執行零次，且不留 pending 狀態。
 
+## 與 GUI 共用流程
+
+只做按鈕導航、不需讀元件答案的跨呈現流程，請用 GUI 作用域的共用流程
+（[GUI 作用域、導航與元件](../modules/gui.md#共用流程java-gui基岩表單)）：
+同一份 `GuiFlow` 同時描述 Java 視圖與基岩表單，表單回應由服務端按轉移表自動推進。
+需要讀 custom 表單元件答案時，才直接用本頁的三參數 `sendForm`。
+
 ## 生命週期
 
 AceLib reload 或停用後，舊的回應 callback 不會再執行。服務 shutdown 後，`sendForm` 以攜帶 `ACELIB-FORM-002` 的 `IllegalStateException` 拒絕。

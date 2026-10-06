@@ -26,7 +26,7 @@ class GuiServiceContractTest extends GuiServiceContract {
     @AfterEach
     void tearDown() {
         if (current != null) {
-            current.shutdown();
+            current.shutdownService();
         }
         MockBukkit.unmock();
     }

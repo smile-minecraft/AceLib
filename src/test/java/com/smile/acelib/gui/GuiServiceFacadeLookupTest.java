@@ -78,11 +78,11 @@ class GuiServiceFacadeLookupTest {
     }
 
     @Test
-    @DisplayName("未啟用時 shutdown 為 idempotent no-op，不丟例外")
+    @DisplayName("未啟用時經內部生命週期停用為 idempotent no-op，不丟例外")
     void uninitializedApi_shutdown_isNoOp() {
         GuiService svc = AceLibApi.uninitialized().getGuiService();
         try {
-            svc.shutdown();
+            ((GuiServiceControl) svc).shutdownService();
         } catch (Throwable t) {
             fail("unavailable facade shutdown 必須不丟例外；實際: " + t);
         }

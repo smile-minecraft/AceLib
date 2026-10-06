@@ -110,7 +110,7 @@ class GuiServiceSchedulerRejectionTest {
         assertEquals(0, service.activeSessionCount(),
             "排程拒絕後 service.activeSessionCount 必須為 0");
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test
@@ -130,7 +130,7 @@ class GuiServiceSchedulerRejectionTest {
         assertEquals(GuiErrorCode.SCHEDULER_REJECTED, second.errorCode(),
             "第二次被拒絕仍須為 SCHEDULER_REJECTED，不可誤判為 SESSION_EXISTS");
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test
@@ -158,7 +158,7 @@ class GuiServiceSchedulerRejectionTest {
         assertEquals(GuiState.REJECTED, query.state());
         assertEquals(GuiErrorCode.SESSION_NOT_FOUND, query.errorCode());
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test
@@ -175,7 +175,7 @@ class GuiServiceSchedulerRejectionTest {
         assertNotNull(result.session(),
             "noop executor 派送成功時必須附帶 session");
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test
@@ -191,7 +191,7 @@ class GuiServiceSchedulerRejectionTest {
             "direct executor 必須視為已派送（既有 inventory lifecycle 測試契約）");
         assertNotNull(result.session());
 
-        service.shutdown();
+        service.shutdownService();
     }
 
     @Test

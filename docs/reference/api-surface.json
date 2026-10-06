@@ -978,6 +978,24 @@
       "mainCallers": "GuiService；GuiSession。"
     },
     {
+      "fqcn": "com.smile.acelib.gui.GuiButton",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiButton",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "GUI 按鈕描述值型別（識別字＋點擊冷卻；點擊走專屬回呼，不以 SLOT_PROTECTED 冒充）",
+      "mainCallers": "GuiView.button；GuiScope 按鈕分派。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiButtonClick",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiButtonClick",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "按鈕點擊事件快照值型別（玩家／世代／欄位／按鈕識別字／鐵砧文字）；v1 穩定。",
+      "mainCallers": "GuiScope 按鈕回呼。"
+    },
+    {
       "fqcn": "com.smile.acelib.gui.GuiConfirmation",
       "package": "com.smile.acelib.gui",
       "simpleName": "GuiConfirmation",
@@ -996,6 +1014,60 @@
       "mainCallers": "GuiService；GuiResult。"
     },
     {
+      "fqcn": "com.smile.acelib.gui.GuiFlow",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiFlow",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "Java GUI／基岩表單共用流程值型別（有序步驟＋起始＋結束回呼）；v1 穩定。",
+      "mainCallers": "GuiScope.openFlow／goTo。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiFlowStep",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiFlowStep",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "共用流程步驟值型別（Java 視圖＋可選基岩表單＋按鈕轉移表）；v1 穩定。",
+      "mainCallers": "GuiFlow.of；Cumulus 外部型別不外洩。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiInputKind",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiInputKind",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "輸入提示種類列舉（CHAT／ANVIL）；v1 凍結常數順序。",
+      "mainCallers": "GuiInputPrompt；GuiScope 輸入流程。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiInputPrompt",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiInputPrompt",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "輸入提示描述值型別（種類／標題／提示／長度上限／逾時）；v1 穩定。",
+      "mainCallers": "GuiScope.promptChat／promptAnvil。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiInputResult",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiInputResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "玩家輸入結果值型別（玩家／世代／種類／文字；region 內恰好一次交付）；v1 穩定。",
+      "mainCallers": "GuiScope 輸入 consumer。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiInputTicket",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiInputTicket",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "輸入票券值型別（不透明一次性票券，綁定玩家與世代）；v1 穩定。",
+      "mainCallers": "GuiScope.promptChat／submitInput。"
+    },
+    {
       "fqcn": "com.smile.acelib.gui.GuiPage",
       "package": "com.smile.acelib.gui",
       "simpleName": "GuiPage",
@@ -1003,6 +1075,15 @@
       "classification": "Supported",
       "reason": "GUI 分頁結果值型別；v1 穩定。",
       "mainCallers": "GuiService；GuiResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiReplacementListener",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiReplacementListener",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "GUI 被取代通知回呼（原擁有者接 listener；v1 穩定）。",
+      "mainCallers": "GuiScope.onReplaced。"
     },
     {
       "fqcn": "com.smile.acelib.gui.GuiResult",
@@ -1014,6 +1095,33 @@
       "mainCallers": "GuiService；GuiSession。"
     },
     {
+      "fqcn": "com.smile.acelib.gui.GuiRevalidation",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiRevalidation",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "送出前重新驗證回呼（僅 SUCCESS 繼續執行 domain action；v1 穩定）。",
+      "mainCallers": "GuiScope.confirmWithRevalidation。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiScope",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiScope",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "單一 plugin 的 GUI 作用域 handle（導航／按鈕／票券／輸入；共用 session 登記；close 具冪等性）。",
+      "mainCallers": "GuiScopes.create；消費者 onEnable／onDisable。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiScopes",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiScopes",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "插件隔離 GUI 作用域統一工廠（per-plugin 隔離建立與清理；重複建立以 ACELIB-GUI-020 拒絕）。",
+      "mainCallers": "消費者 onEnable／onDisable；AceLibPlugin 停用分派。"
+    },
+    {
       "fqcn": "com.smile.acelib.gui.GuiService",
       "package": "com.smile.acelib.gui",
       "simpleName": "GuiService",
@@ -1021,6 +1129,16 @@
       "classification": "Supported",
       "reason": "GUI 服務介面。",
       "mainCallers": "AceLibApi；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiServiceControl",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiServiceControl",
+      "kind": "interface",
+      "classification": "Internal",
+      "reason": "GUI 服務內部生命週期入口；下游不得依賴，公開 shutdown 已於 1.4.0 移除。",
+      "mainCallers": "AceLibPlugin 跨 package 執行內部停用。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 停用 GuiService；v1 前保留 public，下游不得依賴。"
     },
     {
       "fqcn": "com.smile.acelib.gui.GuiSession",
@@ -1039,6 +1157,15 @@
       "classification": "Supported",
       "reason": "GUI 狀態列舉；v1 凍結常數順序（只能追加）。",
       "mainCallers": "GuiResult；GuiSession。"
+    },
+    {
+      "fqcn": "com.smile.acelib.gui.GuiView",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiView",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "GUI 視圖描述值型別（種類／標題／格數／放行欄位／按鈕；預設全擋；v1 穩定）。",
+      "mainCallers": "GuiScope 導航；下游 renderer 讀取。"
     },
     {
       "fqcn": "com.smile.acelib.item.AceItemFactory",

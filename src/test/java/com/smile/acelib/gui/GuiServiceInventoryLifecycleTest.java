@@ -60,7 +60,7 @@ class GuiServiceInventoryLifecycleTest {
     @AfterEach
     void tearDown() {
         if (service != null && service.isRunning()) {
-            service.shutdown();
+            service.shutdownService();
         }
         MockBukkit.unmock();
     }
@@ -225,7 +225,7 @@ class GuiServiceInventoryLifecycleTest {
     @Test
     @DisplayName("reload 後 A 的晚到 close event：保留 B 的新 session")
     void reloadThenLateCloseEvent_keepsNewSession() {
-        service.shutdown();
+        service.shutdownService();
         GuiServiceImpl service1 = new GuiServiceImpl(PlayerContextExecutor.direct());
         service = service1;
         GuiArgument argA = GuiArgument.of(player, "A", 9, List.of());
@@ -234,7 +234,7 @@ class GuiServiceInventoryLifecycleTest {
         InventoryView viewA = player.getOpenInventory();
         Inventory topA = viewA.getTopInventory();
 
-        service1.shutdown();
+        service1.shutdownService();
         GuiServiceImpl service2 = new GuiServiceImpl(PlayerContextExecutor.direct());
         service = service2;
         GuiArgument argB = GuiArgument.of(player, "B", 9, List.of());
@@ -358,7 +358,7 @@ class GuiServiceInventoryLifecycleTest {
         Inventory topBefore = player.getOpenInventory().getTopInventory();
         assertEquals(9, topBefore.getSize());
 
-        service.shutdown();
+        service.shutdownService();
 
         assertEquals(0, service.activeSessionCount(),
             "shutdown 後 active session 數必須為 0");
@@ -370,7 +370,7 @@ class GuiServiceInventoryLifecycleTest {
             "shutdown 後 inventory link 必須被清空");
 
         // shutdown 為 idempotent
-        service.shutdown();
+        service.shutdownService();
         assertEquals(0, service.activeSessionCount());
     }
 

@@ -58,7 +58,7 @@ class GuiAsyncUpdateTest {
     @AfterEach
     void tearDown() {
         if (service != null && service.isRunning()) {
-            service.shutdown();
+            service.shutdownService();
         }
         MockBukkit.unmock();
     }
@@ -114,7 +114,7 @@ class GuiAsyncUpdateTest {
     @DisplayName("beginAsyncUpdate 對 shutdown 服務回 REJECTED + ACELIB-GUI-002")
     void beginAsyncUpdate_shutdown_isRejected() {
         long generation = openSession();
-        service.shutdown();
+        service.shutdownService();
         GuiResult result = service.beginAsyncUpdate(uuid, generation, 0);
         assertEquals(GuiState.REJECTED, result.state());
         assertEquals(GuiErrorCode.SHUTDOWN, result.errorCode());
@@ -261,7 +261,7 @@ class GuiAsyncUpdateTest {
         long generation = openSession();
         GuiAsyncRequest request = service.beginAsyncUpdate(uuid, generation, 0).asyncRequest();
 
-        service.shutdown();
+        service.shutdownService();
 
         AtomicBoolean rendererRan = new AtomicBoolean();
         GuiResult result = service.applyAsyncUpdate(request, GuiPage.loading(),
@@ -294,7 +294,7 @@ class GuiAsyncUpdateTest {
                 "executor 拒絕必須回 ACELIB-GUI-013 SCHEDULER_REJECTED");
             assertEquals(false, rendererRan.get(), "拒絕派送時 renderer 不得執行");
         } finally {
-            svc.shutdown();
+            svc.shutdownService();
         }
     }
 
