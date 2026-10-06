@@ -1140,6 +1140,33 @@
       "mainCallers": "FormText.render；MessageService.formatFormText。"
     },
     {
+      "fqcn": "com.smile.acelib.message.MessageLabel",
+      "package": "com.smile.acelib.message",
+      "simpleName": "MessageLabel",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "顯示標籤值型別（穩定程式識別字 id＋渲染顯示文字 text；缺 key 時文字退回 id）。",
+      "mainCallers": "MessageScope.label；GUI 按鈕／表單選項顯示。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.MessageScope",
+      "package": "com.smile.acelib.message",
+      "simpleName": "MessageScope",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "單一 plugin 的訊息作用域 handle（專屬 LangManager＋MessageService；解析器語系發送／共用渲染／顯示標籤；close 具冪等性）。",
+      "mainCallers": "MessageScopes.create；消費者 onEnable／onDisable。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.MessageScopes",
+      "package": "com.smile.acelib.message",
+      "simpleName": "MessageScopes",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "插件作用域訊息服務統一工廠（per-plugin 隔離建立與清理；重複建立以 ACELIB-MSG-006 拒絕）。",
+      "mainCallers": "消費者 onEnable／onDisable。"
+    },
+    {
       "fqcn": "com.smile.acelib.message.MessageService",
       "package": "com.smile.acelib.message",
       "simpleName": "MessageService",
@@ -1147,6 +1174,24 @@
       "classification": "Supported",
       "reason": "訊息格式化/發送服務；v1 穩定。",
       "mainCallers": "消費者；LangManager。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.PlayerLocaleResolver",
+      "package": "com.smile.acelib.message",
+      "simpleName": "PlayerLocaleResolver",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "玩家語系解析器（可替換；預設跟隨 Player.locale；不強制偏好儲存方式）。",
+      "mainCallers": "MessageScope 解析器發送；下游自訂語系來源。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.RenderedMessage",
+      "package": "com.smile.acelib.message",
+      "simpleName": "RenderedMessage",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "單次渲染結果（component／text／formText 三視圖＋缺 key／渲染失敗診斷；聊天／ActionBar／GUI／表單共用）。",
+      "mainCallers": "MessageService.render；MessageScope 共用發送。"
     },
     {
       "fqcn": "com.smile.acelib.platform.Platform",

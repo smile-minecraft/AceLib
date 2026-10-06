@@ -109,6 +109,8 @@ public final class ErrorCodeRegistry {
         // MSG
         m.put("ACELIB-MSG-001", new ErrorCodeInfo(ErrorCategory.MESSAGE,
             "訊息服務內部錯誤"));
+        m.put("ACELIB-MSG-006", new ErrorCodeInfo(ErrorCategory.MESSAGE,
+            "訊息作用域生命週期違規（重複建立或已關閉後使用）"));
         m.put("ACELIB-MSG-005", new ErrorCodeInfo(ErrorCategory.MESSAGE,
             "表單文字渲染失敗，已退回純文字"));
         // CMD

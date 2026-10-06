@@ -349,7 +349,8 @@
       "method load() : void",
       "method load(java.util.Locale) : void",
       "method reload() : void",
-      "method reload(java.util.Locale) : void"
+      "method reload(java.util.Locale) : void",
+      "method syncMissingBuiltinKeys() : int"
     ],
     "com.smile.acelib.config.MigrationChain": [
       "ctor()",
@@ -1105,10 +1106,46 @@
       "method maxLength() : int",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.message.MessageLabel": [
+      "ctor(java.lang.String,java.lang.String)",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method id() : java.lang.String",
+      "method text() : java.lang.String",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.message.MessageScope": [
+      "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager)",
+      "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager,com.smile.acelib.message.PlayerLocaleResolver)",
+      "method broadcast(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
+      "method close() : void",
+      "method isClosed() : boolean",
+      "method label(java.lang.String,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : com.smile.acelib.message.MessageLabel",
+      "method label(java.lang.String,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : com.smile.acelib.message.MessageLabel",
+      "method lang() : com.smile.acelib.config.LangManager",
+      "method messages() : com.smile.acelib.message.MessageService",
+      "method plugin() : org.bukkit.plugin.java.JavaPlugin",
+      "method reload() : void",
+      "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : com.smile.acelib.message.RenderedMessage",
+      "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : com.smile.acelib.message.RenderedMessage",
+      "method resolver() : com.smile.acelib.message.PlayerLocaleResolver",
+      "method sendActionBar(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
+      "method sendChat(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
+      "method sendTitle(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
+      "method setResolver(com.smile.acelib.message.PlayerLocaleResolver) : void",
+      "method syncBuiltinDefaults() : int"
+    ],
+    "com.smile.acelib.message.MessageScopes": [
+      "method close(org.bukkit.plugin.java.JavaPlugin) : boolean",
+      "method create(org.bukkit.plugin.java.JavaPlugin,java.util.Locale) : com.smile.acelib.message.MessageScope",
+      "method create(org.bukkit.plugin.java.JavaPlugin,java.util.Locale,com.smile.acelib.message.PlayerLocaleResolver) : com.smile.acelib.message.MessageScope",
+      "method get(org.bukkit.plugin.java.JavaPlugin) : java.util.Optional<com.smile.acelib.message.MessageScope>"
+    ],
     "com.smile.acelib.message.MessageService": [
       "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager)",
       "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.config.LangManager,com.smile.acelib.bedrock.BedrockService)",
       "field PREFIX_KEY : java.lang.String",
+      "method broadcast(com.smile.acelib.message.RenderedMessage) : void",
       "method broadcast(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method broadcast(net.kyori.adventure.text.Component) : void",
       "method broadcastWithFallback(net.kyori.adventure.text.Component,java.util.Locale) : void",
@@ -1120,17 +1157,39 @@
       "method getCapability() : com.smile.acelib.platform.PlatformCapability",
       "method getPlatform() : com.smile.acelib.platform.Platform",
       "method parseMiniMessage(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : net.kyori.adventure.text.Component",
+      "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : com.smile.acelib.message.RenderedMessage",
+      "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : com.smile.acelib.message.RenderedMessage",
+      "method sendActionBar(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage) : void",
       "method sendActionBar(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendActionBar(org.bukkit.entity.Player,net.kyori.adventure.text.Component) : void",
       "method sendActionBarWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : void",
+      "method sendChat(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage) : void",
       "method sendChat(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendChat(org.bukkit.entity.Player,net.kyori.adventure.text.Component) : void",
       "method sendChatWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : void",
       "method sendConsole(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
+      "method sendTitle(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage,com.smile.acelib.message.RenderedMessage) : void",
       "method sendTitle(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendTitle(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendTitle(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component) : void",
       "method sendTitleWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component,java.util.Locale) : void"
+    ],
+    "com.smile.acelib.message.PlayerLocaleResolver": [
+      "method playerLocale(java.util.Locale) : com.smile.acelib.message.PlayerLocaleResolver",
+      "method resolve(org.bukkit.entity.Player) : java.util.Locale"
+    ],
+    "com.smile.acelib.message.RenderedMessage": [
+      "ctor(java.lang.String,java.util.Locale,net.kyori.adventure.text.Component,java.lang.String,java.lang.String,boolean,java.lang.String)",
+      "method component() : net.kyori.adventure.text.Component",
+      "method diagnosis() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method formText() : java.lang.String",
+      "method hashCode() : int",
+      "method key() : java.lang.String",
+      "method locale() : java.util.Locale",
+      "method missing() : boolean",
+      "method text() : java.lang.String",
+      "method toString() : java.lang.String"
     ],
     "com.smile.acelib.platform.Platform": [
       "field FOLIA : com.smile.acelib.platform.Platform",

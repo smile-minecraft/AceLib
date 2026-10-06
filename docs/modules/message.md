@@ -14,6 +14,103 @@ MessageService messages = new MessageService(this, lang);
 
 玩家訊息的共用前綴 key 是 `message.prefix`。
 
+## 插件作用域（建議用法）
+
+多個插件各自持有文案時，請經由 `MessageScopes` 統一建立與清理，不要跨 plugin 共用 `LangManager` 或 `MessageService`：
+
+```java
+private MessageScope messages;
+
+@Override
+public void onEnable() {
+    messages = MessageScopes.create(this, Locale.TAIWAN);
+    // 升級補 key：只補新 key，管理員改過的文案不動
+    messages.syncBuiltinDefaults();
+}
+
+@Override
+public void onDisable() {
+    MessageScopes.close(this);
+}
+```
+
+- 同一個 key 在不同 plugin 讀到各自的文案，不互讀、不互清；`close` 只移除自己的登記。
+- 同一 plugin 重複 `create` 會以 `ACELIB-MSG-006` 拒絕；`close` 後再使用該作用域同樣拋 `ACELIB-MSG-006`。
+- `scope.reload()` 重新載入語言檔；`scope.messages()` 取得底層 `MessageService`，`scope.lang()` 取得 `LangManager`。
+- 靜態登記強持有 plugin 實例：`onDisable` 務必 `close`，否則阻礙 classloader 釋放。若忘記關閉就停用，下次 `create` 會自動驅逐該殘留登記並重建（啟用中的重複建立仍拒絕）；驅逐是兜底，不要當作正常流程依賴。
+
+## 玩家語系解析器
+
+玩家導向的 `scope.sendChat`／`sendActionBar`／`sendTitle` 會先經解析器決定語系，再以該語系渲染發送。預設解析器跟隨 `Player.locale()`；偏好存在哪裡不做規定，下游可用自己的資料庫實作後換上：
+
+```java
+// 例如：從下游自己的資料庫讀偏好，查不到就回 null（退回預設語系）
+scope.setResolver(player -> {
+    if (player == null) {
+        return null;
+    }
+    return preferences.loadLocale(player.getUniqueId()).orElse(null);
+});
+```
+
+解析器拋例外或回傳 `null` 時退回作用域預設語系並記錄 `ACELIB-MSG-003`，發送不中斷。
+
+## 語系優先順序與升級補 key
+
+模板讀取順序（由高到低）：
+
+1. 磁碟請求 locale（`<dataFolder>/lang/<locale>.yml`）
+2. 磁碟預設 locale
+3. 內建資源請求 locale（plugin JAR 內 `lang/<locale>.yml`）
+4. 內建資源預設 locale
+
+磁碟自訂文案永遠優先；缺的 key 才讀內建資源；三層皆缺時回空並記錄 `ACELIB-LANG-001`／`ACELIB-MSG-001`。內建資源損壞記 `ACELIB-LANG-002` 並退回下一層。
+
+升級時呼叫 `scope.syncBuiltinDefaults()`（或 `LangManager#syncMissingBuiltinKeys`）把新版 JAR 的新 key 補進磁碟檔：既有 key（含註解與排版）逐位元保留，只附加缺的 key；原檔不存在時以內建資源建立可編輯副本。回傳值為補進的 key 數量，重複呼叫為 0（具冪等性）。
+
+## 共用渲染結果
+
+`MessageService#render` 把同一個模板只讀取、替換、解析一次，回傳的 `RenderedMessage` 同時攜帶三種呈現：
+
+```java
+RenderedMessage rendered = messages.render("command.reload.done", Map.of("plugin", getName()));
+
+// GUI 取 Component（含 prefix 與互動結構）
+Component gui = rendered.component();
+// 表單取安全字串（不帶 prefix）
+String form = rendered.formText();
+// ActionBar／title 取純文字（含 prefix，與 format 輸出一致）
+String text = rendered.text();
+```
+
+同一實例可直接餵發送入口，不重讀語言檔：`sendChat(player, rendered)`、`sendActionBar(player, rendered)`、`sendTitle(player, title, subtitle)`、`broadcast(rendered)`。缺 key 的渲染結果不會發送（診斷已在渲染時記錄）。
+
+`render(key, vars, locale)` 以指定語系渲染；`locale` 為 `null` 時跟隨全域目前語系。注意兩點邊界：
+
+- **舊字串入口維持舊語意**：`sendChat(player, key, vars)` 等字串多載仍送 `format()` 字串（經 `player.sendMessage(String)`，MiniMessage 不解析），與歷史行為一致。「共用渲染」只對 `render`／`RenderedMessage`／scope 路徑成立；同一模板在舊字串路徑與新 Component 路徑的顯示可能不同，這是沿用既有行為，不是回歸。
+- **prefix 取自全域語系**：`render(locale)` 的模板按指定語系分層讀取，但 `message.prefix` 固定讀全域目前語系，不隨指定語系切換。
+- **`formatFormText(key, vars, locale)` 的模板來源**：指定語系非 `null` 時按該語系分層讀取；舊版固定讀全域模板。單語系服無差異，多語系服屬刻意修正（見 CHANGELOG 行為變更）。
+
+## 顯示標籤與程式識別字
+
+GUI 按鈕與表單選項的顯示文字用 `MessageLabel` 與程式分支用的識別字分開：
+
+```java
+MessageLabel confirm = scope.label("confirm", "button.confirm", Map.of());
+String buttonText = confirm.text(); // 顯示用（管理員可改）
+String answerId = confirm.id();     // 程式分支用（永遠是 "confirm"）
+```
+
+顯示文字取共用渲染的表單安全字串視圖：不含聊天 prefix，MiniMessage 已解析為可見文字（含 FormText 行尾 `§r` 重置慣例），GUI 按鈕與表單選項可直接顯示。管理員改文案只會改變 `text()`，`id()` 保持穩定；缺標籤 key 時文字退回 `id` 本身並記錄 `ACELIB-MSG-001`。
+
+## 診斷
+
+- `RenderedMessage#missing()` 為 true 表示三層皆缺 key，`diagnosis()` 攜帶 `ACELIB-MSG-001` 說明。缺鍵警告沿用載入週期去重（同一週期同一 key 只記一次，`reload` 後重置）；注意指定語系路徑（`get(Locale, String)`／`render(key, vars, locale)`）缺 key 只記 `MSG-001`，不記 `LANG-001`。
+- MiniMessage 解析失敗時退回可見純文字，`diagnosis()` 攜帶 `ACELIB-MSG-003`。渲染失敗每次觸發記一次（與既有 `formatComponent` 解析失敗行為一致，不做跨次去重；日誌量與失敗渲染次數成正比）。
+- 語系解析器失敗退回預設語系時記 `ACELIB-MSG-003`。
+- 作用域生命週期違規（重複建立、關閉後使用）拋 `IllegalStateException` 並攜帶 `ACELIB-MSG-006`。
+- Folia 錯誤 region 發送記 `ACELIB-MSG-002` 並略過；Paper 同型例外記 `ACELIB-MSG-003`。完整代碼見[錯誤碼](../reference/error-codes.md)。
+
 ## 格式化與傳送
 
 ```java

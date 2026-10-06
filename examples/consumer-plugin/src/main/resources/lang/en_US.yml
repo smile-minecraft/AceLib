@@ -1,0 +1,9 @@
+# Consumer 範例外掛內建語系（隨 JAR 發布）。
+#
+# 伺服器管理員可在 <dataFolder>/lang/en_US.yml 覆寫這些文案；
+# 覆寫檔缺的 key 會退回這裡的內建值，升級的新 key 以 syncBuiltinDefaults 補進覆寫檔。
+greeting: 'Hello {player}!'
+button:
+  confirm: 'Confirm'
+message:
+  prefix: '[Consumer] '

@@ -2,6 +2,11 @@ package com.smile.acelib.config;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -18,12 +23,14 @@ import org.bukkit.plugin.java.JavaPlugin;
  * 語言檔管理器（多 locale 支援）。
  *
  * <p>從 {@code <dataFolder>/lang/<locale>.yml} 讀取多語字串，
- * 支援 {@code {var}} 變數替換與 fallback（請求 locale 缺失時退回 default）。</p>
+ * 支援 {@code {var}} 變數替換與 fallback（請求 locale 缺失時退回 default）。
+ * 磁碟缺 key 時退回 plugin JAR 內建資源（{@code lang/<locale>.yml}）：
+ * 磁碟自訂文案永遠優先，內建資源只補缺口。</p>
  *
  * <h2>錯誤代碼</h2>
  * <ul>
  *   <li>{@code ACELIB-LANG-001}：訊息 key 缺失（記錄 warning，不中斷；同一載入週期只記一次）</li>
- *   <li>{@code ACELIB-LANG-002}：語言檔格式錯誤或無法寫入</li>
+ *   <li>{@code ACELIB-LANG-002}：語言檔格式錯誤或無法寫入（含內建資源解析損壞）</li>
  *   <li>{@code ACELIB-LANG-003}：語言檔不存在（記錄 warning 並負向快取）</li>
  * </ul>
  *
@@ -60,6 +67,15 @@ public final class LangManager {
      * 不在每次查詢時重複 stat 或重複解析壞檔。</p>
      */
     private final Map<Locale, Optional<YamlConfiguration>> localeCache = new ConcurrentHashMap<>();
+
+    /**
+     * per-locale 內建資源快取（plugin JAR 內 {@code lang/<locale>.yml}）。
+     *
+     * <p>內建資源在執行期不變，快取純為避免每次查詢重複解析；
+     * {@link #load(Locale)}／{@link #reload()} 會一併清空，
+     * 讓升級後的新 JAR 資源立刻生效。</p>
+     */
+    private final Map<Locale, Optional<YamlConfiguration>> builtinCache = new ConcurrentHashMap<>();
 
     /**
      * 本次載入週期內已記錄過的缺鍵（{@code locale + "|" + key}）。
@@ -159,6 +175,7 @@ public final class LangManager {
         this.current = loaded;
         this.currentLocale = target;
         this.localeCache.clear();
+        this.builtinCache.clear();
         this.reportedMissingKeys.clear();
         this.ready = true;
     }
@@ -177,6 +194,109 @@ public final class LangManager {
      */
     public void reload(Locale locale) {
         load(locale);
+    }
+
+    /**
+     * 升級補 key：把 plugin 內建資源（JAR 內 {@code lang/<locale>.yml}）的新 key
+     * 補進磁碟語言檔，不覆寫管理員已修改的文案。
+     *
+     * <p>合併規則（重用保註解寫回）：既有 key 逐位元保留（含註解與排版），
+     * 只附加缺的 key；原檔不存在時以內建資源建立可編輯副本。
+     * 同步的作用域為目前 locale 與預設 locale（去重）。</p>
+     *
+     * <p>補進 key 後，當前生效內容與缺鍵去重記錄一併更新，
+     * 因此後續查詢立刻可見新 key，不必再 {@link #reload()}。</p>
+     *
+     * @return 補進的 key 數量
+     * @throws ConfigException 磁碟檔損壞無法解析，或寫回失敗（ACELIB-LANG-002）
+     * @since 1.4.0
+     */
+    public int syncMissingBuiltinKeys() {
+        Set<Locale> locales = new LinkedHashSet<>();
+        locales.add(currentLocale != null ? currentLocale : defaultLocale);
+        locales.add(defaultLocale);
+        int added = 0;
+        for (Locale locale : locales) {
+            added += syncBuiltinForLocale(locale);
+        }
+        if (added > 0) {
+            localeCache.clear();
+            reportedMissingKeys.clear();
+        }
+        return added;
+    }
+
+    /**
+     * 對單一 locale 執行升級補 key。
+     *
+     * @return 該 locale 補進的 key 數量
+     */
+    private int syncBuiltinForLocale(Locale locale) {
+        Optional<YamlConfiguration> builtinOpt =
+            builtinCache.computeIfAbsent(locale, this::loadBuiltinFile);
+        if (builtinOpt.isEmpty()) {
+            return 0;
+        }
+        Map<String, Object> builtinFlat = CommentPreservingWriter.flatten(
+            builtinOpt.get().getValues(false));
+        if (builtinFlat.isEmpty()) {
+            return 0;
+        }
+        File file = resolveFile(locale);
+        String originalText = null;
+        Map<String, Object> diskFlat = new LinkedHashMap<>();
+        if (file.exists()) {
+            try {
+                originalText = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+                YamlConfiguration disk = new YamlConfiguration();
+                disk.load(file);
+                diskFlat = CommentPreservingWriter.flatten(disk.getValues(false));
+            } catch (IOException | InvalidConfigurationException ex) {
+                throw new ConfigException(
+                    "ACELIB-LANG-002",
+                    "語言檔格式錯誤：" + file.getAbsolutePath() + "（" + ex.getMessage() + "）",
+                    ex
+                );
+            }
+        } else {
+            ensureLangDirectory(file);
+        }
+        Map<String, Object> missing = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : builtinFlat.entrySet()) {
+            if (!diskFlat.containsKey(entry.getKey())) {
+                missing.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (missing.isEmpty()) {
+            return 0;
+        }
+        // 只補不覆寫：removed 為空，且既有 key 值相同時合併器會逐行跳過。
+        Map<String, Object> merged = new LinkedHashMap<>(diskFlat);
+        merged.putAll(missing);
+        String text = CommentPreservingWriter.merge(originalText, merged, Map.of(), Set.of());
+        YamlFileWriter.writeTextAtomically(text, file.toPath(), "ACELIB-LANG-002", "語言檔");
+        refreshCurrentIfSynced(locale, file);
+        return missing.size();
+    }
+
+    /**
+     * 同步的 locale 正好是全域目前 locale 時，刷新生效內容。
+     *
+     * <p>寫入剛成功，解析失敗只可能是極端競態（外部同時改檔）；
+     * 此時保留舊生效內容，不把可用狀態換成不可用。</p>
+     */
+    private void refreshCurrentIfSynced(Locale locale, File file) {
+        if (!ready || !locale.equals(currentLocale)) {
+            return;
+        }
+        try {
+            this.current = loadFromDisk(file);
+        } catch (ConfigException ex) {
+            safeLogger().log(Level.WARNING,
+                "[ACELIB-LANG-002] synced language file cannot be re-read, "
+                    + "keeping previous content: {0}",
+                file.getAbsolutePath());
+        }
     }
 
     // -----------------------------------------------------------------
@@ -211,8 +331,20 @@ public final class LangManager {
         }
         Object raw = current.get(key);
         if (raw == null) {
-            logMissingKey(key);
-            return Optional.empty();
+            // 磁碟缺 key：退回內建資源（請求 locale → 預設 locale），仍缺才記 LANG-001。
+            Optional<String> builtin = readBuiltinValue(currentLocale, key);
+            if (builtin.isEmpty() && !currentLocale.equals(defaultLocale)) {
+                builtin = readBuiltinValue(defaultLocale, key);
+            }
+            if (builtin.isEmpty()) {
+                logMissingKey(key);
+                return Optional.empty();
+            }
+            String template = builtin.get();
+            if (vars == null || vars.isEmpty()) {
+                return Optional.of(template);
+            }
+            return Optional.of(substitute(template, vars));
         }
         String template = raw.toString();
         if (vars == null || vars.isEmpty()) {
@@ -242,7 +374,18 @@ public final class LangManager {
         // 請求 locale 檔缺失或 key 缺失：退回 default locale 檔（不寫入全域 current state）。
         Locale def = getDefaultLocale();
         if (def != null && !def.equals(locale)) {
-            return readFromLocale(def, key);
+            Optional<String> fromDefault = readFromLocale(def, key);
+            if (fromDefault.isPresent()) {
+                return fromDefault;
+            }
+        }
+        // 磁碟各層皆缺：退回內建資源（請求 locale → 預設 locale），磁碟永遠優先於內建。
+        Optional<String> builtin = readBuiltinValue(locale, key);
+        if (builtin.isPresent()) {
+            return builtin;
+        }
+        if (def != null && !def.equals(locale)) {
+            return readBuiltinValue(def, key);
         }
         return Optional.empty();
     }
@@ -291,6 +434,58 @@ public final class LangManager {
                 new Object[]{ex.getCode(), file.getAbsolutePath(), ex.getMessage()});
             return Optional.empty();
         }
+    }
+
+    /**
+     * 從 plugin JAR 內建資源載入指定 locale 的語言檔（不寫入全域 current state）。
+     *
+     * <p>資源路徑為 {@code lang/<locale>.yml}（Bukkit {@code getResource} 慣例）。
+     * 資源不存在 → {@link Optional#empty()}（靜默：並非每個 locale 都要內建）；{@code getResource}
+     * 本身拋例外 → 同樣視為無內建資源，不中斷磁碟查詢。資源存在但解析損壞 →
+     * {@code ACELIB-LANG-002} 警告並負向快取。</p>
+     *
+     * @return 載入成功的內容；無資源或格式錯誤時回傳 {@link Optional#empty()}
+     */
+    private Optional<YamlConfiguration> loadBuiltinFile(Locale locale) {
+        InputStream in;
+        try {
+            in = plugin.getResource(LANG_DIR + "/" + localeToFileName(locale));
+        } catch (Throwable t) {
+            safeLogger().log(Level.FINE,
+                "builtin language resource lookup failed for locale {0}: {1}",
+                new Object[]{locale, t.getMessage()});
+            return Optional.empty();
+        }
+        if (in == null) {
+            return Optional.empty();
+        }
+        try (InputStream autoClose = in) {
+            String text = new String(autoClose.readAllBytes(), StandardCharsets.UTF_8);
+            YamlConfiguration cfg = new YamlConfiguration();
+            cfg.loadFromString(text);
+            return Optional.of(cfg);
+        } catch (Exception ex) {
+            safeLogger().log(Level.WARNING,
+                "[ACELIB-LANG-002] builtin language resource cannot be parsed: lang/{0}（{1}）",
+                new Object[]{localeToFileName(locale), ex.getMessage()});
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 讀取內建資源的單一 key（含 per-locale 快取與負向快取）。
+     */
+    private Optional<String> readBuiltinValue(Locale locale, String key) {
+        Optional<YamlConfiguration> state =
+            builtinCache.computeIfAbsent(locale, this::loadBuiltinFile);
+        if (state.isEmpty()) {
+            return Optional.empty();
+        }
+        Object raw = state.get().get(key);
+        if (raw == null) {
+            return Optional.empty();
+        }
+        return Optional.of(raw.toString());
     }
 
     // -----------------------------------------------------------------

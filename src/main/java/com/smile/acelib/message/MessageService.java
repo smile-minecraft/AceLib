@@ -43,6 +43,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>{@link #formatFormText(String, Map, Locale)} /
  *       {@link #formatFormText(String, Map, FormTextOptions)} — 表單文字格式化
  *       （基岩表單可安全顯示字串，不套 prefix）</li>
+ *   <li>{@link #render(String, Map)} / {@link #render(String, Map, Locale)} —
+ *       單次共用渲染（{@link RenderedMessage}：component／text／formText 三視圖；
+ *       聊天、ActionBar、GUI 與表單共用同一份結果）</li>
  *   <li>{@link #sendChat(Player, String, Map)} — 玩家 chat</li>
  *   <li>{@link #sendActionBar(Player, String, Map)} — 玩家 action bar</li>
  *   <li>{@link #sendTitle(Player, String, Map)} — 玩家 title</li>
@@ -50,6 +53,11 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       title + 可選 subtitle（subtitleKey 為 null 時不送出）</li>
  *   <li>{@link #broadcast(String, Map)} — 全服廣播</li>
  *   <li>{@link #sendConsole(String, Map)} — console（logger.info）</li>
+ *   <li>{@link #sendChat(Player, RenderedMessage)} /
+ *       {@link #sendActionBar(Player, RenderedMessage)} /
+ *       {@link #sendTitle(Player, RenderedMessage, RenderedMessage)} /
+ *       {@link #broadcast(RenderedMessage)} — 已渲染訊息發送（Component 視圖，
+ *       不重讀語言檔；缺 key 結果不發送）</li>
  * </ul>
  *
  * <h2>設計原則</h2>
@@ -303,8 +311,7 @@ public final class MessageService {
      */
     public String format(String key, Map<String, Object> vars) {
         Objects.requireNonNull(key, "key");
-        String body = renderBody(key, vars, true);
-        return body == null ? "" : body;
+        return renderInternal(key, vars, null, false, 0).text();
     }
 
     /**
@@ -349,12 +356,7 @@ public final class MessageService {
      */
     public String formatFormText(String key, Map<String, Object> vars, Locale locale) {
         Objects.requireNonNull(key, "key");
-        Locale effective = locale != null ? locale : lang.getDefaultLocale();
-        Component component = loadFormTextComponent(key, vars);
-        if (component == null) {
-            return "";
-        }
-        return FormText.renderInternal(component, effective, false, 0, this::buildBedrockHint);
+        return renderInternal(key, vars, locale, false, 0).formText();
     }
 
     /**
@@ -376,47 +378,348 @@ public final class MessageService {
         if (options == null) {
             throw new IllegalArgumentException("options must not be null");
         }
-        Locale effective = options.locale() != null ? options.locale() : lang.getDefaultLocale();
-        Component component = loadFormTextComponent(key, vars);
-        if (component == null) {
-            return "";
-        }
-        return FormText.renderInternal(component, effective,
-            options.clickHints(), options.maxLength(), this::buildBedrockHint);
+        return renderInternal(key, vars, options.locale(),
+            options.clickHints(), options.maxLength()).formText();
+    }
+
+    // -----------------------------------------------------------------
+    // 共用渲染結果（聊天／ActionBar／GUI／表單同一份輸出）
+    // -----------------------------------------------------------------
+
+    /**
+     * 以目前全域 locale 渲染一次，聊天、ActionBar、GUI 與表單共用此結果。
+     *
+     * <p>同一個模板只讀取、替換、解析一次：{@code component}（富文字，含 prefix）、
+     * {@code text}（純文字，含 prefix，與 {@link #format} 輸出一致）、
+     * {@code formText}（表單安全字串，不帶 prefix，與
+     * {@link #formatFormText(String, Map, Locale)} 輸出一致）。</p>
+     *
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @return 單次渲染結果；never null
+     * @since 1.4.0
+     */
+    public RenderedMessage render(String key, Map<String, Object> vars) {
+        Objects.requireNonNull(key, "key");
+        return renderInternal(key, vars, null, false, 0);
     }
 
     /**
-     * 讀取 rich template 並做安全替換與 MiniMessage 解析（不套 prefix）。
+     * 以指定語系渲染一次（模板按該語系分層讀取：磁碟請求 locale →
+     * 磁碟預設 locale → 內建請求 locale → 內建預設 locale）。
      *
-     * @return 解析後的 Component；key 缺失或讀取失敗時回傳 null
-     *     （呼叫端回空字串，錯誤碼已在本方法內記錄）
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @param locale 指定語系；可為 null（→ 全域目前語系，與 {@link #render(String, Map)}
+     *     一致）
+     * @return 單次渲染結果；never null
+     * @since 1.4.0
      */
-    private Component loadFormTextComponent(String key, Map<String, Object> vars) {
+    public RenderedMessage render(String key, Map<String, Object> vars, Locale locale) {
+        Objects.requireNonNull(key, "key");
+        return renderInternal(key, vars, locale, false, 0);
+    }
+
+    /**
+     * 單一渲染管線：模板只讀一次，三種呈現皆由該次結果衍生。
+     *
+     * @param clickHints 表單視圖是否附加 click 可讀提示
+     * @param maxLength 表單視圖可見字元上限（0 不截斷）
+     */
+    private RenderedMessage renderInternal(String key, Map<String, Object> vars, Locale locale,
+                                           boolean clickHints, int maxLength) {
+        // mock 情境下 getCurrentLocale()/getDefaultLocale() 可能回傳 null；
+        // 真實 LangManager 建構時即設預設語系，不受影響。此處逐層退回，永不 NPE。
+        Locale effective = locale != null ? locale : lang.getCurrentLocale();
+        if (effective == null) {
+            effective = lang.getDefaultLocale();
+        }
+        if (effective == null) {
+            effective = Locale.ROOT;
+        }
+        Locale formLocale = locale != null ? locale : lang.getDefaultLocale();
+        if (formLocale == null) {
+            formLocale = Locale.ROOT;
+        }
         Optional<String> opt;
         try {
-            opt = lang.get(key, null);
+            opt = locale == null ? lang.get(key, null) : lang.get(locale, key);
         } catch (Throwable t) {
             safeLog(Level.WARNING,
                 "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key + ": " + t.getMessage(),
                 t);
-            return null;
+            return new RenderedMessage(key, effective, Component.empty(), "", "",
+                false, "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key);
         }
-        if (opt.isEmpty()) {
+        if (opt == null || opt.isEmpty()) {
             safeLog(Level.WARNING,
                 "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
-            return null;
+            return new RenderedMessage(key, effective, Component.empty(), "", "",
+                true, "[" + ERR_KEY_MISSING + "] message key missing: " + key
+                    + " (locale=" + effective + ")");
         }
         String template = opt.get();
         if (template == null) {
             safeLog(Level.WARNING,
                 "[" + ERR_FORMAT_ERROR + "] lang.get returned Optional with null body for key="
                     + key);
-            return null;
+            return new RenderedMessage(key, effective, Component.empty(), "", "",
+                false, "[" + ERR_FORMAT_ERROR + "] null body for key=" + key);
         }
+        // 純文字視圖：與 format() 同規則（不跳脫使用者值），保證兩者輸出一致。
+        String text = prefixOf() + plainSubstitute(template, vars);
+        // 富文字視圖：使用者值先跳脫再解析（防 MiniMessage 注入），與 formatComponent 同規則。
         String substituted = safeSubstitute(template, vars);
         Component parsed = deserializeOrNull(substituted, null, ERR_FORMAT_ERROR,
-            "formatFormText parse failed for key=" + key);
-        return parsed == null ? Component.text(substituted) : parsed;
+            "render parse failed for key=" + key);
+        String diagnosis = "";
+        Component content;
+        if (parsed == null) {
+            diagnosis = "[" + ERR_FORMAT_ERROR + "] MiniMessage parse failed for key=" + key
+                + "; using plain-text fallback";
+            content = Component.text(substituted);
+        } else {
+            content = parsed;
+        }
+        Component component = applyPrefixIfNeeded(content, true);
+        String formText = FormText.renderInternal(content, formLocale,
+            clickHints, maxLength, this::buildBedrockHint);
+        return new RenderedMessage(key, effective, component, text, formText, false, diagnosis);
+    }
+
+    /**
+     * 不跳脫的 {@code {var}} 替換（與 {@link LangManager} 規則一致，供純文字視圖使用）。
+     */
+    private static String plainSubstitute(String template, Map<String, Object> vars) {
+        if (vars == null || vars.isEmpty()) {
+            return template;
+        }
+        StringBuilder sb = new StringBuilder(template.length() + 32);
+        int i = 0;
+        int len = template.length();
+        while (i < len) {
+            char c = template.charAt(i);
+            if (c == '{') {
+                int end = template.indexOf('}', i + 1);
+                if (end > 0) {
+                    String varKey = template.substring(i + 1, end);
+                    if (vars.containsKey(varKey)) {
+                        sb.append(vars.get(varKey));
+                        i = end + 1;
+                        continue;
+                    }
+                    sb.append(template, i, end + 1);
+                    i = end + 1;
+                    continue;
+                }
+            }
+            sb.append(c);
+            i++;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 目前 prefix 字串（無 prefix、查詢失敗或 mock 回傳 null 時為空字串）。
+     */
+    private String prefixOf() {
+        Optional<String> prefix;
+        try {
+            prefix = lang.get(PREFIX_KEY);
+        } catch (Throwable t) {
+            return "";
+        }
+        if (prefix == null || prefix.isEmpty() || prefix.get().isEmpty()) {
+            return "";
+        }
+        return prefix.get();
+    }
+
+    /**
+     * 對單一玩家發送已渲染訊息（chat，Component 視圖）。
+     *
+     * <p>直接送出該次渲染的 Component，不重讀語言檔；缺 key 的渲染結果
+     * （{@link RenderedMessage#missing()}）不發送（診斷已在渲染時記錄）。</p>
+     *
+     * @param player 目標玩家；可為 null（→ silent no-op）
+     * @param rendered 已渲染訊息；可為 null（→ silent no-op）
+     * @since 1.4.0
+     */
+    public void sendChat(Player player, RenderedMessage rendered) {
+        if (!isServiceActive()) {
+            return;
+        }
+        if (player == null) {
+            warnSilently("sendChat(Player, RenderedMessage) called with null player");
+            return;
+        }
+        if (rendered == null) {
+            warnSilently("sendChat(Player, RenderedMessage) called with null rendered message");
+            return;
+        }
+        if (!player.isOnline()) {
+            warnSilently("sendChat to offline player=" + safeName(player));
+            return;
+        }
+        if (rendered.missing()) {
+            return;
+        }
+        Component message = rendered.component();
+        synchronized (plugin) {
+            if (!isServiceActive()) {
+                return;
+            }
+            try {
+                player.sendMessage(message);
+            } catch (IllegalStateException ex) {
+                logPlayerOperationFailure(player, "sendChat", ex);
+            } catch (Throwable t) {
+                safeLog(Level.WARNING,
+                    "[" + ERR_FORMAT_ERROR
+                        + "] sendChat(Player, RenderedMessage) failed for player="
+                        + safeName(player) + ": " + t.getMessage(), t);
+            }
+        }
+    }
+
+    /**
+     * 對單一玩家發送已渲染訊息（action bar，Component 視圖）。
+     *
+     * @param player 目標玩家；可為 null（→ silent no-op）
+     * @param rendered 已渲染訊息；可為 null（→ silent no-op）
+     * @since 1.4.0
+     */
+    public void sendActionBar(Player player, RenderedMessage rendered) {
+        if (!isServiceActive()) {
+            return;
+        }
+        if (player == null) {
+            warnSilently("sendActionBar(Player, RenderedMessage) called with null player");
+            return;
+        }
+        if (rendered == null) {
+            warnSilently(
+                "sendActionBar(Player, RenderedMessage) called with null rendered message");
+            return;
+        }
+        if (!player.isOnline()) {
+            warnSilently("sendActionBar to offline player=" + safeName(player));
+            return;
+        }
+        if (rendered.missing()) {
+            return;
+        }
+        Component message = rendered.component();
+        synchronized (plugin) {
+            if (!isServiceActive()) {
+                return;
+            }
+            try {
+                player.sendActionBar(message);
+            } catch (IllegalStateException ex) {
+                logPlayerOperationFailure(player, "sendActionBar", ex);
+            } catch (Throwable t) {
+                safeLog(Level.WARNING,
+                    "[" + ERR_FORMAT_ERROR
+                        + "] sendActionBar(Player, RenderedMessage) failed for player="
+                        + safeName(player) + ": " + t.getMessage(), t);
+            }
+        }
+    }
+
+    /**
+     * 對單一玩家發送已渲染 title／subtitle（Component 視圖）。
+     *
+     * @param player 目標玩家；可為 null（→ silent no-op）
+     * @param title 已渲染 title；可為 null（→ silent no-op）
+     * @param subtitle 已渲染 subtitle；可為 null（→ 視為空）
+     * @since 1.4.0
+     */
+    public void sendTitle(Player player, RenderedMessage title, RenderedMessage subtitle) {
+        if (!isServiceActive()) {
+            return;
+        }
+        if (player == null) {
+            warnSilently("sendTitle(Player, RenderedMessage, RenderedMessage) called "
+                + "with null player");
+            return;
+        }
+        if (title == null) {
+            warnSilently("sendTitle(Player, RenderedMessage, RenderedMessage) called "
+                + "with null title");
+            return;
+        }
+        if (!player.isOnline()) {
+            warnSilently("sendTitle to offline player=" + safeName(player));
+            return;
+        }
+        if (title.missing()) {
+            return;
+        }
+        Component titleComponent = title.component();
+        Component subtitleComponent =
+            subtitle == null || subtitle.missing() ? Component.empty() : subtitle.component();
+        synchronized (plugin) {
+            if (!isServiceActive()) {
+                return;
+            }
+            try {
+                Title adventureTitle = Title.title(
+                    titleComponent, subtitleComponent, 10, 70, 20);
+                player.showTitle(adventureTitle);
+            } catch (IllegalStateException ex) {
+                logPlayerOperationFailure(player, "sendTitle", ex);
+            } catch (Throwable t) {
+                safeLog(Level.WARNING,
+                    "[" + ERR_FORMAT_ERROR
+                        + "] sendTitle(Player, RenderedMessage, RenderedMessage) failed "
+                        + "for player=" + safeName(player) + ": " + t.getMessage(), t);
+            }
+        }
+    }
+
+    /**
+     * 對所有線上玩家廣播已渲染訊息（Component 視圖，不重讀語言檔）。
+     *
+     * @param rendered 已渲染訊息；可為 null（→ silent no-op）
+     * @since 1.4.0
+     */
+    public void broadcast(RenderedMessage rendered) {
+        if (!isServiceActive()) {
+            return;
+        }
+        if (rendered == null) {
+            warnSilently("broadcast(RenderedMessage) called with null rendered message");
+            return;
+        }
+        if (rendered.missing()) {
+            return;
+        }
+        Component message = rendered.component();
+        synchronized (plugin) {
+            if (!isServiceActive()) {
+                return;
+            }
+            Server srv = safeServer();
+            if (srv == null) {
+                warnSilently("broadcast(RenderedMessage) called but server is unavailable");
+                return;
+            }
+            for (Player p : srv.getOnlinePlayers()) {
+                if (p == null || !p.isOnline()) {
+                    continue;
+                }
+                try {
+                    p.sendMessage(message);
+                } catch (IllegalStateException ex) {
+                    logPlayerOperationFailure(p, "broadcast", ex);
+                } catch (Throwable t) {
+                    safeLog(Level.WARNING,
+                        "[" + ERR_FORMAT_ERROR + "] broadcast(RenderedMessage) failed for player="
+                            + safeName(p) + ": " + t.getMessage(), t);
+                }
+            }
+        }
     }
 
     // -----------------------------------------------------------------
@@ -678,8 +981,7 @@ public final class MessageService {
      */
     public Component formatComponent(String key, Map<String, Object> vars) {
         Objects.requireNonNull(key, "key");
-        Component component = renderComponent(key, vars, true);
-        return component == null ? Component.empty() : component;
+        return renderInternal(key, vars, null, false, 0).component();
     }
 
     /**
@@ -1245,38 +1547,6 @@ public final class MessageService {
     // -----------------------------------------------------------------
     // Component 管線內部 helper
     // -----------------------------------------------------------------
-
-    private Component renderComponent(String key, Map<String, Object> vars, boolean applyPrefix) {
-        // 讀取 raw template（保留 {var}），由本方法做安全替換，避免使用者值注入標籤。
-        Optional<String> opt;
-        try {
-            opt = lang.get(key, null);
-        } catch (Throwable t) {
-            safeLog(Level.WARNING,
-                "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key + ": " + t.getMessage(), t);
-            return null;
-        }
-        if (opt.isEmpty()) {
-            safeLog(Level.WARNING,
-                "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
-            return null;
-        }
-        String template = opt.get();
-        if (template == null) {
-            safeLog(Level.WARNING,
-                "[" + ERR_FORMAT_ERROR + "] lang.get returned Optional with null body for key=" + key);
-            return null;
-        }
-        String substituted = safeSubstitute(template, vars);
-        Component parsed = deserializeOrNull(substituted, null, ERR_FORMAT_ERROR,
-            "formatComponent parse failed for key=" + key);
-        if (parsed == null) {
-            // 解析失敗：回傳原始（已替換）字串的純文字 Component，避免資訊遺失；
-            // 仍依 applyPrefix 套用同一 prefix，與正常路徑語意一致。
-            return applyPrefixIfNeeded(Component.text(substituted), applyPrefix);
-        }
-        return applyPrefixIfNeeded(parsed, applyPrefix);
-    }
 
     private Component applyPrefixIfNeeded(Component component, boolean applyPrefix) {
         if (!applyPrefix) {

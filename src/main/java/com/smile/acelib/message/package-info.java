@@ -10,15 +10,27 @@
  * <p>以 {@link com.smile.acelib.config.LangManager} 建構
  * {@link com.smile.acelib.message.MessageService}（建議由
  * {@link com.smile.acelib.AceLibApi} 或 plugin 組裝鏈提供 instance），
- * 之後即可格式化與發送訊息。</p>
+ * 之後即可格式化與發送訊息。多插件各自持有文案時，改經
+ * {@link com.smile.acelib.message.MessageScopes} 建立 per-plugin
+ * {@link com.smile.acelib.message.MessageScope}，由工廠統一建立與清理。</p>
  *
  * <h2>主要型別</h2>
  * <ul>
  *   <li>{@link com.smile.acelib.message.MessageService}（Supported）—
  *       格式化（{@code format} / {@code formatConsole} /
- *       {@code formatFormText}）與發送
+ *       {@code formatFormText} / {@code render}）與發送
  *       （{@code sendChat} / {@code sendActionBar} / {@code sendTitle} /
- *       {@code broadcast} / {@code sendConsole}）</li>
+ *       {@code broadcast} / {@code sendConsole}，含共用渲染結果多載）</li>
+ *   <li>{@link com.smile.acelib.message.MessageScopes}（Supported）—
+ *       插件作用域統一工廠（建立／查詢／關閉）</li>
+ *   <li>{@link com.smile.acelib.message.MessageScope}（Supported）—
+ *       單一 plugin 的訊息 handle（解析器語系發送／共用渲染／顯示標籤／升級補 key）</li>
+ *   <li>{@link com.smile.acelib.message.PlayerLocaleResolver}（Supported）—
+ *       可替換的玩家語系解析器</li>
+ *   <li>{@link com.smile.acelib.message.RenderedMessage}（Supported）—
+ *       單次渲染結果（component／text／formText 三視圖＋診斷）</li>
+ *   <li>{@link com.smile.acelib.message.MessageLabel}（Supported）—
+ *       顯示標籤（穩定程式識別字＋顯示文字）</li>
  *   <li>{@link com.smile.acelib.message.FormText}（Supported）—
  *       Adventure Component → 基岩表單可安全顯示字串的靜態渲染入口</li>
  *   <li>{@link com.smile.acelib.message.FormTextOptions}（Supported）—
@@ -45,6 +57,7 @@
  *   <li>{@code ACELIB-MSG-002} — 在不安全上下文操作玩家訊息（Folia）</li>
  *   <li>{@code ACELIB-MSG-003} — 訊息格式錯誤或安全降級</li>
  *   <li>{@code ACELIB-MSG-005} — 表單文字渲染失敗，已退回純文字</li>
+ *   <li>{@code ACELIB-MSG-006} — 訊息作用域生命週期違規（重複建立／關閉後使用）</li>
  * </ul>
  *
  * @since 1.0.0

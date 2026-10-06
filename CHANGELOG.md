@@ -24,6 +24,18 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 新增錯誤碼 `ACELIB-WORLD-017`（延後派送無法安排）與 `ACELIB-WORLD-018`（到達確認失敗）。
 - 傳送後端改為真正的非同步呼叫（`Entity#teleportAsync`，`keepPassengers` 以 `RETAIN_PASSENGERS` 旗標表達）：移除過去永遠生效的同步 fallback；目標 chunk 未載入時改由平台非同步語意處理。呼叫端本就以 future 等待結果，無需改動。
 
+### 本階段內容（插件作用域的訊息與在地化）
+
+- 插件作用域訊息服務（`MessageScopes`／`MessageScope`）：每 plugin 在 `onEnable` 建立、`onDisable` 關閉自己的作用域；同 key 各自隔離，不跨 plugin 讀文案或清理他人資源；重複建立與關閉後使用以 `ACELIB-MSG-006` 拒絕。
+- 玩家語系解析器（`PlayerLocaleResolver`）可替換：預設跟隨 `Player.locale()`；偏好存在哪裡不做規定，下游可用自己的資料庫實作；解析失敗退回預設語系並記錄 `ACELIB-MSG-003`，不中斷發送。
+- 磁碟自訂文案優先，缺 key 讀 plugin JAR 內建資源（`lang/<locale>.yml`）；升級以 `syncMissingBuiltinKeys` 只補新 key（保註解合併、不覆寫管理員修改、具冪等性）。
+- 聊天、ActionBar、GUI 與表單共用同一份渲染結果（`MessageService#render` → `RenderedMessage`：component／text／formText 三視圖一次產出）；顯示標籤與程式識別字以 `MessageLabel`（id＋text，文字取無 prefix 且 MiniMessage 已解析的表單安全字串視圖）分離，缺 key 時文字退回 id。
+- 缺 key（`ACELIB-MSG-001`）與渲染失敗（`ACELIB-MSG-003`）在渲染結果的 `missing`／`diagnosis` 中可診斷；既有 `format`／`formatComponent` 改走同一管線，單語系下輸出與重構前等價。
+- 行為變更（刻意修正，多語系服注意）：`formatFormText(key, vars, locale)` 指定非全域語系時，現在按該語系分層讀模板（舊版固定讀全域模板）；`render(locale)` 的 `message.prefix` 仍取自全域語系。單語系服無差異。
+- 原始碼相容性說明：新增 `RenderedMessage` 發送多載後，字面 `null` 呼叫（`sendChat(p, null)`、`broadcast(null)`）在原始碼層歧義，需加明確轉型（例如 `(Component) null`）；二進位相容，簽章只增不減（與既有 `Locale`／`FormTextOptions` 多載歧義提醒一致）。
+- 新增錯誤碼 `ACELIB-MSG-006`（訊息作用域生命週期違規）。
+- API 為加法性變更：新增 `MessageScopes`、`MessageScope`、`PlayerLocaleResolver`、`RenderedMessage`、`MessageLabel`，`LangManager` 新增 `syncMissingBuiltinKeys`，`MessageService` 新增 `render` 與 `RenderedMessage` 發送多載；未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步。
+
 ### 本階段內容（設定的啟動、快照與型別綁定）
 
 - 啟動四分類（`ConfigManager#startup`）：首次安裝、有效設定、損壞設定、使用後缺檔；識別依據是安裝狀態 sidecar（只在驗證成功後寫入），不是檔案是否存在。

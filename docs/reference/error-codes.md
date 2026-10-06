@@ -71,8 +71,9 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | --- | --- | --- |
 | `ACELIB-MSG-001` | 訊息 key 缺失 | 查詢的 locale key 不存在 |
 | `ACELIB-MSG-002` | 在不安全上下文操作玩家訊息（Folia） | Folia 下非區域執行緒傳送訊息 |
-| `ACELIB-MSG-003` | 訊息格式錯誤 | LangManager 抓不到物件或格式異常 |
+| `ACELIB-MSG-003` | 訊息格式錯誤 | LangManager 抓不到物件或格式異常；語系解析器失敗退回預設語系；共用渲染 MiniMessage 解析失敗退回純文字 |
 | `ACELIB-MSG-005` | 表單文字渲染失敗，已退回純文字 | FormText 管線內部失敗時 warning 並回傳純文字版本 |
+| `ACELIB-MSG-006` | 訊息作用域生命週期違規 | 同一 plugin 重複建立作用域，或已關閉的作用域被使用 |
 
 ### 指令系統（CMD）
 

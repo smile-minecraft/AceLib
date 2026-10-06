@@ -613,7 +613,7 @@ class MessageServiceTest {
         void sendChat_component_nullSafe() {
             assertDoesNotThrow(() -> service.sendChat(null, Component.text("x")));
             PlayerMock p = server.addPlayer();
-            assertDoesNotThrow(() -> service.sendChat(p, null));
+            assertDoesNotThrow(() -> service.sendChat(p, (Component) null));
             assertNull(firstComponentMessageOrNull(p),
                 "null message 不應傳送任何 Component");
         }
@@ -699,7 +699,7 @@ class MessageServiceTest {
         @Test
         @DisplayName("broadcast(Component)：null message 為 silent no-op")
         void broadcast_component_nullSafe() {
-            assertDoesNotThrow(() -> service.broadcast(null));
+            assertDoesNotThrow(() -> service.broadcast((Component) null));
         }
 
         @Test

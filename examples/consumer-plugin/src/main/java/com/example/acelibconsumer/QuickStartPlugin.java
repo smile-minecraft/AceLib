@@ -6,6 +6,10 @@ import com.smile.acelib.command.CommandDoc;
 import com.smile.acelib.form.FormImage;
 import com.smile.acelib.message.FormText;
 import com.smile.acelib.message.FormTextOptions;
+import com.smile.acelib.message.MessageLabel;
+import com.smile.acelib.message.MessageScope;
+import com.smile.acelib.message.MessageScopes;
+import com.smile.acelib.message.RenderedMessage;
 import com.smile.acelib.scheduler.AceLibScheduler;
 import com.smile.acelib.scheduler.SafeScheduler;
 import com.smile.acelib.scheduler.TaskScope;
@@ -32,6 +36,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * </ul>
  */
 public class QuickStartPlugin extends JavaPlugin {
+
+    private MessageScope messageScope;
 
     @Override
     public void onEnable() {
@@ -67,6 +73,12 @@ public class QuickStartPlugin extends JavaPlugin {
 
         // 5. 只依賴公開 API 使用本版三個新功能（編譯期即證明 Supported 面足夠）。
         demonstrateNewApis(api);
+
+        // 5b. 插件作用域訊息服務：建 scope、升級補 key、共用渲染與顯示標籤。
+        //     管理員覆寫檔缺的 key 退回本 JAR 內建 lang/en_US.yml。
+        messageScope = MessageScopes.create(this, java.util.Locale.US);
+        messageScope.syncBuiltinDefaults();
+        demonstrateMessageScope(messageScope);
 
         // 6. 作用域任務群組（本版新 API）：讀取→背景計算→回玩家執行緒回覆。
         //    只用 Supported 型別；SafeSchedulerImpl 等 Internal 型別不可引用。
@@ -133,6 +145,29 @@ public class QuickStartPlugin extends JavaPlugin {
             player.getUniqueId(), () -> "done", scheduler);
         ticket.whenComplete(done ->
             getLogger().info("deferred action settled: " + done.outcome()));
+    }
+
+    /**
+     * 插件作用域訊息示範：一次渲染同時餵聊天、GUI 與表單；按鈕顯示文字與
+     * 程式識別字分離（分支永遠比對 {@code id}，不比對顯示文字）。
+     *
+     * @param scope 本 plugin 的訊息作用域；不可為 null
+     */
+    private void demonstrateMessageScope(MessageScope scope) {
+        RenderedMessage rendered = scope.render("greeting", java.util.Map.of("player", "world"));
+        getLogger().info("chat preview: " + rendered.text());
+        getLogger().info("form preview: " + rendered.formText());
+
+        MessageLabel confirm = scope.label("confirm", "button.confirm", java.util.Map.of());
+        getLogger().info("button [" + confirm.id() + "] displays: " + confirm.text());
+    }
+
+    @Override
+    public void onDisable() {
+        if (messageScope != null) {
+            messageScope.close();
+            messageScope = null;
+        }
     }
 
     /**

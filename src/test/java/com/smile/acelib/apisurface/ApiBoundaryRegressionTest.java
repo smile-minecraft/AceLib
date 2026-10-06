@@ -132,17 +132,29 @@ class ApiBoundaryRegressionTest {
         //       綁定例外（ACELIB-CFG-007，帶完整欄位路徑）
         //     - com.smile.acelib.config.ConfigChangeListener（interface）—
         //       監看回呼（自動重載成功／無效診斷）
+        //   Supported +5（插件作用域訊息與在地化）：
+        //     - com.smile.acelib.message.MessageLabel（record）— 顯示標籤值型別
+        //       （穩定程式識別字 id＋渲染顯示文字 text；缺 key 時文字退回 id）
+        //     - com.smile.acelib.message.MessageScope（class）— 單一 plugin
+        //       訊息作用域 handle（專屬 LangManager＋MessageService；解析器語系
+        //       發送／共用渲染／顯示標籤；close 具冪等性）
+        //     - com.smile.acelib.message.MessageScopes（class）— 統一工廠
+        //       （per-plugin 隔離建立與清理；重複建立以 ACELIB-MSG-006 拒絕）
+        //     - com.smile.acelib.message.PlayerLocaleResolver（interface）—
+        //       玩家語系解析器（可替換；預設跟隨 Player.locale；不強制偏好儲存）
+        //     - com.smile.acelib.message.RenderedMessage（record）— 單次渲染結果
+        //       （component／text／formText 三視圖＋缺 key／渲染失敗診斷）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 128,
-            "Supported 數量偏離 canonical 128，實際=" + supported);
+        assertTrue(supported == 133,
+            "Supported 數量偏離 canonical 133，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
         assertTrue(internal == 20,
             "Internal 數量偏離 canonical 20，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 160,
-            "top-level inventory 偏離 canonical 160，實際=" + types.size());
+        assertTrue(types.size() == 165,
+            "top-level inventory 偏離 canonical 165，實際=" + types.size());
     }
 
     @Test
