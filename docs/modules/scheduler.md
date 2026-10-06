@@ -52,6 +52,30 @@ scheduler.cancelAll();
 
 Folia 上不要把全域 `BukkitScheduler` 當成玩家、實體或位置工作的預設路徑。若工作從 async callback 回來後要修改遊戲物件，請再次用 scheduler 送回正確位置。
 
+## 完成語意與作用域群組
+
+`ScheduledTask` 只代表「已接受排程」。需要知道動作有沒有做完時，用作用域群組：
+
+```java
+TaskScope scope = scheduler.scopeFor(player);
+TaskTicket<String> ticket = scope.pipeline(
+    () -> loadSomething(),          // 讀取（背景執行）
+    raw -> transform(raw),          // 背景計算
+    result -> player.sendMessage(Component.text(result))); // 回玩家所在執行緒回覆
+
+ticket.whenComplete(outcome -> {
+    switch (outcome.outcome()) {
+        case COMPLETED -> log("done: " + outcome.value());
+        case FAILED -> log("failed", outcome.cause());
+        case CANCELLED, REJECTED -> log("not run: " + outcome.errorRecord().code());
+    }
+});
+```
+
+終態只有四種：`COMPLETED`（完成，攜值）、`FAILED`（執行時拋錯，記 `ACELIB-SCHED-001`）、`CANCELLED`（接受後被取消）、`REJECTED`（派送當下即被拒絕，從未接受）。終態只完成一次；完成後再取消不改變終態。等待用 `await(timeout, unit)`（只能在自己的執行緒呼叫，不可在 region 或主執行緒任務內呼叫），串接用 `stage()`。
+
+玩家退服、實體退休、plugin 停用時，群組內未結束的任務自動取消並通知 `CANCELLED`，作用域失效後的新派送一律 `REJECTED`。退服後回覆階段不會再執行。`cancelAll()` 只取消群組內待執行任務，作用域仍可用。
+
 錯誤代碼與觸發原因見[錯誤碼](../reference/error-codes.md)。需要先判斷目前執行緒是否允許操作時，請看[上下文安全](context.md)。
 
 ## 相關頁面

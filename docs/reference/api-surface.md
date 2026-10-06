@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：151 個 public 頂層型別
-- Supported：119
+- 總數：155 個 public 頂層型別
+- Supported：123
 - SPI：12
 - Internal：20
 
@@ -233,6 +233,10 @@
 | `com.smile.acelib.scheduler.ScheduledTask` | interface | Supported | 排程任務控制介面（cancel/isCancelled）；v1 穩定。 |  | SafeScheduler；SafeExecutor。 |
 | `com.smile.acelib.scheduler.TaskErrorRecord` | record | Supported | 排程錯誤記錄值型別；v1 穩定。 |  | TaskErrorRecorder；SafeScheduler。 |
 | `com.smile.acelib.scheduler.TaskErrorRecorder` | class | Supported | 排程錯誤記錄器；v1 穩定工具。 |  | SafeSchedulerImpl；消費者。 |
+| `com.smile.acelib.scheduler.TaskOutcome` | enum | Supported | 排程動作終態分類列舉；v1 凍結常數順序。 |  | TaskResult；TaskTicket。 |
+| `com.smile.acelib.scheduler.TaskResult` | record | Supported | 排程動作終態值型別；v1 穩定。 |  | TaskTicket；TaskScope。 |
+| `com.smile.acelib.scheduler.TaskScope` | interface | Supported | 玩家／實體作用域任務群組介面。 |  | SafeScheduler；消費者。 |
+| `com.smile.acelib.scheduler.TaskTicket` | interface | Supported | 可觀察終態的任務票據介面；v1 穩定。 |  | TaskScope；消費者。 |
 | `com.smile.acelib.scheduler.TaskType` | enum | Supported | 排程任務型別列舉；v1 凍結常數順序。 |  | SafeScheduler；ScheduledTask。 |
 
 ### com.smile.acelib.world

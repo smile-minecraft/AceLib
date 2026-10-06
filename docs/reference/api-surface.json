@@ -1240,6 +1240,42 @@
       "mainCallers": "SafeSchedulerImpl；消費者。"
     },
     {
+      "fqcn": "com.smile.acelib.scheduler.TaskOutcome",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskOutcome",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "排程動作終態分類列舉；v1 凍結常數順序。",
+      "mainCallers": "TaskResult；TaskTicket。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskResult",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "排程動作終態值型別；v1 穩定。",
+      "mainCallers": "TaskTicket；TaskScope。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskScope",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskScope",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "玩家／實體作用域任務群組介面。",
+      "mainCallers": "SafeScheduler；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.scheduler.TaskTicket",
+      "package": "com.smile.acelib.scheduler",
+      "simpleName": "TaskTicket",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "可觀察終態的任務票據介面；v1 穩定。",
+      "mainCallers": "TaskScope；消費者。"
+    },
+    {
       "fqcn": "com.smile.acelib.scheduler.TaskType",
       "package": "com.smile.acelib.scheduler",
       "simpleName": "TaskType",

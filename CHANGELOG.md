@@ -12,6 +12,12 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 測試 JAR（`AceLib-<version>-test-fixtures.jar`）納入 Release workflow 的獨立選取與 SHA-256 完整性檢查；下游以座標加 `test-fixtures` 後綴引用（`testFixtures(...)` 寫法在 JitPack 解析不到）。
 - 開發版本三處（`build.gradle.kts`、`plugin.yml`、`AceLibVersion.java`）與本機 consumer 座標同步為 `1.4.0-SNAPSHOT`。
 
+### 本階段內容（任務完成語意與作用域）
+
+- 排程結果區分「已接受排程」與「動作完成」：`SafeScheduler#scopeFor(Player/Entity)` 建立玩家／實體作用域群組，派送回傳 `TaskTicket`（沿用 `ScheduledTask` 句柄語意，另以 `TaskResult`／`TaskOutcome` 攜帶完成、失敗、取消、拒派四種終態，支援等待與串接，終態只完成一次）。
+- 玩家退服、實體退休、plugin 停用時群組任務自動取消並通知呼叫端；退服後不執行使用者程式。
+- `TaskScope#pipeline` 把讀取、背景計算、回玩家／實體所在執行緒回覆串成單一流程（Folia 下回覆跟著跨區後的玩家）；任一階段失敗、取消或拒派即為整條流程的終態。
+
 ## [1.3.1] - 2026-10-06
 
 v1.3.1 是修補版，修正排程、資料、事件、冷卻、設定、世界、生命週期與玩家資料的已知缺陷；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.3.1`）取得。

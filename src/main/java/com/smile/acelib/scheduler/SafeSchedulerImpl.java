@@ -6,9 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
@@ -16,6 +19,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -98,6 +102,20 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     private final SchedulerBackend backend;
     private final TaskErrorRecorder recorder;
     private final Set<ScheduledTask> tracked = ConcurrentHashMap.newKeySet();
+    /**
+     * 存活的作用域群組（退服／退休／停用時關閉，{@link #cancelAll()} 時連帶取消）。
+     *
+     * <p>已關閉的作用域由 {@link #forgetScope(TaskScopeImpl)} 除名；
+     * 結束的票據由作用域自行解除追蹤，因此集合規模維持在「活著群組數」。</p>
+     */
+    private final Set<TaskScopeImpl> scopes = ConcurrentHashMap.newKeySet();
+    /**
+     * 作用域關閉事件監聽（退服／實體移除）。
+     *
+     * <p>第一個作用域建立時註冊、停用時解除註冊；{@code volatile} 搭配
+     * 同步的雙重檢查，確保多執行緒下只註冊一次。</p>
+     */
+    private volatile ScopeListener scopeListener;
     private volatile boolean disabled = false;
     /**
      * 錯誤紀錄 sink。
@@ -244,6 +262,34 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         return dispatch(TaskType.LOCATION, runnable, null, location, 0L, 0L, false);
     }
 
+    @Override
+    public TaskScope scopeFor(Player player) {
+        Objects.requireNonNull(player, "player");
+        if (disabled) {
+            return new TaskScopeImpl(this, plugin, TaskScopeImpl.Kind.PLAYER,
+                player, null, false, disabledRecord());
+        }
+        ensureScopeListener();
+        TaskScopeImpl scope = new TaskScopeImpl(this, plugin, TaskScopeImpl.Kind.PLAYER,
+            player, null, true, null);
+        scopes.add(scope);
+        return scope;
+    }
+
+    @Override
+    public TaskScope scopeFor(Entity entity) {
+        Objects.requireNonNull(entity, "entity");
+        if (disabled) {
+            return new TaskScopeImpl(this, plugin, TaskScopeImpl.Kind.ENTITY,
+                null, entity, false, disabledRecord());
+        }
+        ensureScopeListener();
+        TaskScopeImpl scope = new TaskScopeImpl(this, plugin, TaskScopeImpl.Kind.ENTITY,
+            null, entity, true, null);
+        scopes.add(scope);
+        return scope;
+    }
+
     /**
      * 檢查 location 所在 chunk 是否已載入，且<strong>不</strong>產生載入副作用。
      *
@@ -284,6 +330,16 @@ public final class SafeSchedulerImpl implements SafeScheduler {
                 LOGGER.log(Level.FINE, "cancelAll: task cancel failed: " + safeMessage(t2), t2);
             }
         }
+        // 作用域票據的底層句柄已在上輪快照中取消；此處補上終態寫入
+        // （單純取消不留紀錄，與既有 cancelAll 語意一致）。
+        for (TaskScopeImpl scope : new ArrayList<>(scopes)) {
+            try {
+                scope.cancelAll();
+            } catch (Throwable failure) {
+                LOGGER.log(Level.FINE,
+                    "cancelAll: scope cancel failed: " + safeMessage(failure), failure);
+            }
+        }
     }
 
     @Override
@@ -299,12 +355,135 @@ public final class SafeSchedulerImpl implements SafeScheduler {
      * 通知 scheduler 插件已停用：取消所有任務並標記為 disabled。
      *
      * <p>呼叫後任何後續 {@code runXxx(...)} 都會回傳 no-op task，
-     * 並留下 {@code ACELIB-SCHED-006} 紀錄。
+     * 並留下 {@code ACELIB-SCHED-006} 紀錄。作用域群組同步關閉
+     * （各票據收到取消終態），退服監聽解除註冊。
      * 重複呼叫不丟例外。</p>
      */
     public void onPluginDisable() {
         this.disabled = true;
+        TaskErrorRecord shutdown = TaskErrorRecord.cancelled(
+            TaskType.GLOBAL, ERR_PLUGIN_DISABLED,
+            "scheduler is disabled; scoped tasks cancelled");
+        for (TaskScopeImpl scope : new ArrayList<>(scopes)) {
+            try {
+                scope.deactivate(shutdown);
+            } catch (Throwable failure) {
+                LOGGER.log(Level.FINE,
+                    "onPluginDisable: scope deactivate failed: " + safeMessage(failure),
+                    failure);
+            }
+        }
         cancelAll();
+        unregisterScopeListener();
+    }
+
+    /**
+     * 確保作用域關閉監聽已註冊（第一個作用域建立時呼叫一次）。
+     *
+     * <p>plugin 未啟用時無法註冊監聽：此時退服自動取消無從實現，
+     * fail-fast 拒絕建群組，避免靜默失去核心語意。</p>
+     *
+     * @throws IllegalStateException 當 plugin 未啟用
+     */
+    private void ensureScopeListener() {
+        ScopeListener current = scopeListener;
+        if (current != null) {
+            return;
+        }
+        synchronized (this) {
+            if (scopeListener != null) {
+                return;
+            }
+            if (!plugin.isEnabled()) {
+                throw new IllegalStateException(
+                    "scopeFor 需要已啟用的 plugin（退服／退休監聽無法註冊）");
+            }
+            ScopeListener created = new ScopeListener(this);
+            Bukkit.getPluginManager().registerEvents(created, plugin);
+            scopeListener = created;
+        }
+    }
+
+    /**
+     * 解除作用域關閉監聽註冊（停用路徑；server 在 plugin disable 時亦會自動移除）。
+     */
+    private void unregisterScopeListener() {
+        ScopeListener current;
+        synchronized (this) {
+            current = scopeListener;
+            scopeListener = null;
+        }
+        if (current != null) {
+            try {
+                HandlerList.unregisterAll(current);
+            } catch (Throwable failure) {
+                LOGGER.log(Level.FINE,
+                    "unregisterScopeListener failed: " + safeMessage(failure), failure);
+            }
+        }
+    }
+
+    /**
+     * 玩家退服時關閉其作用域（{@link ScopeListener} 呼叫）。
+     *
+     * @param id 退服玩家識別碼；可為 null（直接忽略）
+     */
+    void onPlayerQuit(UUID id) {
+        if (id == null) {
+            return;
+        }
+        TaskErrorRecord quit = TaskErrorRecord.cancelled(
+            TaskType.PLAYER, ERR_PLAYER_OFFLINE, "player quit (uuid=" + id + ")");
+        for (TaskScopeImpl scope : new ArrayList<>(scopes)) {
+            try {
+                if (scope.ownsPlayer(id)) {
+                    scope.deactivate(quit);
+                }
+            } catch (Throwable failure) {
+                LOGGER.log(Level.FINE,
+                    "onPlayerQuit: scope deactivate failed: " + safeMessage(failure), failure);
+            }
+        }
+    }
+
+    /**
+     * 實體退休時關閉其作用域（{@link ScopeListener} 呼叫）。
+     *
+     * @param id 退休實體識別碼；可為 null（直接忽略）
+     */
+    void onEntityRetired(UUID id) {
+        if (id == null) {
+            return;
+        }
+        TaskErrorRecord retired = TaskErrorRecord.cancelled(
+            TaskType.ENTITY, ERR_ENTITY_INVALID, "entity retired (uuid=" + id + ")");
+        for (TaskScopeImpl scope : new ArrayList<>(scopes)) {
+            try {
+                if (scope.ownsEntity(id)) {
+                    scope.deactivate(retired);
+                }
+            } catch (Throwable failure) {
+                LOGGER.log(Level.FINE,
+                    "onEntityRetired: scope deactivate failed: " + safeMessage(failure), failure);
+            }
+        }
+    }
+
+    /**
+     * 作用域關閉後除名（{@link TaskScopeImpl#deactivate(TaskErrorRecord)} 呼叫）。
+     *
+     * @param scope 已關閉的作用域
+     */
+    void forgetScope(TaskScopeImpl scope) {
+        scopes.remove(scope);
+    }
+
+    /**
+     * 停用狀態的作用域關閉紀錄（新建失活群組用，不寫入 recorder）。
+     */
+    private TaskErrorRecord disabledRecord() {
+        return TaskErrorRecord.cancelled(
+            TaskType.GLOBAL, ERR_PLUGIN_DISABLED, "scheduler is disabled");
     }
 
     /**
@@ -402,7 +581,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
     // -----------------------------------------------------------------
 
     /**
-     * 統一 dispatch 入口。
+     * 統一 dispatch 入口（既有 8 種任務方法共用，行為保持不變）。
      *
      * @param type         任務類型
      * @param runnable     使用者提供的程式；不可為 null
@@ -420,30 +599,12 @@ public final class SafeSchedulerImpl implements SafeScheduler {
                                     long periodTicks,
                                     boolean async) {
         Objects.requireNonNull(runnable, "runnable");
-
-        if (disabled) {
-            recordAndNotify(TaskErrorRecord.cancelled(
-                type, ERR_PLUGIN_DISABLED, "scheduler is disabled"));
-            return new NoOpScheduledTask(plugin, type);
-        }
-
-        long creationTick = currentTick();
-
-        // backend 選擇在建構時依 capability profile 完成；null 表示
-        // regionScheduling 與 globalScheduler 皆不支援（UNKNOWN）。
-        if (backend == null) {
-            recordAndNotify(TaskErrorRecord.cancelled(
-                type, ERR_PLATFORM_UNSUPPORTED,
-                "platform capability does not include regionScheduling nor globalScheduler"));
-            return new NoOpScheduledTask(plugin, type);
-        }
-
         // 一次性任務與週期任務的收尾條件不同：一次性任務 runnable 跑完就結束，
         // 週期任務要持續被追蹤直到被取消。兩者的解除追蹤都收斂到
         // BukkitScheduledTask.finish()，由 cancel()、一次性執行結束與
         // Folia entity 退役三條路徑觸發。
         BukkitScheduledTask scheduled = new BukkitScheduledTask(
-            plugin, type, creationTick, tracked, periodTicks > 0L);
+            plugin, type, currentTick(), tracked, periodTicks > 0L);
         Runnable wrapped = () -> {
             if (disabled || scheduled.isCancelRequested()) {
                 scheduled.finish();
@@ -452,6 +613,59 @@ public final class SafeSchedulerImpl implements SafeScheduler {
             wrap(type, runnable);
             scheduled.finish();
         };
+        return dispatchCore(type, scheduled, wrapped, scheduled::finish,
+            player, entityOrLoc, delayTicks, periodTicks, async, null);
+    }
+
+    /**
+     * 派送共用核心（既有任務方法與作用域任務方法共用）。
+     *
+     * <p>收斂所有「派送期」分支：停用、無 backend、null 句柄、實體退休例外、
+     * 底層拋錯，以及先登記後派送的空窗補取消。作用域路徑經由
+     * {@code rejectionListener} 得知派送期拒絕（以寫入拒派終態）；
+     * 既有路徑傳 null，行為與重構前完全一致。</p>
+     *
+     * @param type               任務類型
+     * @param scheduled          已建立的追蹤任務（呼叫端依一次性／週期區分建立）
+     * @param wrapped            已包裝使用者程式的 wrapper
+     * @param retired            任務在執行前就被平台判定為不可能執行時的收尾通知
+     * @param player             玩家目標；其他型別為 null
+     * @param entityOrLoc        實體或位置目標；其他型別為 null
+     * @param delayTicks         延遲 tick
+     * @param periodTicks        週期間隔；&gt;0 表示週期任務
+     * @param async              是否走 async pool
+     * @param rejectionListener  派送期拒絕通知（作用域寫入拒派終態用）；可為 null
+     * @return 派送成功的追蹤任務，或已取消的 no-op
+     */
+    private ScheduledTask dispatchCore(TaskType type,
+                                       BukkitScheduledTask scheduled,
+                                       Runnable wrapped,
+                                       Runnable retired,
+                                       Player player,
+                                       Object entityOrLoc,
+                                       long delayTicks,
+                                       long periodTicks,
+                                       boolean async,
+                                       Consumer<TaskErrorRecord> rejectionListener) {
+        if (disabled) {
+            TaskErrorRecord rejected = TaskErrorRecord.cancelled(
+                type, ERR_PLUGIN_DISABLED, "scheduler is disabled");
+            recordAndNotify(rejected);
+            notifyRejection(rejectionListener, rejected);
+            return new NoOpScheduledTask(plugin, type);
+        }
+
+        // backend 選擇在建構時依 capability profile 完成；null 表示
+        // regionScheduling 與 globalScheduler 皆不支援（UNKNOWN）。
+        if (backend == null) {
+            TaskErrorRecord rejected = TaskErrorRecord.cancelled(
+                type, ERR_PLATFORM_UNSUPPORTED,
+                "platform capability does not include regionScheduling nor globalScheduler");
+            recordAndNotify(rejected);
+            notifyRejection(rejectionListener, rejected);
+            return new NoOpScheduledTask(plugin, type);
+        }
+
         // 先登記再派送：backend.dispatch 可能阻塞（或被 latch 測試刻意擋住），
         // disable / cancelAll 可能正好插入這段空窗。先登記讓並行的 cancelAll
         // 能經由 cancelRequested 看到飛行中的任務；派送返回後再以 disabled /
@@ -460,21 +674,24 @@ public final class SafeSchedulerImpl implements SafeScheduler {
 
         try {
             PlatformTaskHandle handle = backend.dispatch(
-                type, wrapped, scheduled::finish,
+                type, wrapped, retired,
                 player, entityOrLoc, delayTicks, periodTicks, async);
             if (handle == null) {
                 tracked.remove(scheduled);
+                TaskErrorRecord rejected;
                 if (type == TaskType.ENTITY || type == TaskType.PLAYER
                     || type == TaskType.PLAYER_LATER) {
-                    recordAndNotify(TaskErrorRecord.cancelled(
+                    rejected = TaskErrorRecord.cancelled(
                         type, ERR_ENTITY_INVALID,
-                        "entity retired before dispatch (backend returned null)"));
+                        "entity retired before dispatch (backend returned null)");
                 } else {
-                    recordAndNotify(TaskErrorRecord.threw(
+                    rejected = TaskErrorRecord.threw(
                         type, ERR_PLATFORM_UNSUPPORTED,
                         "dispatch returned null handle",
-                        new IllegalStateException("null handle")));
+                        new IllegalStateException("null handle"));
                 }
+                recordAndNotify(rejected);
+                notifyRejection(rejectionListener, rejected);
                 return new NoOpScheduledTask(plugin, type);
             }
             scheduled.attach(handle);
@@ -489,21 +706,158 @@ public final class SafeSchedulerImpl implements SafeScheduler {
                 tracked.remove(scheduled);
             }
             return scheduled;
-        } catch (EntityRetiredException retired) {
+        } catch (EntityRetiredException retiredFailure) {
             tracked.remove(scheduled);
-            recordAndNotify(TaskErrorRecord.cancelled(
+            TaskErrorRecord rejected = TaskErrorRecord.cancelled(
                 type, ERR_ENTITY_INVALID,
-                "entity retired before dispatch: " + safeMessage(retired)));
+                "entity retired before dispatch: " + safeMessage(retiredFailure));
+            recordAndNotify(rejected);
+            notifyRejection(rejectionListener, rejected);
             return new NoOpScheduledTask(plugin, type);
-        } catch (Throwable t) {
+        } catch (Throwable failure) {
             tracked.remove(scheduled);
             // backend 派發失敗（Folia API 不可用、不支援的組合、底層拋例外等）
             // fail-closed：記錄 SCHED-005 並回 no-op task，絕不退回 unsafe scheduler。
-            recordAndNotify(TaskErrorRecord.threw(
+            TaskErrorRecord rejected = TaskErrorRecord.threw(
                 type, ERR_PLATFORM_UNSUPPORTED,
-                "dispatch failed: " + safeMessage(t), t));
+                "dispatch failed: " + safeMessage(failure), failure);
+            recordAndNotify(rejected);
+            notifyRejection(rejectionListener, rejected);
             return new NoOpScheduledTask(plugin, type);
         }
+    }
+
+    /**
+     * 轉發派送期拒絕通知（作用域終態用；既有路徑傳 null 即不通知）。
+     */
+    private static void notifyRejection(Consumer<TaskErrorRecord> listener,
+                                        TaskErrorRecord rejected) {
+        if (listener != null) {
+            listener.accept(rejected);
+        }
+    }
+
+    /**
+     * 作用域任務派送（package-private，{@link TaskScopeImpl} 呼叫）。
+     *
+     * <p>與既有 {@link #dispatch} 共用 {@link #dispatchCore} 的派送期分支，
+     * 差別只在回呼包裝：執行成功攜值完成、拋錯記 SCHED-001 並失敗、
+     * 守衛觸發（停用／取消／作用域關閉／擁有者失效／退休）記對應代碼並取消。
+     * 派送期拒絕經由拒絕通知寫入拒派終態。</p>
+     *
+     * @param type         任務類型
+     * @param player       玩家目標；其他型別為 null
+     * @param entityOrLoc  實體或位置目標；其他型別為 null
+     * @param action       使用者提供的程式（可攜回值、可拋錯）；不可為 null
+     * @param scope        所屬作用域；不可為 null
+     * @param <T> 值型別
+     * @return 可觀察終態的票據；拒派時為已完成的拒派票據
+     */
+    <T> TaskTicket<T> dispatchScoped(TaskType type,
+                                     Player player,
+                                     Object entityOrLoc,
+                                     Supplier<T> action,
+                                     TaskScopeImpl scope) {
+        Objects.requireNonNull(action, "action");
+        Objects.requireNonNull(scope, "scope");
+        long creationTick = currentTick();
+        TaskCompletionSource<T> source = new TaskCompletionSource<>();
+
+        if (disabled || !scope.isActive()) {
+            TaskErrorRecord rejected = scope.closeRecordOrNull() != null
+                ? scope.closeRecordOrNull()
+                : TaskErrorRecord.cancelled(
+                    type, ERR_PLUGIN_DISABLED, "scheduler is disabled");
+            recordAndNotify(rejected);
+            return rejectedTicket(type, creationTick, source, rejected);
+        }
+        TaskErrorRecord unavailable = scope.checkAvailable(type);
+        if (unavailable != null) {
+            recordAndNotify(unavailable);
+            return rejectedTicket(type, creationTick, source, unavailable);
+        }
+
+        boolean async = type == TaskType.ASYNC;
+        BukkitScheduledTask scheduled =
+            new BukkitScheduledTask(plugin, type, creationTick, tracked, false);
+        TicketTask<T> ticket = new TicketTask<>(plugin, type, creationTick, source);
+        ticket.setOnSettle(() -> scope.untrack(ticket));
+        Runnable retired = () -> {
+            scheduled.finish();
+            TaskErrorRecord retiredRecord = TaskErrorRecord.cancelled(
+                type, ERR_ENTITY_INVALID, "entity retired before execution");
+            recordAndNotify(retiredRecord);
+            ticket.trySettle(TaskResult.cancelled(retiredRecord));
+        };
+        Runnable wrapped = () -> {
+            if (disabled || scheduled.isCancelRequested() || scheduled.hasFinished()
+                || !scope.isActive()) {
+                // 關閉當下已由關閉路徑記錄；此處只寫終態、不重複記錄。
+                ticket.trySettle(TaskResult.cancelled(scope.closeRecordOrNull()));
+                scheduled.cancel();
+                return;
+            }
+            TaskErrorRecord gone = scope.checkAvailable(type);
+            if (gone != null) {
+                // 擁有者在派送後、執行前失效（例如退服事件尚在派送途中）：
+                // 此處是唯一的紀錄點，必須記錄。
+                recordAndNotify(gone);
+                ticket.trySettle(TaskResult.cancelled(gone));
+                scheduled.cancel();
+                return;
+            }
+            T value;
+            try {
+                value = action.get();
+            } catch (Throwable failure) {
+                TaskErrorRecord threw = TaskErrorRecord.threw(
+                    type, ERR_TASK_EXCEPTION,
+                    "user task threw exception: " + safeMessage(failure), failure);
+                recordAndNotify(threw);
+                ticket.trySettle(TaskResult.failed(failure, threw));
+                scheduled.finish();
+                return;
+            }
+            if (!scope.isActive() || disabled) {
+                ticket.trySettle(TaskResult.cancelled(scope.closeRecordOrNull()));
+            } else {
+                ticket.trySettle(TaskResult.completed(value));
+            }
+            scheduled.finish();
+        };
+        ScheduledTask delegate = dispatchCore(type, scheduled, wrapped, retired,
+            player, entityOrLoc, 0L, 0L, async, record ->
+                ticket.trySettle(TaskResult.rejected(record)));
+        ticket.attach(delegate);
+        if (source.isDone()) {
+            // backend 在派送內同步執行（測試 stub）：終態已寫入，不追蹤。
+            return ticket;
+        }
+        scope.track(ticket);
+        if (!scope.isActive() || disabled) {
+            // 派送期間作用域關閉或停用（關閉快照未含此票據）：
+            // 在此補上取消終態，否則票據永遠沒有終態。
+            // 關閉紀錄優先（退服／退休／停用原因）；尚無紀錄時以無紀錄取消收斂。
+            ticket.trySettle(TaskResult.cancelled(scope.closeRecordOrNull()));
+            scheduled.cancel();
+        } else if (delegate.isCancelled()) {
+            // 派送返回前就被取消（空窗補取消）：接受後取消，終態為取消。
+            ticket.trySettle(TaskResult.cancelled(null));
+        }
+        return ticket;
+    }
+
+    /**
+     * 建立已完成的拒派票據（派送期拒絕用，不追蹤）。
+     */
+    private <T> TaskTicket<T> rejectedTicket(TaskType type,
+                                             long creationTick,
+                                             TaskCompletionSource<T> source,
+                                             TaskErrorRecord rejected) {
+        TicketTask<T> ticket = new TicketTask<>(plugin, type, creationTick, source);
+        ticket.trySettle(TaskResult.rejected(rejected));
+        ticket.attach(new NoOpScheduledTask(plugin, type));
+        return ticket;
     }
 
     /**
@@ -525,9 +879,9 @@ public final class SafeSchedulerImpl implements SafeScheduler {
      *
      * <p>sink 為 {@code null} 時退化成裸 {@code recorder.record(...)}（既有行為）。
      * sink 拋例外時<strong>不</strong>冒到 caller，避免污染 scheduler 主流程
-     * 或 recorder 內部狀態。</p>
+     * 或 recorder 內部狀態。package-private：作用域實作共用同一條紀錄路徑。</p>
      */
-    private void recordAndNotify(TaskErrorRecord record) {
+    void recordAndNotify(TaskErrorRecord record) {
         recorder.record(record);
         BiConsumer<String, String> sink = this.recordSink;
         if (sink != null && record != null) {
@@ -539,7 +893,7 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         }
     }
 
-    private static long currentTick() {
+    static long currentTick() {
         try {
             return Bukkit.getCurrentTick();
         } catch (Throwable t) {

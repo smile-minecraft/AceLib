@@ -23,7 +23,9 @@ import org.bukkit.entity.Player;
  *   <li>{@link #runAtLocation(Location, Runnable)} — 指定位置所在 region 任務</li>
  *   <li>{@link #getRecorderErrors(int)} — 取得錯誤紀錄</li>
  * </ol>
- * <p>加上 {@link #cancelAll()} 共 10 個對外方法。</p>
+ * <p>加上 {@link #cancelAll()} 共 10 個基礎方法；另有
+ * {@link #scopeFor(Player)}／{@link #scopeFor(Entity)} 兩個作用域工廠
+ *（回傳 {@link TaskScope}，派送結果以 {@link TaskTicket} 攜帶終態）。</p>
  *
  * <h2>邊界行為</h2>
  * <ul>
@@ -127,6 +129,38 @@ public interface SafeScheduler {
      * @return 不可變的「時間由舊到新」紀錄清單
      */
     List<TaskErrorRecord> getRecorderErrors(int max);
+
+    /**
+     * 以指定玩家為作用域建立任務群組。
+     *
+     * <p>群組內的任務共享生命週期：玩家退服或 plugin 停用時自動取消，
+     * 呼叫端經由 {@link TaskTicket} 收到終態。派送結果可區分
+     * 「已接受排程」與「動作完成」，並支援等待與串接。</p>
+     *
+     * <p>生產實作要求 plugin 已啟用（退服監聽需註冊）；未啟用時拋
+     * {@link IllegalStateException}，避免靜默失去自動取消。</p>
+     *
+     * @param player 作用域擁有者；不可為 null（離線玩家可建群組，但派送即拒派）
+     * @return 新的作用域群組；永不為 null
+     * @throws NullPointerException 當 {@code player} 為 null
+     * @throws IllegalStateException 當 plugin 未啟用（生產實作）
+     * @since 1.4.0
+     */
+    TaskScope scopeFor(Player player);
+
+    /**
+     * 以指定實體為作用域建立任務群組。
+     *
+     * <p>語意同 {@link #scopeFor(Player)}；實體退休（移除、死亡）時群組自動取消。
+     * Folia 下回覆派送跟著實體當下所在的 region。</p>
+     *
+     * @param entity 作用域擁有者；不可為 null（已失效實體可建群組，但派送即拒派）
+     * @return 新的作用域群組；永不為 null
+     * @throws NullPointerException 當 {@code entity} 為 null
+     * @throws IllegalStateException 當 plugin 未啟用（生產實作）
+     * @since 1.4.0
+     */
+    TaskScope scopeFor(Entity entity);
 
     /**
      * 取消目前由本 scheduler 派送的所有任務。

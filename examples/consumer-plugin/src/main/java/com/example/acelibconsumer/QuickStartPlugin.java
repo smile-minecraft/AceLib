@@ -6,8 +6,13 @@ import com.smile.acelib.command.CommandDoc;
 import com.smile.acelib.form.FormImage;
 import com.smile.acelib.message.FormText;
 import com.smile.acelib.message.FormTextOptions;
+import com.smile.acelib.scheduler.AceLibScheduler;
+import com.smile.acelib.scheduler.SafeScheduler;
+import com.smile.acelib.scheduler.TaskScope;
+import com.smile.acelib.scheduler.TaskTicket;
 import java.util.List;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -60,6 +65,33 @@ public class QuickStartPlugin extends JavaPlugin {
 
         // 5. 只依賴公開 API 使用本版三個新功能（編譯期即證明 Supported 面足夠）。
         demonstrateNewApis(api);
+
+        // 6. 作用域任務群組（本版新 API）：讀取→背景計算→回玩家執行緒回覆。
+        //    只用 Supported 型別；SafeSchedulerImpl 等 Internal 型別不可引用。
+        SafeScheduler scheduler =
+            AceLibScheduler.create(this, api.getPlatform(), api.getPlatformCapability());
+        getServer().getOnlinePlayers().stream()
+            .findFirst()
+            .ifPresent(player -> demonstrateScopedTasks(scheduler, player));
+    }
+
+    /**
+     * 作用域任務示範：讀取、背景計算、回玩家所在執行緒回覆串成單一流程。
+     *
+     * <p>玩家退服時流程自動取消（終態 {@code CANCELLED}），回覆不再執行；
+     * 終態經由票據通知，呼叫端不阻塞 region 執行緒。</p>
+     *
+     * @param scheduler 本 plugin 擁有的排程器；不可為 null
+     * @param player 作用域擁有者；不可為 null
+     */
+    private void demonstrateScopedTasks(SafeScheduler scheduler, Player player) {
+        TaskScope scope = scheduler.scopeFor(player);
+        TaskTicket<String> ticket = scope.pipeline(
+            () -> "raw",
+            String::toUpperCase,
+            upper -> player.sendMessage(Component.text("computed: " + upper)));
+        ticket.whenComplete(
+            result -> getLogger().info("scoped pipeline settled: " + result.outcome()));
     }
 
     /**

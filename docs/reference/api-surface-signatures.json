@@ -1200,7 +1200,9 @@
       "method runForPlayerLater(org.bukkit.entity.Player,java.lang.Runnable,long) : com.smile.acelib.scheduler.ScheduledTask",
       "method runGlobal(java.lang.Runnable) : com.smile.acelib.scheduler.ScheduledTask",
       "method runLater(java.lang.Runnable,long) : com.smile.acelib.scheduler.ScheduledTask",
-      "method runTimer(java.lang.Runnable,long,long) : com.smile.acelib.scheduler.ScheduledTask"
+      "method runTimer(java.lang.Runnable,long,long) : com.smile.acelib.scheduler.ScheduledTask",
+      "method scopeFor(org.bukkit.entity.Entity) : com.smile.acelib.scheduler.TaskScope",
+      "method scopeFor(org.bukkit.entity.Player) : com.smile.acelib.scheduler.TaskScope"
     ],
     "com.smile.acelib.scheduler.ScheduledTask": [
       "method cancel() : void",
@@ -1235,6 +1237,48 @@
       "method getRecentErrors(int) : java.util.List<com.smile.acelib.scheduler.TaskErrorRecord>",
       "method record(com.smile.acelib.scheduler.TaskErrorRecord) : void",
       "method setRecordSink(java.util.function.Consumer<com.smile.acelib.scheduler.TaskErrorRecord>) : void"
+    ],
+    "com.smile.acelib.scheduler.TaskOutcome": [
+      "field CANCELLED : com.smile.acelib.scheduler.TaskOutcome",
+      "field COMPLETED : com.smile.acelib.scheduler.TaskOutcome",
+      "field FAILED : com.smile.acelib.scheduler.TaskOutcome",
+      "field REJECTED : com.smile.acelib.scheduler.TaskOutcome",
+      "method valueOf(java.lang.String) : com.smile.acelib.scheduler.TaskOutcome",
+      "method values() : com.smile.acelib.scheduler.TaskOutcome[]"
+    ],
+    "com.smile.acelib.scheduler.TaskResult": [
+      "ctor(com.smile.acelib.scheduler.TaskOutcome,T,java.lang.Throwable,com.smile.acelib.scheduler.TaskErrorRecord)",
+      "method cancelled(com.smile.acelib.scheduler.TaskErrorRecord) : com.smile.acelib.scheduler.TaskResult<T>",
+      "method cause() : java.lang.Throwable",
+      "method completed(T) : com.smile.acelib.scheduler.TaskResult<T>",
+      "method equals(java.lang.Object) : boolean",
+      "method errorRecord() : com.smile.acelib.scheduler.TaskErrorRecord",
+      "method failed(java.lang.Throwable,com.smile.acelib.scheduler.TaskErrorRecord) : com.smile.acelib.scheduler.TaskResult<T>",
+      "method hashCode() : int",
+      "method isCancelled() : boolean",
+      "method isCompleted() : boolean",
+      "method isFailed() : boolean",
+      "method isRejected() : boolean",
+      "method outcome() : com.smile.acelib.scheduler.TaskOutcome",
+      "method rejected(com.smile.acelib.scheduler.TaskErrorRecord) : com.smile.acelib.scheduler.TaskResult<T>",
+      "method toString() : java.lang.String",
+      "method value() : T"
+    ],
+    "com.smile.acelib.scheduler.TaskScope": [
+      "method cancelAll() : void",
+      "method isActive() : boolean",
+      "method pendingCount() : int",
+      "method pipeline(java.util.function.Supplier<T>,java.util.function.Function<? super T, ? extends R>,java.util.function.Consumer<? super R>) : com.smile.acelib.scheduler.TaskTicket<R>",
+      "method plugin() : org.bukkit.plugin.java.JavaPlugin",
+      "method run(java.lang.Runnable) : com.smile.acelib.scheduler.TaskTicket<java.lang.Void>",
+      "method supply(java.util.function.Supplier<T>) : com.smile.acelib.scheduler.TaskTicket<T>",
+      "method supplyAsync(java.util.function.Supplier<T>) : com.smile.acelib.scheduler.TaskTicket<T>"
+    ],
+    "com.smile.acelib.scheduler.TaskTicket": [
+      "method await(long,java.util.concurrent.TimeUnit) : com.smile.acelib.scheduler.TaskResult<T>",
+      "method isDone() : boolean",
+      "method stage() : java.util.concurrent.CompletionStage<com.smile.acelib.scheduler.TaskResult<T>>",
+      "method whenComplete(java.util.function.Consumer<? super com.smile.acelib.scheduler.TaskResult<T>>) : com.smile.acelib.scheduler.TaskTicket<T>"
     ],
     "com.smile.acelib.scheduler.TaskType": [
       "field ASYNC : com.smile.acelib.scheduler.TaskType",

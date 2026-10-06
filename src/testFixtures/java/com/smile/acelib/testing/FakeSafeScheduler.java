@@ -3,6 +3,7 @@ package com.smile.acelib.testing;
 import com.smile.acelib.scheduler.SafeScheduler;
 import com.smile.acelib.scheduler.ScheduledTask;
 import com.smile.acelib.scheduler.TaskErrorRecord;
+import com.smile.acelib.scheduler.TaskScope;
 import com.smile.acelib.scheduler.TaskType;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -287,6 +288,47 @@ public final class FakeSafeScheduler implements SafeScheduler {
         }
         int from = Math.max(0, errors.size() - max);
         return Collections.unmodifiableList(new ArrayList<>(errors.subList(from, errors.size())));
+    }
+
+    @Override
+    public TaskScope scopeFor(Player player) {
+        Objects.requireNonNull(player, "player");
+        return new FakeTaskScope(this, plugin, player);
+    }
+
+    @Override
+    public TaskScope scopeFor(Entity entity) {
+        Objects.requireNonNull(entity, "entity");
+        return new FakeTaskScope(this, plugin, entity);
+    }
+
+    /**
+     * 作用域紀錄寫入（{@link FakeTaskScope} 共用同一條錯誤清單）。
+     *
+     * @param record 要寫入的紀錄；不可為 null
+     */
+    void recordForScope(TaskErrorRecord record) {
+        record(Objects.requireNonNull(record, "record"));
+    }
+
+    /**
+     * 玩家離線判定（{@link FakeTaskScope} 派送前檢查用）。
+     *
+     * @param player 目標玩家；不可為 null
+     * @return 離線為 true
+     */
+    boolean isOfflineForScope(Player player) {
+        return isOffline(player);
+    }
+
+    /**
+     * 實體退休判定（{@link FakeTaskScope} 派送前檢查用）。
+     *
+     * @param entity 目標實體；不可為 null
+     * @return 退休為 true
+     */
+    boolean isRetiredForScope(Entity entity) {
+        return isRetired(entity);
     }
 
     @Override

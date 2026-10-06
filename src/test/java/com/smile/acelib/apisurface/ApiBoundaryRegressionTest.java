@@ -68,7 +68,8 @@ class ApiBoundaryRegressionTest {
         }
         // v1 canonical inventory：119 Supported + 12 SPI + 20 Internal = 151。
         // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），表單圖示任務再 +1（→ 144），
-        // 表單文字任務再 +2（→ 146），指令目錄任務再 +5（→ 151），新增十九個頂層型別：
+        // 表單文字任務再 +2（→ 146），指令目錄任務再 +5（→ 151），
+        // 任務完成語意與作用域任務再 +4（→ 155），新增二十三個頂層型別：
         //   Supported +13：
         //     - com.smile.acelib.bedrock.BedrockService（interface）— 基岩玩家查詢 facade，
         //       缺席環境以 absent lookup 零影響
@@ -111,17 +112,26 @@ class ApiBoundaryRegressionTest {
         //   Internal +1：
         //     - com.smile.acelib.external.FloodgateIntegrationAdapter — plugin 接線需跨
         //       package 建構並讀取 typed lookup，比照既有三個內建 adapter 保留 public
+        //   Supported +4：
+        //     - com.smile.acelib.scheduler.TaskOutcome（enum）— 終態分類
+        //       （COMPLETED／FAILED／CANCELLED／REJECTED；v1 凍結常數順序）
+        //     - com.smile.acelib.scheduler.TaskResult（record）— 終態值型別
+        //       （攜值／攜因／攜紀錄；欄位組合由建構子強制）
+        //     - com.smile.acelib.scheduler.TaskScope（interface）— 玩家／實體
+        //       作用域任務群組（退服／退休／停用自動取消；讀取→計算→回覆流程）
+        //     - com.smile.acelib.scheduler.TaskTicket（interface）— 可觀察終態的
+        //       任務票據（沿用 ScheduledTask 句柄語意＋等待／串接）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 119,
-            "Supported 數量偏離 canonical 119，實際=" + supported);
+        assertTrue(supported == 123,
+            "Supported 數量偏離 canonical 123，實際=" + supported);
         assertTrue(spi == 12,
             "SPI 數量偏離 canonical 12，實際=" + spi);
         assertTrue(internal == 20,
             "Internal 數量偏離 canonical 20，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 151,
-            "top-level inventory 偏離 canonical 151，實際=" + types.size());
+        assertTrue(types.size() == 155,
+            "top-level inventory 偏離 canonical 155，實際=" + types.size());
     }
 
     @Test
