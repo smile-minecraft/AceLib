@@ -141,8 +141,8 @@ AceLib 要讓下游 plugin 少寫重複的程式碼，也更容易寫對。規�
 
 #### Paper
 
-- [ ] reload 之後 GUI 仍可點擊。
-- [ ] reload 之後不留舊任務。
+- [x] reload 之後 GUI 仍可點擊。
+- [x] reload 之後不留舊任務。
 
 #### 資料庫
 
