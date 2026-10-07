@@ -26,6 +26,8 @@ import java.util.Set;
  * <h2>reload 順序</h2>
  * <p>{@code reload(...)} 先 {@code shutdownAll()} 舊 adapters 並清空 registry，再註冊
  * 新 adapters 並 {@code initializeAll()}；過程中舊與新 adapters 不會同時可用。</p>
+ * <p>Adapters 互相獨立，因此 initialize 與 shutdown 維持註冊插入順序；只有在
+ * lifecycle host 明確宣告模組相依時，宿主才依相依圖安排逆序停用。</p>
  *
  * @see IntegrationAdapter
  * @see IntegrationProbeResult

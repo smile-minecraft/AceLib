@@ -1455,6 +1455,33 @@
       "mainCallers": "ItemMigration；ItemMigrationResult。"
     },
     {
+      "fqcn": "com.smile.acelib.lifecycle.LifecycleHost",
+      "package": "com.smile.acelib.lifecycle",
+      "simpleName": "LifecycleHost",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "下游模組生命週期宿主；以 owner 批次驗證相依、排序啟用與反向清理，reload 失敗明確記錄結果並區分可重試與 fail-closed。",
+      "mainCallers": "AceLibApi.getLifecycleHost；下游 plugin 註冊與撤銷模組。"
+    },
+    {
+      "fqcn": "com.smile.acelib.lifecycle.LifecycleModule",
+      "package": "com.smile.acelib.lifecycle",
+      "simpleName": "LifecycleModule",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "下游模組宣告值型別（穩定 id、相依 id 與啟用回呼）；啟用交回 handle 前的部分資源由模組自行清理。",
+      "mainCallers": "LifecycleHost.register；下游 plugin 宣告模組。"
+    },
+    {
+      "fqcn": "com.smile.acelib.lifecycle.LifecycleResult",
+      "package": "com.smile.acelib.lifecycle",
+      "simpleName": "LifecycleResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "生命週期操作不可變結果（SUCCESS／REJECTED／FAILED、宿主狀態與結構化問題）。",
+      "mainCallers": "LifecycleHost；下游 plugin 處理註冊、撤銷與 reload 結果。"
+    },
+    {
       "fqcn": "com.smile.acelib.message.FormText",
       "package": "com.smile.acelib.message",
       "simpleName": "FormText",

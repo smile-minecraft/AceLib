@@ -7,12 +7,17 @@ import com.smile.acelib.display.DisplayService;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
+import com.smile.acelib.lifecycle.LifecycleHost;
+import com.smile.acelib.lifecycle.LifecycleModule;
+import com.smile.acelib.lifecycle.LifecycleResult;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.world.WorldErrorCode;
 import com.smile.acelib.world.WorldService;
 import com.smile.acelib.world.WorldServiceUnavailableImpl;
 import java.util.Objects;
+import java.util.Collection;
+import java.util.List;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -58,6 +63,7 @@ public final class AceLibApi {
     private final CommandCatalog commandCatalog;
     private final BooleanSupplier readyCheck;
     private final Runnable onReload;
+    private final LifecycleHost lifecycleHost;
 
     private AceLibApi(String version,
                       Platform platform,
@@ -70,6 +76,23 @@ public final class AceLibApi {
                       CommandCatalog commandCatalog,
                       BooleanSupplier readyCheck,
                       Runnable onReload) {
+        this(version, platform, capability, worldService, guiService, displayService,
+            externalService, bedrockService, commandCatalog, readyCheck, onReload,
+            new UnavailableLifecycleHost());
+    }
+
+    private AceLibApi(String version,
+                      Platform platform,
+                      PlatformCapability capability,
+                      WorldService worldService,
+                      GuiService guiService,
+                      DisplayService displayService,
+                      ExternalIntegrationService externalService,
+                      BedrockService bedrockService,
+                      CommandCatalog commandCatalog,
+                      BooleanSupplier readyCheck,
+                      Runnable onReload,
+                      LifecycleHost lifecycleHost) {
         this.version = Objects.requireNonNull(version, "version");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.capability = Objects.requireNonNull(capability, "capability");
@@ -81,6 +104,16 @@ public final class AceLibApi {
         this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
         this.readyCheck = Objects.requireNonNull(readyCheck, "readyCheck");
         this.onReload = Objects.requireNonNull(onReload, "onReload");
+        this.lifecycleHost = Objects.requireNonNull(lifecycleHost, "lifecycleHost");
+    }
+
+    /**
+     * 以實際 plugin 管理的生命週期宿主建立同內容 facade；僅限 AceLib 內部接線使用。
+     */
+    AceLibApi withLifecycleHost(LifecycleHost lifecycleHost) {
+        return new AceLibApi(version, platform, capability, worldService, guiService,
+            displayService, externalService, bedrockService, commandCatalog, readyCheck,
+            onReload, lifecycleHost);
     }
 
     /**
@@ -650,6 +683,20 @@ public final class AceLibApi {
     }
 
     /**
+     * 取得模組宣告與生命週期管理服務。
+     *
+     * <p>此 facade 永不回傳 null。AceLib 未啟用或此 instance 未經 plugin lifecycle
+     * 接線時，回傳明確為 {@code NOT_READY} 的不可用宿主；正式 consumer 應透過
+     * {@link AceLibProvider#api()} 取得目前 facade，再呼叫此方法。</p>
+     *
+     * @return 生命週期宿主 facade；永不為 null
+     * @since 1.4.0
+     */
+    public LifecycleHost getLifecycleHost() {
+        return lifecycleHost;
+    }
+
+    /**
      * 當前 plugin 是否處於已啟用狀態。
      */
     public boolean isReady() {
@@ -717,5 +764,37 @@ public final class AceLibApi {
          *         （{@link AceLibApi#isReady()} 為 false）
          */
         AceLibApi api();
+    }
+
+    private static final class UnavailableLifecycleHost implements LifecycleHost {
+
+        private final LifecycleResult result = new LifecycleResult(
+            LifecycleResult.Outcome.REJECTED,
+            Status.NOT_READY,
+            List.of(new LifecycleResult.Problem(
+                LifecycleResult.Code.INVALID_STATE, null, List.of(),
+                "lifecycle host is not connected to an enabled AceLib plugin")),
+            List.of());
+
+        @Override
+        public Status status() {
+            return Status.NOT_READY;
+        }
+
+        @Override
+        public LifecycleResult lastResult() {
+            return result;
+        }
+
+        @Override
+        public LifecycleResult register(org.bukkit.plugin.Plugin owner,
+                Collection<LifecycleModule> modules) {
+            return result;
+        }
+
+        @Override
+        public LifecycleResult unregister(org.bukkit.plugin.Plugin owner) {
+            return result;
+        }
     }
 }

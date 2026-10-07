@@ -11,11 +11,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.smile.acelib.diagnostics.DiagnosticSnapshot;
 import com.smile.acelib.diagnostics.ModuleState;
 import com.smile.acelib.diagnostics.ModuleStatus;
+import com.smile.acelib.bedrock.BedrockService;
 import com.smile.acelib.external.ExternalIntegrationService;
+import com.smile.acelib.form.FormErrorCodes;
+import com.smile.acelib.form.FormService;
+import com.smile.acelib.form.FormSpec;
 import com.smile.acelib.scheduler.SafeSchedulerImpl;
 import com.smile.acelib.external.IntegrationProbeResult;
 import com.smile.acelib.external.IntegrationStatus;
 import com.smile.acelib.platform.PlatformDetector;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -315,5 +320,37 @@ class AceLibPluginExternalIntegrationTest {
             assertFalse(after.getStatus(id).reason().contains("is not registered"),
                 id + " 在新服務中必須已註冊");
         }
+    }
+
+    @Test
+    @DisplayName("Phase D 後半失敗會清理新 external/bedrock/form，舊表單生命週期同步結束")
+    void reload_playerShutdownFailureCompensatesNewIntegrationsAndOldForm() {
+        ExternalIntegrationService oldExternal = plugin.getExternalIntegrationService();
+        BedrockService oldBedrock = plugin.getBoundBedrockServiceForTesting();
+        FormService oldForms = oldBedrock.forms();
+        plugin.reloadPlayerShutdownFailureHook = () -> {
+            throw new IllegalStateException("injected player shutdown failure");
+        };
+
+        assertFalse(plugin.reload());
+
+        ExternalIntegrationService currentExternal = plugin.getExternalIntegrationService();
+        BedrockService currentBedrock = plugin.getBoundBedrockServiceForTesting();
+        assertNotSame(oldExternal, currentExternal,
+            "未提交的新 external service 必須經補償替換為 SHUTDOWN facade");
+        assertEquals("FAILED", currentExternal.getModuleStatus());
+        assertTrue(currentExternal.getStatus("vault").reason()
+                .contains(ExternalIntegrationService.SHUTDOWN),
+            "unavailable facade 必須保留 SHUTDOWN 錯誤語意");
+        assertNotSame(oldBedrock, currentBedrock,
+            "未提交的新 bedrock service 必須經補償替換為 SHUTDOWN facade");
+        assertEquals("FAILED", currentBedrock.getModuleStatus());
+        assertEquals("FAILED", oldBedrock.getModuleStatus());
+
+        IllegalStateException formFailure = org.junit.jupiter.api.Assertions.assertThrows(
+            IllegalStateException.class,
+            () -> oldForms.sendForm(UUID.fromString("00000000-0000-0000-0000-000000000099"),
+                FormSpec.simple("title").content("body").button("ok").build()));
+        assertTrue(formFailure.getMessage().contains(FormErrorCodes.ACELIB_FORM_SERVICE_SHUTDOWN));
     }
 }

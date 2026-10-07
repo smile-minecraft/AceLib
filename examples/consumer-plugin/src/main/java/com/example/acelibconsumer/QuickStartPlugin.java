@@ -16,6 +16,9 @@ import com.smile.acelib.gui.GuiFlowStep;
 import com.smile.acelib.gui.GuiScope;
 import com.smile.acelib.gui.GuiScopes;
 import com.smile.acelib.gui.GuiView;
+import com.smile.acelib.lifecycle.LifecycleHost;
+import com.smile.acelib.lifecycle.LifecycleModule;
+import com.smile.acelib.lifecycle.LifecycleResult;
 import com.smile.acelib.message.FormText;
 import com.smile.acelib.message.FormTextOptions;
 import com.smile.acelib.message.MessageLabel;
@@ -29,6 +32,8 @@ import com.smile.acelib.scheduler.TaskTicket;
 import com.smile.acelib.world.LocationSnapshot;
 import com.smile.acelib.world.WorldService;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
@@ -52,6 +57,8 @@ public class QuickStartPlugin extends JavaPlugin {
     private MessageScope messageScope;
     private GuiScope guiScope;
     private BrigadierRegistrar commandRegistrar;
+    private AceLibApi.AceLibProvider apiProvider;
+    private LifecycleHost lifecycleHost;
 
     @Override
     public void onEnable() {
@@ -67,7 +74,8 @@ public class QuickStartPlugin extends JavaPlugin {
         }
 
         // 3. provider.api() 永不回傳 null；但 reload / disable 後可能不 ready。
-        AceLibApi api = registration.getProvider().api();
+        apiProvider = registration.getProvider();
+        AceLibApi api = apiProvider.api();
         if (!api.isReady()) {
             getLogger().warning("AceLib 存在但尚未 ready；停用本 plugin 避免半初始化。");
             getServer().getPluginManager().disablePlugin(this);
@@ -76,6 +84,7 @@ public class QuickStartPlugin extends JavaPlugin {
 
         getLogger().info("AceLib " + api.getVersion()
             + " on " + api.getPlatform().getDisplayName());
+        lifecycleHost = api.getLifecycleHost();
 
         // 4. 依平台能力決定分支（Folia region 排程 / Paper 全域排程）。
         if (api.getPlatformCapability().regionScheduling()) {
@@ -88,34 +97,21 @@ public class QuickStartPlugin extends JavaPlugin {
         // 5. 只依賴公開 API 使用本版三個新功能（編譯期即證明 Supported 面足夠）。
         demonstrateNewApis(api);
 
-        // 5a. 型別化指令框架：Brigadier 註冊取代 plugin.yml 的 commands 宣告。
+        // 5a. 先示範圖錯誤如何以結構化結果拒絕，再原子註冊自己的有效模組。
+        if (!registerLifecycleModules()) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        // 5b. 型別化指令框架：Brigadier 註冊取代 plugin.yml 的 commands 宣告。
         //     註冊必須在 onEnable 期間完成；reload 不重建、不重複註冊。
         registerTypedCommands();
-
-        // 5b. 插件作用域訊息服務：建 scope、升級補 key、共用渲染與顯示標籤。
-        //     管理員覆寫檔缺的 key 退回本 JAR 內建 lang/en_US.yml。
-        messageScope = MessageScopes.create(this, java.util.Locale.US);
-        messageScope.syncBuiltinDefaults();
-        demonstrateMessageScope(messageScope);
-
-        // 5c. 插件隔離 GUI 作用域：服務以 supplier 包裝（reload 後自動讀到新實例），
-        //     結束只關自己的作用域。公開介面沒有全服務 shutdown。
-        AceLibApi guiApi = registration.getProvider().api();
-        guiScope = GuiScopes.create(this,
-            () -> registration.getProvider().api().getGuiService(),
-            Clock.system(),
-            guiApi.getBedrockService().forms(),
-            guiApi.getBedrockService()::isBedrockPlayer);
-        guiScope.onReplaced((uuid, oldSession, newSession) ->
-            getLogger().info("gui replaced for " + uuid));
-        getServer().getOnlinePlayers().stream()
-            .findFirst()
-            .ifPresent(player -> demonstrateGuiScope(guiScope, player));
 
         // 6. 作用域任務群組（本版新 API）：讀取→背景計算→回玩家執行緒回覆。
         //    只用 Supported 型別；SafeSchedulerImpl 等 Internal 型別不可引用。
         SafeScheduler scheduler =
-            AceLibScheduler.create(this, api.getPlatform(), api.getPlatformCapability());
+            AceLibScheduler.create(this, apiProvider.api().getPlatform(),
+                apiProvider.api().getPlatformCapability());
         WorldService world = api.getWorldService();
         getServer().getOnlinePlayers().stream()
             .findFirst()
@@ -123,6 +119,106 @@ public class QuickStartPlugin extends JavaPlugin {
                 demonstrateScopedTasks(scheduler, player);
                 demonstrateDeferredOperations(scheduler, world, player);
             });
+    }
+
+    @Override
+    public void onDisable() {
+        // 管理指令註冊器不屬於 lifecycle module handle，由 consumer 自己關閉。
+        if (commandRegistrar != null) {
+            commandRegistrar.shutdown();
+            commandRegistrar = null;
+        }
+        if (lifecycleHost != null) {
+            LifecycleResult result = lifecycleHost.unregister(this);
+            if (!result.isSuccess()) {
+                result.problems().forEach(problem -> getLogger().warning(
+                    "[" + problem.code().code() + "] module cleanup was not complete: "
+                        + problem.message() + " " + problem.relatedModuleIds()));
+            }
+        }
+        closeOwnedScopes();
+    }
+
+    private boolean registerLifecycleModules() {
+        String prefix = getName().toLowerCase(Locale.ROOT);
+        String missingId = prefix + ":missing-dependency";
+        LifecycleResult missing = lifecycleHost.register(this, List.of(
+            new LifecycleModule(prefix + ":invalid", Set.of(missingId), context -> () -> { })));
+        if (!wasRejectedAs(missing, LifecycleResult.Code.MISSING_DEPENDENCY)) {
+            return false;
+        }
+
+        String cycleA = prefix + ":cycle-a";
+        String cycleB = prefix + ":cycle-b";
+        LifecycleResult cycle = lifecycleHost.register(this, List.of(
+            new LifecycleModule(cycleA, Set.of(cycleB), context -> () -> { }),
+            new LifecycleModule(cycleB, Set.of(cycleA), context -> () -> { })));
+        if (!wasRejectedAs(cycle, LifecycleResult.Code.DEPENDENCY_CYCLE)) {
+            return false;
+        }
+
+        LifecycleModule base = new LifecycleModule(prefix + ":base", Set.of(), context -> {
+            if (context.owner() != this || !context.apiProvider().api().isReady()) {
+                throw new IllegalStateException("lifecycle module requires a ready AceLib API");
+            }
+            return () -> getLogger().info("lifecycle module stopped: " + prefix + ":base");
+        });
+        LifecycleModule scopes = new LifecycleModule(prefix + ":scopes", Set.of(base.id()),
+            context -> startOwnedScopes(context.apiProvider()));
+        LifecycleResult registered = lifecycleHost.register(this, List.of(scopes, base));
+        if (!registered.isSuccess()) {
+            registered.problems().forEach(problem -> getLogger().severe(
+                "[" + problem.code().code() + "] module registration failed: "
+                    + problem.message()));
+        }
+        return registered.isSuccess();
+    }
+
+    private boolean wasRejectedAs(LifecycleResult result, LifecycleResult.Code expectedCode) {
+        boolean rejected = result.outcome() == LifecycleResult.Outcome.REJECTED
+            && result.problems().stream().anyMatch(problem -> problem.code() == expectedCode);
+        if (!rejected) {
+            getLogger().severe("lifecycle host did not report expected " + expectedCode.code()
+                + "; outcome=" + result.outcome() + ", problems=" + result.problems());
+        } else {
+            getLogger().info("lifecycle graph was safely rejected: " + expectedCode.code());
+        }
+        return rejected;
+    }
+
+    private LifecycleModule.Handle startOwnedScopes(AceLibApi.AceLibProvider provider) {
+        AceLibApi current = provider.api();
+        try {
+            messageScope = MessageScopes.create(this, Locale.US);
+            messageScope.syncBuiltinDefaults();
+            demonstrateMessageScope(messageScope);
+
+            guiScope = GuiScopes.create(this,
+                () -> apiProvider.api().getGuiService(),
+                Clock.system(),
+                current.getBedrockService().forms(),
+                current.getBedrockService()::isBedrockPlayer);
+            guiScope.onReplaced((uuid, oldSession, newSession) ->
+                getLogger().info("gui replaced for " + uuid));
+            getServer().getOnlinePlayers().stream()
+                .findFirst()
+                .ifPresent(player -> demonstrateGuiScope(guiScope, player));
+            return this::closeOwnedScopes;
+        } catch (RuntimeException | Error failure) {
+            closeOwnedScopes();
+            throw failure;
+        }
+    }
+
+    private void closeOwnedScopes() {
+        if (guiScope != null) {
+            guiScope.close();
+            guiScope = null;
+        }
+        if (messageScope != null) {
+            messageScope.close();
+            messageScope = null;
+        }
     }
 
     /**
@@ -232,21 +328,6 @@ public class QuickStartPlugin extends JavaPlugin {
         this.commandRegistrar = registrar;
         getLogger().info("registered typed commands: "
             + registrar.getRegisteredCommands().size());
-    }
-
-    @Override
-    public void onDisable() {
-        // 停用：內部 registry 標記 disabled 並清空；平台側節點由平台移除。
-        if (commandRegistrar != null) {
-            commandRegistrar.shutdown();
-            commandRegistrar = null;
-        }
-        if (messageScope != null) {
-            messageScope.close();
-            messageScope = null;
-        }
-        GuiScopes.close(this);
-        guiScope = null;
     }
 
     /**

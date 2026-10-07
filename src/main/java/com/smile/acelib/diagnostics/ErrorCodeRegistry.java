@@ -158,6 +158,25 @@ public final class ErrorCodeRegistry {
             "目標 chunk 尚未載入"));
         m.put("ACELIB-DISP-007", new ErrorCodeInfo(ErrorCategory.DISPLAY,
             "擁有者上下文內執行失敗"));
+        // LIFE（下游模組依賴圖與宿主交易）
+        m.put("ACELIB-LIFE-001", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組宣告不完整或 id 非法"));
+        m.put("ACELIB-LIFE-002", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組 id 重複"));
+        m.put("ACELIB-LIFE-003", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組依賴不存在"));
+        m.put("ACELIB-LIFE-004", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組依賴圖有循環"));
+        m.put("ACELIB-LIFE-005", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "其他 plugin 模組仍依賴待撤銷模組"));
+        m.put("ACELIB-LIFE-006", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組啟用失敗"));
+        m.put("ACELIB-LIFE-007", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "模組 handle 清理失敗"));
+        m.put("ACELIB-LIFE-008", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "生命週期宿主目前不接受此操作"));
+        m.put("ACELIB-LIFE-009", new ErrorCodeInfo(ErrorCategory.LIFECYCLE,
+            "reload 未能提交或重建下游模組"));
         KNOWN = Map.copyOf(m);
     }
 

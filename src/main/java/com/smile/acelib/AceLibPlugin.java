@@ -34,6 +34,7 @@ import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiScopes;
 import com.smile.acelib.gui.GuiService;
 import com.smile.acelib.gui.GuiServiceControl;
+import com.smile.acelib.lifecycle.LifecycleResult;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
@@ -305,6 +306,9 @@ public class AceLibPlugin extends JavaPlugin {
      * {@code api()} 都是安全的。</p>
      */
     private volatile AceLibApi.AceLibProvider apiProvider;
+    private final LifecycleHostImpl lifecycleHost = new LifecycleHostImpl(
+        () -> apiProvider, Logger.getLogger(LOG_NAME));
+    private boolean reloadInProgress;
 
     /**
      * Package-private 測試 seam：reload 流程中可在「舊 scheduler teardown 之後」
@@ -362,6 +366,9 @@ public class AceLibPlugin extends JavaPlugin {
 
     /** Package-private test seam for a controlled external-service bind failure during reload. */
     volatile Runnable reloadExternalBindFailureHook = null;
+
+    /** 受控模擬 reload 核心服務重建途中拋錯，驗證部分提交會 fail closed。 */
+    volatile Runnable reloadCoreServiceBindFailureHook = null;
 
     public AceLibPlugin() {
         // 預先放一個 uninitialized facade，避免 getApi() 在 onEnable 前丟例外
@@ -524,13 +531,14 @@ public class AceLibPlugin extends JavaPlugin {
             this.displayService,
             () -> ready,
             () -> reload()
-        );
+        ).withLifecycleHost(lifecycleHost);
 
         this.ready = true;
 
         // 對外正式取得入口：於 facade 就緒後註冊 provider（disabled 之後
         // onDisable 會解除註冊，reload 期間不解除）。
         registerApiProvider(s);
+        logLifecycleResult("activate", lifecycleHost.activate());
 
         logInfo("AceLib {0} enabled on {1} (capability={2})",
             api.getVersion(), api.getPlatform().getDisplayName(), capability);
@@ -538,6 +546,7 @@ public class AceLibPlugin extends JavaPlugin {
 
     @Override
     public synchronized void onDisable() {
+        logLifecycleResult("shutdown", lifecycleHost.shutdown());
         if (!ready) {
             // INCOMPATIBLE enable 留下的半初始化狀態：onEnable 已建立 diagnostics 並
             // 註冊 compatibility 模組（FAILED），但 ready=false 早退。此處仍要清掉
@@ -635,7 +644,7 @@ public class AceLibPlugin extends JavaPlugin {
         this.platformDetector = null;
         // 保留 SHUTDOWN worldService 與 guiService reference，避免 double-fork 既有 contract。
         this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog,
-            this.displayService);
+            this.displayService).withLifecycleHost(lifecycleHost);
         // 已持有 provider 的呼叫端改讀 shutdown facade（與 plugin.getApi() 一致），
         // 再清除 plugin 端 reference 協助 GC。
         updateApiProvider(this.api);
@@ -877,6 +886,10 @@ public class AceLibPlugin extends JavaPlugin {
         return externalService;
     }
 
+    BedrockService getBoundBedrockServiceForTesting() {
+        return bedrockService;
+    }
+
     /**
      * 重新偵測平台並發佈新 API 實例（既有 diagnostics reference in-place 重綁）。
      *
@@ -899,9 +912,11 @@ public class AceLibPlugin extends JavaPlugin {
      *       log SEVERE + {@code ACELIB-DBG-001}、return false。
      *       <strong>此階段不修改 {@code this.scheduler} / {@code this.api}</strong>。</li>
      *   <li><strong>Phase D：commit</strong> — 全部成功才寫入
-     *       {@code this.scheduler}、{@code this.api}、輸出 reload info log、回傳
-     *       {@code true}。</li>
+     *       {@code this.scheduler}、{@code this.api}，之後依拓樸重建下游模組。</li>
      * </ol>
+     * <p>核心拆舊之前，宿主先反向停用下游模組。可安全重試的核心 rollback 會保留模組宣告，
+     * 將宿主恢復為可重入狀態並記錄失敗結果；已關閉的 handle 保持未啟用，新註冊會拒絕，
+     * 直到下一次 reload 重建成功。核心 fail-closed 或下游重建失敗則宿主維持 {@code FAILED}。</p>
      *
      * <p>與舊版差異：</p>
      * <ul>
@@ -920,6 +935,60 @@ public class AceLibPlugin extends JavaPlugin {
     public synchronized boolean reload() {
         if (!ready || platformDetector == null) {
             return false;
+        }
+        if (reloadInProgress) {
+            logWarningWithCode("ACELIB-LIFE-008",
+                "reload was rejected because another reload is already in progress");
+            return false;
+        }
+        reloadInProgress = true;
+        ReloadAttempt attempt = new ReloadAttempt(externalService, bedrockService);
+        try {
+            LifecycleResult stopped = lifecycleHost.beginReload();
+            logLifecycleResult("reload module shutdown", stopped);
+            if (!stopped.isSuccess()) {
+                return false;
+            }
+
+            ReloadRuntimeOutcome outcome = reloadRuntime(attempt);
+            if (outcome != ReloadRuntimeOutcome.COMMITTED) {
+                cleanupUncommittedReloadIntegrations(attempt);
+                if (outcome == ReloadRuntimeOutcome.RETRYABLE_FAILURE) {
+                    lifecycleHost.retryableReloadFailure(null);
+                } else {
+                    lifecycleHost.failReload(null);
+                }
+                return false;
+            }
+
+            LifecycleResult rebuilt = lifecycleHost.finishReload();
+            logLifecycleResult("reload module rebuild", rebuilt);
+            return rebuilt.isSuccess();
+        } catch (Throwable failure) {
+            cleanupUncommittedReloadIntegrations(attempt);
+            lifecycleHost.failReload(failure);
+            try {
+                teardownRuntimeOnReloadFailure(diagnostics, ReloadFailureKind.UNEXPECTED);
+            } catch (Throwable teardownFailure) {
+                logSevereWithCode("ACELIB-LIFE-009",
+                    "reload teardown after an unexpected failure also failed: "
+                        + teardownFailure);
+                downgradeAfterReloadPhaseAFailure(diagnostics);
+            }
+            logSevereWithCode("ACELIB-LIFE-009",
+                "reload failed after downstream lifecycle modules were stopped: " + failure);
+            if (failure instanceof Error error) {
+                throw error;
+            }
+            return false;
+        } finally {
+            reloadInProgress = false;
+        }
+    }
+
+    private ReloadRuntimeOutcome reloadRuntime(ReloadAttempt attempt) {
+        if (!ready || platformDetector == null) {
+            return ReloadRuntimeOutcome.FAILED_CLOSED;
         }
         Platform reDetected = platformDetector.detect();
         PlatformCapability reCapability = platformDetector.detectCapability(reDetected);
@@ -946,8 +1015,8 @@ public class AceLibPlugin extends JavaPlugin {
                 "reload: runtime became INCOMPATIBLE; downgrading plugin. " + reloadCompatibility.reason);
             // 完整停用 runtime 資源（scheduler / listener / 服務），避免「plugin FAILED 但
             // runtime 資源仍活著」的不一致；teardown 內部失敗只記錄並繼續降級，不拋例外。
-            teardownRuntimeOnIncompatibleReload(ds);
-            return false;
+            teardownRuntimeOnReloadFailure(ds, ReloadFailureKind.INCOMPATIBLE);
+            return ReloadRuntimeOutcome.FAILED_CLOSED;
         }
         if (reloadCompatibility.state == CompatibilityStatus.State.UNVERIFIED) {
             publishCompatibility(ds, reloadCompatibility, reloadFingerprint);
@@ -975,7 +1044,7 @@ public class AceLibPlugin extends JavaPlugin {
                         + "FAILED state to avoid leaving a half-applied scheduler. "
                         + "Cause: " + t);
                 downgradeAfterReloadPhaseAFailure(ds);
-                return false;
+                return ReloadRuntimeOutcome.FAILED_CLOSED;
             }
             // 測試 seam：允許注入受控失敗
             if (reloadOldTeardownFailureHook != null) {
@@ -986,7 +1055,7 @@ public class AceLibPlugin extends JavaPlugin {
                         "reload: old scheduler teardown hook failed; downgrading "
                             + "plugin to FAILED state. Cause: " + t);
                     downgradeAfterReloadPhaseAFailure(ds);
-                    return false;
+                    return ReloadRuntimeOutcome.FAILED_CLOSED;
                 }
             }
         }
@@ -1011,7 +1080,7 @@ public class AceLibPlugin extends JavaPlugin {
                     + "plugin to FAILED state to avoid leaving a half-applied "
                     + "scheduler. Cause: " + t);
             downgradeAfterReloadPhaseAFailure(ds);
-            return false;
+            return ReloadRuntimeOutcome.FAILED_CLOSED;
         }
 
         // -----------------------------------------------------------------
@@ -1044,7 +1113,7 @@ public class AceLibPlugin extends JavaPlugin {
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
                     "reload: diagnostics rebind failed; rolled back to previous binding "
                         + "(metadata + scheduler restored). Cause: " + t);
-                return false;
+                return ReloadRuntimeOutcome.RETRYABLE_FAILURE;
             }
         }
 
@@ -1057,6 +1126,7 @@ public class AceLibPlugin extends JavaPlugin {
         // 失敗時進入完整 rollbackReload 路徑（釋放 newScheduler、還原 ds metadata/ready、
         // 重新綁回已 disabled 舊 scheduler），避免 diagnostics rebind 階段已將 ds 綁定
         // newScheduler 卻未同步 this.scheduler 的不一致，再乾淨回傳 false。
+        attempt.integrationPhaseStarted = true;
         ExternalIntegrationService oldExternal = this.externalService;
         if (oldExternal != null) {
             try {
@@ -1093,19 +1163,19 @@ public class AceLibPlugin extends JavaPlugin {
                 // 先解除該模組註冊，使 diagnostics 與 SHUTDOWN facade 的 external service
                 // 語意一致（integration 模組回到 NOT_INITIALIZED），避免「diagnostics 顯示
                 // FAILED 但實際 external service 已 SHUTDOWN」的假象。
-                if (this.diagnostics != null) {
+                if (ds != null) {
                     try {
-                        this.diagnostics.unregisterModuleState(MODULE_INTEGRATION);
-                    } catch (Throwable ignore) {
-                        logFine("reload external bind failure: integration module unregister "
-                            + "failed (ignored): " + ignore.getMessage());
+                        ds.unregisterModuleState(MODULE_INTEGRATION);
+                    } catch (Throwable cleanupFailure) {
+                        logFine("reload rollback: integration module unregister failed "
+                            + "(best-effort): " + cleanupFailure.getMessage());
                     }
                 }
                 rollbackReload(newScheduler, ds, oldMeta, oldScheduler);
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
                     "reload: external service bind failed; rolled back to previous binding "
                         + "(scheduler/diagnostics restored). Cause: " + t);
-                return false;
+                return ReloadRuntimeOutcome.RETRYABLE_FAILURE;
             }
         }
         bindExternalService(this.server);
@@ -1137,7 +1207,7 @@ public class AceLibPlugin extends JavaPlugin {
                 logSevereWithCode(code,
                     "reload: player data shutdown failed; plugin degraded without commit. Cause: "
                         + failure);
-                return false;
+                return ReloadRuntimeOutcome.FAILED_CLOSED;
             }
         }
         if (oldListener != null) {
@@ -1148,9 +1218,9 @@ public class AceLibPlugin extends JavaPlugin {
         // 舊 player 服務已 shutdown（flush 完成、in-flight 排空）：關閉其自建 io pool。
         // 失敗路徑（上方已 return）不關閉——舊服務仍存活且使用該 pool。
         shutdownPlayerIoExecutor();
-        // 舊 store 在服務 shutdown（已完成最後一批 flush）之後才關閉，且必須早於
-        // bindPlayerDataService：後者會覆寫 playerDataStore 欄位，先關才不會
-        // 誤關新 store。順序：service flush → 關 store → 關 io pool → rebind。
+        // 舊 store 在服務 shutdown（已完成最後一批 flush）與自建 io pool 關閉後才關閉，
+        // 且必須早於 bindPlayerDataService：後者會覆寫 playerDataStore 欄位，先關才不會
+        // 誤關新 store。順序：service flush → 關 io pool → 關 store → rebind。
         closePlayerDataStore();
         bindPlayerDataService(this.server);
         // 先釋放舊 world/gui 服務（unregister 舊 GUI listener + shutdown 舊 impl），
@@ -1167,6 +1237,9 @@ public class AceLibPlugin extends JavaPlugin {
         // 捕獲 disabled scheduler，導致 reload 後 openInventory 一律回
         // ACELIB-GUI-013 SCHEDULER_REJECTED 即為此順序錯誤的具體症狀。
         this.scheduler = newScheduler;
+        if (reloadCoreServiceBindFailureHook != null) {
+            reloadCoreServiceBindFailureHook.run();
+        }
         // reload 成功後重新建立 world 服務（既有 worldService 已 shutdown）。
         bindWorldService(this.server);
         // reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
@@ -1193,12 +1266,26 @@ public class AceLibPlugin extends JavaPlugin {
             this.displayService,
             () -> ready,
             () -> reload()
-        );
+        ).withLifecycleHost(lifecycleHost);
         // 更新 provider 的 facade reference，使已持有 provider 的呼叫端讀到新 facade。
         updateApiProvider(this.api);
+        attempt.coreCommitted = true;
         onPluginReady();
         logInfo("AceLib reloaded on {0}", reDetected.getDisplayName());
-        return true;
+        return ReloadRuntimeOutcome.COMMITTED;
+    }
+
+    private void cleanupUncommittedReloadIntegrations(ReloadAttempt attempt) {
+        if (!attempt.integrationPhaseStarted || attempt.coreCommitted) {
+            return;
+        }
+        if (externalService != attempt.previousExternal) {
+            unbindExternalService();
+        }
+        if (bedrockService != attempt.previousBedrock) {
+            unbindBedrockService();
+        }
+        attempt.integrationPhaseStarted = false;
     }
 
     /**
@@ -1320,6 +1407,32 @@ public class AceLibPlugin extends JavaPlugin {
         }
     }
 
+    private static final class ReloadAttempt {
+
+        private final ExternalIntegrationService previousExternal;
+        private final BedrockService previousBedrock;
+
+        private boolean integrationPhaseStarted;
+        private boolean coreCommitted;
+
+        private ReloadAttempt(ExternalIntegrationService previousExternal,
+                BedrockService previousBedrock) {
+            this.previousExternal = previousExternal;
+            this.previousBedrock = previousBedrock;
+        }
+    }
+
+    private enum ReloadFailureKind {
+        INCOMPATIBLE,
+        UNEXPECTED
+    }
+
+    private enum ReloadRuntimeOutcome {
+        COMMITTED,
+        RETRYABLE_FAILURE,
+        FAILED_CLOSED
+    }
+
     /**
      * Phase A 失敗後的狀態降級（避免 READY 假象）。
      *
@@ -1371,17 +1484,19 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
-     * INCOMPATIBLE reload 路徑的 runtime 資源 teardown。
+     * reload 無法繼續時釋放 runtime 資源並發布 shutdown facade。
      *
      * <p>與 {@link #onDisable()} / Phase A 相同的「停用即釋放」語意：舊 scheduler 標記
      * disabled、player lifecycle listener 解除、各服務 shutdown 並替換為 SHUTDOWN facade。
      * 每個步驟獨立 try/catch，失敗只記錄並繼續，最終由
-     * {@link #downgradeAfterReloadPhaseAFailure} 統一降級為 FAILED；不拋出未捕捉例外，
-     * 也不重複進 Phase A（此路徑在 gate 失敗後直接 return）。</p>
+     * {@link #downgradeAfterReloadPhaseAFailure} 統一降級為 FAILED；不重複進 Phase A。
+     * 日誌會標示失敗原因，避免把一般 reload 例外誤報為 runtime 不相容。</p>
      *
      * @param ds 既有 diagnostics reference（可為 null；內部以 null-guard 保護）
+     * @param kind teardown 原因，用來區分不相容 runtime 與非預期 reload 例外
      */
-    private void teardownRuntimeOnIncompatibleReload(DiagnosticsService ds) {
+    private void teardownRuntimeOnReloadFailure(DiagnosticsService ds, ReloadFailureKind kind) {
+        String logPrefix = "reload(" + kind + "): ";
         // 0. 先解除對外 provider registration（與 onDisable 同序）：避免 teardown 期間
         //    仍有呼叫端新取得 provider；已持有 provider 的呼叫端稍後切換為 shutdown facade。
         //    unregisterApiProvider 內部已 try/catch，此處不再包一層。
@@ -1394,7 +1509,7 @@ public class AceLibPlugin extends JavaPlugin {
         try {
             com.smile.acelib.event.AceLibEvents.unbind(this);
         } catch (Throwable t) {
-            logFine("reload(INCOMPATIBLE): AceLibEvents.unbind failed (ignored): " + t.getMessage());
+            logFine(logPrefix + "AceLibEvents.unbind failed (ignored): " + t.getMessage());
         }
 
         SafeSchedulerImpl oldScheduler = this.scheduler;
@@ -1408,7 +1523,7 @@ public class AceLibPlugin extends JavaPlugin {
                 oldScheduler.onPluginDisable();
             } catch (Throwable t) {
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
-                    "reload(INCOMPATIBLE): old scheduler teardown failed (ignored): " + t);
+                    logPrefix + "old scheduler teardown failed (ignored): " + t);
             }
             // 測試 seam：允許注入受控失敗（與 Phase A 共用同一 hook 語意）
             if (reloadOldTeardownFailureHook != null) {
@@ -1416,7 +1531,7 @@ public class AceLibPlugin extends JavaPlugin {
                     reloadOldTeardownFailureHook.run();
                 } catch (Throwable t) {
                     logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
-                        "reload(INCOMPATIBLE): old scheduler teardown hook failed (ignored): " + t);
+                        logPrefix + "old scheduler teardown hook failed (ignored): " + t);
                 }
             }
         }
@@ -1426,7 +1541,7 @@ public class AceLibPlugin extends JavaPlugin {
                 HandlerList.unregisterAll(oldListener);
             } catch (Throwable t) {
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
-                    "reload(INCOMPATIBLE): player lifecycle listener unbind failed (ignored): " + t);
+                    logPrefix + "player lifecycle listener unbind failed (ignored): " + t);
             }
             oldListener.close();
             this.playerLifecycleListener = null;
@@ -1436,14 +1551,14 @@ public class AceLibPlugin extends JavaPlugin {
         //    unbindCommandFramework 內部已 try/catch。
         unbindCommandFramework();
         // 指令目錄 listener 解除 + 目錄清空並標記不可用（與 onDisable 同序）。
-        try { unbindCommandCatalog(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): catalog unbind failed (ignored): " + t); }
+        try { unbindCommandCatalog(); } catch (Throwable t) { logFine(logPrefix + "catalog unbind failed (ignored): " + t); }
         // 5. player 服務 shutdown
         if (oldPlayerService != null) {
             try {
                 oldPlayerService.shutdown();
             } catch (Throwable t) {
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
-                    "reload(INCOMPATIBLE): player data shutdown failed (ignored): " + t);
+                    logPrefix + "player data shutdown failed (ignored): " + t);
             }
             this.playerDataService = null;
         }
@@ -1451,24 +1566,23 @@ public class AceLibPlugin extends JavaPlugin {
         try {
             shutdownPlayerIoExecutor();
         } catch (Throwable t) {
-            logFine("reload(INCOMPATIBLE): player io executor shutdown failed (ignored): "
-                + t.getMessage());
+            logFine(logPrefix + "player io executor shutdown failed (ignored): " + t.getMessage());
         }
         // store 在服務 shutdown（已 flush）之後關閉；降級路徑不會 rebind 新 service，
         // 因此此處是釋放 SQLite 連線的最後時機（closePlayerDataStore 內部冪等且
         // 已 try/catch，不會中斷 teardown）。
         closePlayerDataStore();
         // 6. 其餘服務 shutdown + SHUTDOWN facade 替換（內部已 try/catch）
-        try { unbindWorldService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): world unbind failed (ignored): " + t); }
-        try { unbindGuiService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): gui unbind failed (ignored): " + t); }
-        try { unbindDisplayService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): display unbind failed (ignored): " + t); }
-        try { unbindExternalService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): external unbind failed (ignored): " + t); }
-        try { unbindBedrockService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): bedrock unbind failed (ignored): " + t); }
+        try { unbindWorldService(); } catch (Throwable t) { logFine(logPrefix + "world unbind failed (ignored): " + t); }
+        try { unbindGuiService(); } catch (Throwable t) { logFine(logPrefix + "gui unbind failed (ignored): " + t); }
+        try { unbindDisplayService(); } catch (Throwable t) { logFine(logPrefix + "display unbind failed (ignored): " + t); }
+        try { unbindExternalService(); } catch (Throwable t) { logFine(logPrefix + "external unbind failed (ignored): " + t); }
+        try { unbindBedrockService(); } catch (Throwable t) { logFine(logPrefix + "bedrock unbind failed (ignored): " + t); }
 
         // 7. 切換 cached facade 為 shutdown，並讓已持有 provider 的呼叫端讀到 shutdown 語意
         //    （與 onDisable 末尾一致：updateApiProvider 更新 provider 內部快照，再清 reference）。
         this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog,
-            this.displayService);
+            this.displayService).withLifecycleHost(lifecycleHost);
         updateApiProvider(this.api);
         this.apiProvider = null;
 
@@ -1532,6 +1646,23 @@ public class AceLibPlugin extends JavaPlugin {
 
     private void logWarningWithCode(String code, String message) {
         safeLogger().log(Level.WARNING, "[" + code + "] " + message);
+    }
+
+    private void logLifecycleResult(String operation, LifecycleResult result) {
+        if (result == null || result.isSuccess()) {
+            return;
+        }
+        for (LifecycleResult.Problem problem : result.problems()) {
+            String details = "lifecycle " + operation + ": " + problem.message()
+                + (problem.moduleId() == null ? "" : " [" + problem.moduleId() + "]")
+                + (problem.relatedModuleIds().isEmpty() ? ""
+                    : " related=" + problem.relatedModuleIds());
+            if (result.outcome() == LifecycleResult.Outcome.REJECTED) {
+                logWarningWithCode(problem.code().code(), details);
+            } else {
+                logSevereWithCode(problem.code().code(), details);
+            }
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -1767,8 +1898,8 @@ public class AceLibPlugin extends JavaPlugin {
     /**
      * 任一插件停用時的集中分派 listener（MONITOR 觀察，不取消亦不修改事件）。
      *
-     * <p>同時做兩件互不影響的事：撤下該插件的指令目錄描述，以及關閉該插件的
-     * GUI 作用域（結束其 GUI、移除登記）。兩條分派各自永不拋例外，
+     * <p>同時撤下該插件的指令目錄描述、關閉該插件的 GUI 作用域（結束其 GUI、移除登記），
+     * 並由宿主撤銷該 plugin 的生命週期模組。三條分派各自永不拋例外，
      * 不中斷其他 listener。合併於單一註冊，避免 PluginDisableEvent
      * 出現多個 AceLib 內部註冊。</p>
      */
@@ -1776,9 +1907,14 @@ public class AceLibPlugin extends JavaPlugin {
 
         @EventHandler(priority = EventPriority.MONITOR)
         void onPluginDisable(PluginDisableEvent event) {
+            Plugin disabledPlugin = event == null ? null : event.getPlugin();
             handleCatalogPluginDisable(commandCatalog,
-                event == null ? null : event.getPlugin());
-            GuiScopes.handlePluginDisable(event == null ? null : event.getPlugin());
+                disabledPlugin);
+            GuiScopes.handlePluginDisable(disabledPlugin);
+            if (disabledPlugin != null) {
+                logLifecycleResult("owner disable " + disabledPlugin.getName(),
+                    lifecycleHost.ownerDisabled(disabledPlugin));
+            }
         }
     }
 
@@ -2351,8 +2487,8 @@ public class AceLibPlugin extends JavaPlugin {
             placeholderAdapter.placeholderProvider();
         ExternalIntegrationServiceImpl impl = new ExternalIntegrationServiceImpl(
             registry, economyProvider, permissionProvider, placeholderProvider, null);
-        this.diagnostics.registerModuleState(MODULE_INTEGRATION, impl.toModuleState());
         this.externalService = impl;
+        this.diagnostics.registerModuleState(MODULE_INTEGRATION, impl.toModuleState());
         // 基岩服務綁定：floodgate 啟用 → typed lookup；缺席 → absent lookup（零影響）。
         bindBedrockService(floodgateAdapter);
     }

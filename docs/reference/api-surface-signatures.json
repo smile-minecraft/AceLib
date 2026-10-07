@@ -8,6 +8,7 @@
       "method getDisplayService() : com.smile.acelib.display.DisplayService",
       "method getExternalIntegrationService() : com.smile.acelib.external.ExternalIntegrationService",
       "method getGuiService() : com.smile.acelib.gui.GuiService",
+      "method getLifecycleHost() : com.smile.acelib.lifecycle.LifecycleHost",
       "method getPlatform() : com.smile.acelib.platform.Platform",
       "method getPlatformCapability() : com.smile.acelib.platform.PlatformCapability",
       "method getVersion() : java.lang.String",
@@ -768,6 +769,7 @@
       "field GUI : com.smile.acelib.diagnostics.ErrorCategory",
       "field ITEM : com.smile.acelib.diagnostics.ErrorCategory",
       "field LANGUAGE : com.smile.acelib.diagnostics.ErrorCategory",
+      "field LIFECYCLE : com.smile.acelib.diagnostics.ErrorCategory",
       "field MESSAGE : com.smile.acelib.diagnostics.ErrorCategory",
       "field PLATFORM : com.smile.acelib.diagnostics.ErrorCategory",
       "field PLAYER : com.smile.acelib.diagnostics.ErrorCategory",
@@ -1551,6 +1553,32 @@
       "method hashCode() : int",
       "method major() : int",
       "method minor() : int",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.lifecycle.LifecycleHost": [
+      "method lastResult() : com.smile.acelib.lifecycle.LifecycleResult",
+      "method register(org.bukkit.plugin.Plugin,java.util.Collection<com.smile.acelib.lifecycle.LifecycleModule>) : com.smile.acelib.lifecycle.LifecycleResult",
+      "method status() : com.smile.acelib.lifecycle.LifecycleHost$Status",
+      "method unregister(org.bukkit.plugin.Plugin) : com.smile.acelib.lifecycle.LifecycleResult"
+    ],
+    "com.smile.acelib.lifecycle.LifecycleModule": [
+      "ctor(java.lang.String,java.util.Set<java.lang.String>,com.smile.acelib.lifecycle.LifecycleModule$Starter)",
+      "method dependsOn() : java.util.Set<java.lang.String>",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method id() : java.lang.String",
+      "method starter() : com.smile.acelib.lifecycle.LifecycleModule$Starter",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.lifecycle.LifecycleResult": [
+      "ctor(com.smile.acelib.lifecycle.LifecycleResult$Outcome,com.smile.acelib.lifecycle.LifecycleHost$Status,java.util.List<com.smile.acelib.lifecycle.LifecycleResult$Problem>,java.util.List<java.lang.String>)",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method isSuccess() : boolean",
+      "method moduleIds() : java.util.List<java.lang.String>",
+      "method outcome() : com.smile.acelib.lifecycle.LifecycleResult$Outcome",
+      "method problems() : java.util.List<com.smile.acelib.lifecycle.LifecycleResult$Problem>",
+      "method status() : com.smile.acelib.lifecycle.LifecycleHost$Status",
       "method toString() : java.lang.String"
     ],
     "com.smile.acelib.message.FormText": [

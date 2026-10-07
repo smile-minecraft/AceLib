@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs217() throws IOException {
+     void canonicalTopLevelInventoryIs220() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -246,17 +246,21 @@ class ApiBoundaryRegressionTest {
         //   - DisplayService／DisplayResult／DisplayState／DisplayErrorCode／Hologram
         //     為下游顯示 facade、結果、狀態、錯誤碼與不暴露 Bukkit 實體的快照
         //   - DisplayServiceControl 為 AceLibPlugin 跨 package 的內部停用入口
+        // 生命週期宿主再增加 Supported +3：
+        //   - LifecycleHost（interface）— 下游模組生命週期管理入口
+        //   - LifecycleModule（record）— 下游模組與相依關係宣告
+        //   - LifecycleResult（record）— 操作狀態與結構化問題
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 167,
-            "Supported 數量偏離 canonical 167，實際=" + supported);
+        assertTrue(supported == 170,
+            "Supported 數量偏離 canonical 170，實際=" + supported);
         assertTrue(spi == 24,
             "SPI 數量偏離 canonical 24，實際=" + spi);
         assertTrue(internal == 26,
             "Internal 數量偏離 canonical 26，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 217,
-            "top-level inventory 偏離 canonical 217，實際=" + types.size());
+        assertTrue(types.size() == 220,
+            "top-level inventory 偏離 canonical 220，實際=" + types.size());
     }
 
     @Test

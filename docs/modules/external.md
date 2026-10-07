@@ -36,6 +36,8 @@ switch (result.status()) {
 
 `AVAILABLE` 是目前 server 的探測結果，不是永久保證。外部 plugin 可能在生命週期中停用；使用前仍應重新查詢，並準備沒有整合時的行為。
 
+四個內建 adapter 彼此獨立，初始化與清理維持 registry 的註冊順序；這不代表一般模組相依。下游只有在 lifecycle module 明確宣告依賴時，才由生命週期宿主依拓樸順序啟用、反向停用。
+
 AceLib 使用 reflection 探測，不要求這些外部 API 一定存在於 classpath。若你要直接呼叫 Vault、PlaceholderAPI 或 LuckPerms API，仍需在自己的 plugin 宣告相應 dependency，並遵守對方的文件。
 
 AceLib 尚未就緒或已停用時，查詢會回 `INIT_FAILED` 與不可用原因。完整 `ACELIB-EXT-*` 說明見[錯誤碼](../reference/error-codes.md)。

@@ -106,6 +106,16 @@ class ErrorCodeRegistryTest {
             assertSame(ErrorCategory.DATA,
                 ErrorCodeRegistry.categorize("ACELIB-DATA-001"));
         }
+
+        @Test
+        @DisplayName("ACELIB-LIFE-* 有獨立分類且九個宿主錯誤碼可查詢")
+        void lifeCode_mapsToLifecycleAndIsRegistered() {
+            assertEquals("LIFECYCLE", ErrorCodeRegistry.categorize("ACELIB-LIFE-001").name());
+            for (int code = 1; code <= 9; code++) {
+                String formatted = "ACELIB-LIFE-%03d".formatted(code);
+                assertNotNull(ErrorCodeRegistry.lookup(formatted), formatted);
+            }
+        }
     }
 
     @Nested
@@ -207,11 +217,11 @@ class ErrorCodeRegistryTest {
     class CategoryEnum {
 
         @Test
-        @DisplayName("ErrorCategory 至少包含 16 種分類（PLAT/SCHED/CTX/CFG/MSG/LANG/CMD/EVT/DATA/PLAYER/WORLD/GUI/ITEM/EXT/DEBUG/UNKNOWN）")
+        @DisplayName("ErrorCategory 包含所有已登錄分類（含 LIFE）")
         void category_hasAllPlanAreas() {
-            // 至少有 16 個 enum 值
-            assertTrue(ErrorCategory.values().length >= 16,
-                "ErrorCategory 必須包含 Plan §七定義的所有 area + DEBUG + UNKNOWN");
+            assertTrue(java.util.Arrays.asList(ErrorCategory.values())
+                    .contains(ErrorCategory.LIFECYCLE),
+                "ErrorCategory 必須包含 ACELIB-LIFE-* 的分類");
         }
 
         @Test

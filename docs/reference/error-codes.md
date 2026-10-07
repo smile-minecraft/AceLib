@@ -32,6 +32,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `EXT` | `ACELIB-EXT-*` | 外部整合 |
 | `BED` | `ACELIB-BED-*` | 基岩版玩家服務 |
 | `FORM` | `ACELIB-FORM-*` | 表單服務 |
+| `LIFE` | `ACELIB-LIFE-*` | 生命週期宿主 |
 | `DBG` | `ACELIB-DBG-*` | 診斷模組自身 |
 
 ### 排程器（SCHED）
@@ -242,6 +243,20 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-FORM-001` | 表單服務尚未啟用 | Floodgate 缺席（綁定 absent 發送 seam）時 sendForm 被拒絕 |
 | `ACELIB-FORM-002` | 表單服務已停用 | onDisable／reload 失敗後 shutdown，sendForm 被拒絕 |
 | `ACELIB-FORM-003` | 按鈕圖示轉換失敗，已退回純文字 | 單顆 simple 按鈕圖示映射拋例外時 warning 並以純文字送出該按鈕（表單其餘部分不受影響） |
+
+### 生命週期宿主（LIFE）
+
+| 代碼 | 說明 | 觸發情境 |
+| --- | --- | --- |
+| `ACELIB-LIFE-001` | 模組宣告不完整或 id 非法 | 建立模組時 id 或依賴為空，或缺少啟用回呼 |
+| `ACELIB-LIFE-002` | 模組 id 重複 | 同一批或既有宿主圖中出現重複 id |
+| `ACELIB-LIFE-003` | 模組依賴不存在 | 完整註冊批次驗證時找不到依賴 id |
+| `ACELIB-LIFE-004` | 模組依賴圖有循環 | 相依圖含一個或多個循環；整批在啟用前拒絕 |
+| `ACELIB-LIFE-005` | 其他 plugin 模組仍依賴待撤銷模組 | unregister 列出直接或間接相依者並拒絕拆除 |
+| `ACELIB-LIFE-006` | 模組啟用失敗 | enable 回呼拋例外或未交回 handle |
+| `ACELIB-LIFE-007` | 模組 handle 清理失敗 | close 失敗；宿主保留待清理 handle 並標示失敗 |
+| `ACELIB-LIFE-008` | 生命週期宿主目前不接受此操作 | 宿主未就緒、正在轉換、已失敗／停用，或 reload 重入 |
+| `ACELIB-LIFE-009` | reload 未能提交或重建下游模組 | 核心 reload 失敗，或核心提交後模組重建失敗；不假稱完整回滾 |
 
 ### 其他
 

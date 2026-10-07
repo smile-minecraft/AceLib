@@ -74,6 +74,9 @@ public enum ErrorCategory {
     /** 診斷／除錯模組自身錯誤（{@code ACELIB-DBG-*}）。 */
     DEBUG("DBG"),
 
+    /** 生命週期宿主與下游模組相依管理錯誤（{@code ACELIB-LIFE-*}）。 */
+    LIFECYCLE("LIFE"),
+
     /** 無法識別的代碼（fallback）。 */
     UNKNOWN("UNKNOWN");
 

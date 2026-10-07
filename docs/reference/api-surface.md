@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：217 個 public 頂層型別
-- Supported：167
+- 總數：220 個 public 頂層型別
+- Supported：170
 - SPI：24
 - Internal：26
 
@@ -256,6 +256,14 @@
 | `com.smile.acelib.item.ItemMigrationContext` | interface | SPI | 物品遷移上下文介面（extension point）；傳遞給 ItemMigration。 |  | ItemMigration.migrate；消費者實作。 |
 | `com.smile.acelib.item.ItemMigrationResult` | record | Supported | 物品遷移結果值型別；v1 穩定。 |  | ItemMigration；ItemMigrationChain。 |
 | `com.smile.acelib.item.ItemSchemaVersion` | record | Supported | 物品 schema 版本值型別（major.minor）；v1 凍結結構。 |  | ItemMigration；ItemMigrationResult。 |
+
+### com.smile.acelib.lifecycle
+
+| Type | Kind | Classification | Reason | Retention | Main callers |
+| --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.lifecycle.LifecycleHost` | interface | Supported | 下游模組生命週期宿主；以 owner 批次驗證相依、排序啟用與反向清理，reload 失敗明確記錄結果並區分可重試與 fail-closed。 |  | AceLibApi.getLifecycleHost；下游 plugin 註冊與撤銷模組。 |
+| `com.smile.acelib.lifecycle.LifecycleModule` | record | Supported | 下游模組宣告值型別（穩定 id、相依 id 與啟用回呼）；啟用交回 handle 前的部分資源由模組自行清理。 |  | LifecycleHost.register；下游 plugin 宣告模組。 |
+| `com.smile.acelib.lifecycle.LifecycleResult` | record | Supported | 生命週期操作不可變結果（SUCCESS／REJECTED／FAILED、宿主狀態與結構化問題）。 |  | LifecycleHost；下游 plugin 處理註冊、撤銷與 reload 結果。 |
 
 ### com.smile.acelib.message
 

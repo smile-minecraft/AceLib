@@ -5,6 +5,8 @@
 - 在 `plugin.yml` 宣告 `depend: [AceLib]`。
 - 透過 Bukkit `ServicesManager` 取得 `AceLibApi.AceLibProvider`。
 - 檢查 `api().isReady()`，再使用 API。
+- 使用公開 lifecycle API 註冊帶依賴的模組，並處理缺依賴與循環的結構化拒絕。
+- reload 後透過動態 provider 取得新 facade；停用時只撤銷本 plugin 擁有的模組。
 - 依 Paper 或 Folia 的平台能力選擇操作路徑。
 
 一般 plugin 專案請先看[快速開始](../../docs/consumer/quickstart.md)。已發布版本使用 JitPack `com.github.smile-minecraft:AceLib:v1.3.1`（對應 `v1.3.1` tag）；本範例驗證中的本機版本為 `com.smile:acelib:1.4.0-SNAPSHOT`（含 `com.smile:acelib:1.4.0-SNAPSHOT:test-fixtures` 測試輔助，見下方）。

@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticSnapshot;
 import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.lifecycle.LifecycleModule;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
@@ -20,6 +21,9 @@ import com.smile.acelib.scheduler.TaskErrorRecord;
 import com.smile.acelib.scheduler.TaskType;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -611,6 +615,24 @@ class AceLibPluginTest {
     }
 
     @Test
+    @DisplayName("reload callback 重入時拒絕內層呼叫，外層仍只提交一個世代")
+    void reload_reentrantInvocationIsRejected() {
+        AtomicBoolean callbackEntered = new AtomicBoolean();
+        AtomicReference<Boolean> nestedResult = new AtomicReference<>();
+        plugin.reloadOldTeardownFailureHook = () -> {
+            if (callbackEntered.compareAndSet(false, true)) {
+                nestedResult.set(plugin.reload());
+            }
+        };
+
+        boolean outerResult = plugin.reload();
+
+        assertTrue(outerResult, "外層 reload 應完成唯一一次提交");
+        assertEquals(Boolean.FALSE, nestedResult.get(), "重入的 reload 必須明確拒絕");
+        assertTrue(plugin.isReady(), "拒絕重入不得降級外層已提交的 plugin");
+    }
+
+    @Test
     @DisplayName("reload new SafeSchedulerImpl construction 失敗：回傳 false、輸出 "
         + "ACELIB-DBG-001 WARNING/SEVERE、scheduler/api/diagnostics reference 不變、"
         + "plugin 明確降級為 FAILED（與 Phase A 策略一致）")
@@ -838,6 +860,97 @@ class AceLibPluginTest {
 
         // 新 scheduler reference
         assertNotNull(plugin.getSchedulerForDiagnostics());
+    }
+
+    @Test
+    @DisplayName("reload 核心服務重建拋錯後 fail closed，不留 READY facade 或執行緒池")
+    void reload_coreServiceBindingFailureFailsClosed() {
+        AceLibApi previousApi = plugin.getApi();
+        AtomicReference<java.util.concurrent.ExecutorService> createdExecutor =
+            new AtomicReference<>();
+        plugin.reloadCoreServiceBindFailureHook = () -> {
+            createdExecutor.set(plugin.getPlayerIoExecutor());
+            throw new IllegalStateException("injected core service binding failure");
+        };
+
+        assertFalse(plugin.reload(), "核心服務重建失敗時 reload 必須回傳 false");
+
+        assertFalse(plugin.isReady(), "部分提交後不得保留 plugin READY 狀態");
+        assertFalse(previousApi.isReady(), "已持有的舊 facade 必須讀到 not-ready");
+        assertFalse(plugin.getApi().isReady(), "plugin facade 必須切換為 shutdown 狀態");
+        assertSame(com.smile.acelib.lifecycle.LifecycleHost.Status.FAILED,
+            plugin.getApi().getLifecycleHost().status());
+        LifecycleHostImpl lifecycleHost =
+            (LifecycleHostImpl) plugin.getApi().getLifecycleHost();
+        assertEquals(com.smile.acelib.lifecycle.LifecycleResult.Outcome.REJECTED,
+            lifecycleHost.beginReload().outcome(),
+            "核心 fail-closed 後宿主不得允許 reload 重入");
+        assertSame(com.smile.acelib.lifecycle.LifecycleHost.Status.FAILED,
+            lifecycleHost.status());
+        assertTrue(plugin.getSchedulerForDiagnostics().isDisabled(),
+            "部分提交的 scheduler 必須停用");
+        assertNotNull(createdExecutor.get(), "失敗點前已建立 player io executor");
+        assertTrue(createdExecutor.get().isShutdown(), "失敗路徑不得留下 player io executor");
+        assertNull(plugin.getPlayerIoExecutor(), "plugin 不再持有已關閉的 executor");
+    }
+
+    @Test
+    @DisplayName("核心 rollback 可重試：零模組時清除失敗 hook 後 reload 成功")
+    void reload_retryableCoreFailureWithoutModulesCanRetry() {
+        var lifecycleHost = plugin.getApi().getLifecycleHost();
+        AtomicBoolean failOnce = new AtomicBoolean(true);
+        plugin.reloadRebindFailureHook = () -> {
+            if (failOnce.getAndSet(false)) {
+                throw new IllegalStateException("injected one-shot diagnostics rebind failure");
+            }
+        };
+
+        assertFalse(plugin.reload(), "注入的第一次核心 rollback 應回傳 false");
+        assertEquals(com.smile.acelib.lifecycle.LifecycleHost.Status.READY,
+            lifecycleHost.status(), "可重試的核心 rollback 不得永久鎖成 FAILED");
+
+        plugin.reloadRebindFailureHook = null;
+        assertTrue(plugin.reload(), "清除失敗 hook 後第二次 reload 應成功");
+        assertEquals(com.smile.acelib.lifecycle.LifecycleHost.Status.READY,
+            lifecycleHost.status());
+    }
+
+    @Test
+    @DisplayName("核心 rollback 可重試：模組 handle 只關閉一次並在重試時重建")
+    void reload_retryableCoreFailureRebuildsDormantModulesOnRetry() {
+        var lifecycleHost = plugin.getApi().getLifecycleHost();
+        List<String> events = new ArrayList<>();
+        assertTrue(lifecycleHost.register(plugin, List.of(new LifecycleModule(
+            "test:retryable", Set.of(), context -> {
+                events.add("enable");
+                return () -> events.add("close");
+            }))).isSuccess());
+
+        AtomicBoolean failOnce = new AtomicBoolean(true);
+        plugin.reloadRebindFailureHook = () -> {
+            if (failOnce.getAndSet(false)) {
+                throw new IllegalStateException("injected one-shot diagnostics rebind failure");
+            }
+        };
+
+        assertFalse(plugin.reload(), "注入的第一次核心 rollback 應回傳 false");
+        assertEquals(List.of("enable", "close"), events,
+            "第一次 reload 應停用舊 handle，尚未重建");
+        assertEquals(com.smile.acelib.lifecycle.LifecycleHost.Status.READY,
+            lifecycleHost.status(), "可重試的核心 rollback 應允許下一次 reload 重入");
+        assertEquals(com.smile.acelib.lifecycle.LifecycleResult.Outcome.FAILED,
+            lifecycleHost.lastResult().outcome(),
+            "宿主應保留第一次 reload 失敗的診斷結果");
+        assertFalse(lifecycleHost.register(plugin, List.of(new LifecycleModule(
+            "test:blocked-until-retry", Set.of(), context -> () -> { }))).isSuccess(),
+            "舊模組尚未重建前，不得新增會依賴不完整圖狀態的模組");
+
+        plugin.reloadRebindFailureHook = null;
+        assertTrue(plugin.reload(), "清除失敗 hook 後第二次 reload 應成功");
+        assertEquals(List.of("enable", "close", "enable"), events,
+            "重試不得重複關閉舊 handle，且必須重建註冊模組");
+        assertEquals(com.smile.acelib.lifecycle.LifecycleHost.Status.READY,
+            lifecycleHost.status());
     }
 
     @Test

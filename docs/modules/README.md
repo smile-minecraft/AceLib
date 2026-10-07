@@ -22,6 +22,7 @@ AceLib 各模組的 API 與使用限制。先從 ready 的 `AceLibApi` 取得對
 - [診斷](diagnostics.md) — 模組狀態與錯誤碼查詢。
 - [基岩版玩家](bedrock.md) — 偵測基岩版玩家與其裝置／輸入／語言資訊。
 - [表單](form.md) — 傳送基岩原生表單並接收回應。
+- [生命週期宿主](lifecycle.md) — 宣告下游模組相依，並由 AceLib 安排啟停與 reload。
 
 ## 相關頁面
 

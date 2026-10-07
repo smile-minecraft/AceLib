@@ -72,6 +72,8 @@ final class BedrockServiceImpl implements BedrockService {
 
     @Override
     public void shutdown() {
-        stopped.set(true);
+        if (stopped.compareAndSet(false, true)) {
+            formService.shutdown();
+        }
     }
 }

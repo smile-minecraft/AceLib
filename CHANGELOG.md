@@ -6,6 +6,13 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 1.4.0-SNAPSHOT 為開發中的預覽版本，尚未發布：GitHub Release 尚未建立，JitPack 尚未提供此版本的公開座標。下游在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0-SNAPSHOT`。已發布版本的取得方式（JitPack `com.github.smile-minecraft:AceLib:v1.3.1`、v1.3.1 GitHub Release）維持不變，見下方 `1.3.1` 節。
 
+### 本階段內容（生命週期宿主）
+
+- 新增 `AceLibApi.getLifecycleHost()` 與公開 lifecycle 模組宣告：依賴圖在啟用前一次驗證，缺依賴、重複 id 與循環會結構化拒絕；有效模組依拓樸啟用、反向停用。
+- 批次啟用失敗會反向清理已交付 handle；reload 先停用下游模組，核心提交後再拓樸重建。可安全重試的核心 rollback 保留模組宣告並允許再次 reload；核心 fail-closed 或模組重建失敗則明確維持 `FAILED`，不假稱跨世代完整回滾。
+- 新增 `ACELIB-LIFE-001`～`ACELIB-LIFE-009`；Bedrock shutdown 同步清理表單 pending response，Phase D 未提交的 external／bedrock 服務會補償釋放，並拒絕 reload 重入。
+- 新增[生命週期宿主指南](docs/modules/lifecycle.md)及 consumer 範例；新公開型別、API surface 與簽章基線同步列於 reference 文件。
+
 ### 本階段內容（每玩家顯示）
 
 - 新增 `DisplayService`：每位玩家有獨立計分板與 BossBar，另提供固定位置的原生 `TextDisplay` 全息字；呼叫結果區分已完成、已接受派送、拒絕與失敗。

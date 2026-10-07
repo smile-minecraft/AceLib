@@ -2,8 +2,12 @@ package com.smile.acelib.bedrock;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.form.FormService;
+import com.smile.acelib.form.FormSendResult;
+import com.smile.acelib.form.FormSpec;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,5 +55,22 @@ class BedrockServiceFormsWiringTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
             () -> service.forms().sendForm(playerId, spec),
             "已 shutdown 的表單服務必須拒絕發送");
+    }
+
+    @Test
+    @DisplayName("bedrock shutdown 同步清除先前取得的表單服務")
+    void bedrockShutdown_alsoShutsDownFormService() {
+        FormService formService = FormService.forProduction(
+            (playerId, form) -> FormSendResult.REJECTED);
+        BedrockService service = BedrockService.forProduction(
+            BedrockService.PlayerLookup.absent(), formService);
+        UUID playerId = UUID.fromString("00000000-0000-0000-0000-000000000006");
+        FormSpec form = FormSpec.simple("title").content("body").button("ok").build();
+
+        service.shutdown();
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> formService.sendForm(playerId, form));
+        assertTrue(failure.getMessage().contains("ACELIB-FORM-002"));
     }
 }
