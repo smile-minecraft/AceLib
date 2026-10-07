@@ -5,6 +5,7 @@
     "com.smile.acelib.AceLibApi": [
       "method getBedrockService() : com.smile.acelib.bedrock.BedrockService",
       "method getCommandCatalog() : com.smile.acelib.command.CommandCatalog",
+      "method getDisplayService() : com.smile.acelib.display.DisplayService",
       "method getExternalIntegrationService() : com.smile.acelib.external.ExternalIntegrationService",
       "method getGuiService() : com.smile.acelib.gui.GuiService",
       "method getPlatform() : com.smile.acelib.platform.Platform",
@@ -12,6 +13,7 @@
       "method getVersion() : java.lang.String",
       "method getWorldService() : com.smile.acelib.world.WorldService",
       "method isReady() : boolean",
+      "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,com.smile.acelib.command.CommandCatalog,com.smile.acelib.display.DisplayService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,com.smile.acelib.command.CommandCatalog,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,com.smile.acelib.bedrock.BedrockService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
       "method ready(java.lang.String,com.smile.acelib.platform.Platform,com.smile.acelib.platform.PlatformCapability,com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.external.ExternalIntegrationService,java.util.function.BooleanSupplier,java.lang.Runnable) : com.smile.acelib.AceLibApi",
@@ -23,6 +25,7 @@
       "method shutDown(com.smile.acelib.world.WorldService) : com.smile.acelib.AceLibApi",
       "method shutDown(com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService) : com.smile.acelib.AceLibApi",
       "method shutDown(com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.command.CommandCatalog) : com.smile.acelib.AceLibApi",
+      "method shutDown(com.smile.acelib.world.WorldService,com.smile.acelib.gui.GuiService,com.smile.acelib.command.CommandCatalog,com.smile.acelib.display.DisplayService) : com.smile.acelib.AceLibApi",
       "method uninitialized() : com.smile.acelib.AceLibApi"
     ],
     "com.smile.acelib.AceLibVersion": [
@@ -758,6 +761,7 @@
       "field CONTEXT : com.smile.acelib.diagnostics.ErrorCategory",
       "field DATA : com.smile.acelib.diagnostics.ErrorCategory",
       "field DEBUG : com.smile.acelib.diagnostics.ErrorCategory",
+      "field DISPLAY : com.smile.acelib.diagnostics.ErrorCategory",
       "field EVENT : com.smile.acelib.diagnostics.ErrorCategory",
       "field EXTERNAL : com.smile.acelib.diagnostics.ErrorCategory",
       "field FORM : com.smile.acelib.diagnostics.ErrorCategory",
@@ -857,6 +861,66 @@
       "method suppressed() : int",
       "method toString() : java.lang.String",
       "method windowMs() : long"
+    ],
+    "com.smile.acelib.display.DisplayErrorCode": [
+      "field CHUNK_NOT_LOADED : java.lang.String",
+      "field ENTITY_RETIRED : java.lang.String",
+      "field INVALID_INPUT : java.lang.String",
+      "field NOT_READY : java.lang.String",
+      "field OPERATION_FAILED : java.lang.String",
+      "field PLAYER_OFFLINE : java.lang.String",
+      "field SHUTDOWN : java.lang.String"
+    ],
+    "com.smile.acelib.display.DisplayResult": [
+      "method accepted(java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method accepted(java.util.UUID,java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method deduped() : boolean",
+      "method deduped(java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method detail() : java.lang.String",
+      "method errorCode() : java.lang.String",
+      "method failed(java.lang.String,java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method hologramId() : java.util.UUID",
+      "method isSuccess() : boolean",
+      "method rejected(java.lang.String,java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method state() : com.smile.acelib.display.DisplayState",
+      "method success(java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method success(java.util.UUID,java.lang.String) : com.smile.acelib.display.DisplayResult",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.display.DisplayService": [
+      "field MAX_SCOREBOARD_LINES : int",
+      "method closeAll() : int",
+      "method closePlayer(java.util.UUID) : boolean",
+      "method findHologram(java.util.UUID) : java.util.Optional<com.smile.acelib.display.Hologram>",
+      "method forProduction(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.scheduler.SafeScheduler) : com.smile.acelib.display.DisplayService",
+      "method forUnavailable(java.lang.String) : com.smile.acelib.display.DisplayService",
+      "method handlePlayerQuit(java.util.UUID) : void",
+      "method hideBossBar(java.util.UUID) : com.smile.acelib.display.DisplayResult",
+      "method hideScoreboard(java.util.UUID) : com.smile.acelib.display.DisplayResult",
+      "method removeHologram(java.util.UUID) : com.smile.acelib.display.DisplayResult",
+      "method setHologramVisible(java.util.UUID,java.util.UUID,boolean) : com.smile.acelib.display.DisplayResult",
+      "method showBossBar(java.util.UUID,net.kyori.adventure.text.Component,double,org.bukkit.boss.BarColor,org.bukkit.boss.BarStyle) : com.smile.acelib.display.DisplayResult",
+      "method showHologram(org.bukkit.Location,net.kyori.adventure.text.Component) : com.smile.acelib.display.DisplayResult",
+      "method showScoreboard(java.util.UUID,net.kyori.adventure.text.Component,java.util.List<net.kyori.adventure.text.Component>) : com.smile.acelib.display.DisplayResult",
+      "method updateBossBar(java.util.UUID,net.kyori.adventure.text.Component,double) : com.smile.acelib.display.DisplayResult",
+      "method updateHologram(java.util.UUID,net.kyori.adventure.text.Component) : com.smile.acelib.display.DisplayResult"
+    ],
+    "com.smile.acelib.display.DisplayState": [
+      "field ACCEPTED : com.smile.acelib.display.DisplayState",
+      "field FAILED : com.smile.acelib.display.DisplayState",
+      "field REJECTED : com.smile.acelib.display.DisplayState",
+      "field SUCCESS : com.smile.acelib.display.DisplayState",
+      "method valueOf(java.lang.String) : com.smile.acelib.display.DisplayState",
+      "method values() : com.smile.acelib.display.DisplayState[]"
+    ],
+    "com.smile.acelib.display.Hologram": [
+      "ctor(java.util.UUID,org.bukkit.Location,net.kyori.adventure.text.Component)",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method id() : java.util.UUID",
+      "method location() : org.bukkit.Location",
+      "method text() : net.kyori.adventure.text.Component",
+      "method toString() : java.lang.String"
     ],
     "com.smile.acelib.event.AceLibEvents": [
       "method bind(com.smile.acelib.AceLibPlugin,com.smile.acelib.event.SafeEventRegistry) : void",

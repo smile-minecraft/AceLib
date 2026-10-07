@@ -855,6 +855,61 @@
       "mainCallers": "ErrorThrottler。"
     },
     {
+      "fqcn": "com.smile.acelib.display.DisplayErrorCode",
+      "package": "com.smile.acelib.display",
+      "simpleName": "DisplayErrorCode",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "每玩家顯示模組錯誤碼常數（ACELIB-DISP-*）；與錯誤登錄表同步。",
+      "mainCallers": "DisplayService；DisplayResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.display.DisplayResult",
+      "package": "com.smile.acelib.display",
+      "simpleName": "DisplayResult",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "顯示操作結果值型別，帶狀態、錯誤碼、診斷文字或全息字識別碼。",
+      "mainCallers": "DisplayService 各操作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.display.DisplayService",
+      "package": "com.smile.acelib.display",
+      "simpleName": "DisplayService",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "每玩家計分板、BossBar 與位置型 TextDisplay 的公開 facade；封裝排程、可見性與生命週期清理。",
+      "mainCallers": "AceLibApi.getDisplayService；下游 plugin。"
+    },
+    {
+      "fqcn": "com.smile.acelib.display.DisplayServiceControl",
+      "package": "com.smile.acelib.display",
+      "simpleName": "DisplayServiceControl",
+      "kind": "interface",
+      "classification": "Internal",
+      "reason": "顯示服務內部停用入口；下游不得直接依賴。",
+      "retention": "AceLibPlugin（com.smile.acelib）跨 package 在 reload／disable 時停用 DisplayService；生命週期控制不是下游 API。",
+      "mainCallers": "AceLibPlugin 執行內部服務停用。"
+    },
+    {
+      "fqcn": "com.smile.acelib.display.DisplayState",
+      "package": "com.smile.acelib.display",
+      "simpleName": "DisplayState",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "顯示操作結果狀態（SUCCESS／ACCEPTED／REJECTED／FAILED）。",
+      "mainCallers": "DisplayResult。"
+    },
+    {
+      "fqcn": "com.smile.acelib.display.Hologram",
+      "package": "com.smile.acelib.display",
+      "simpleName": "Hologram",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "全息字不可變快照，提供識別碼、位置與文字，不暴露 Bukkit 實體。",
+      "mainCallers": "DisplayService.findHologram。"
+    },
+    {
       "fqcn": "com.smile.acelib.event.AceLibEvents",
       "package": "com.smile.acelib.event",
       "simpleName": "AceLibEvents",

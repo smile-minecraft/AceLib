@@ -26,6 +26,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `DATA` | `ACELIB-DATA-*` | 資料儲存 |
 | `PLAYER` | `ACELIB-PLAYER-*` | 玩家狀態 |
 | `WORLD` | `ACELIB-WORLD-*` | 世界操作 |
+| `DISP` | `ACELIB-DISP-*` | 每玩家顯示 |
 | `GUI` | `ACELIB-GUI-*` | GUI |
 | `ITEM` | `ACELIB-ITEM-*` | Item |
 | `EXT` | `ACELIB-EXT-*` | 外部整合 |
@@ -160,6 +161,18 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-WORLD-016` | 跨區域／玩家傳送部分完成 | 第一步成功但第二步失敗 |
 | `ACELIB-WORLD-017` | 延後操作無法安排派送 | 作用域建立失敗等派送期拒絕 |
 | `ACELIB-WORLD-018` | 傳送回報成功但到達確認失敗 | 平台回成功、玩家實際不在目的地 |
+
+### 每玩家顯示（DISP）
+
+| 代碼 | 說明 | 觸發情境 |
+| --- | --- | --- |
+| `ACELIB-DISP-001` | 顯示服務尚未啟用 | AceLib 尚未完成 enable，呼叫 unavailable facade |
+| `ACELIB-DISP-002` | 顯示服務已停用 | reload／disable 後仍使用舊 DisplayService reference |
+| `ACELIB-DISP-003` | 顯示操作輸入不合法 | null 參數、計分板超過 15 行、BossBar 進度不在 `[0, 1]` 或全息字識別碼未知 |
+| `ACELIB-DISP-004` | 目標玩家已離線 | 計分板、BossBar 或觀看者操作前／派送時玩家離線 |
+| `ACELIB-DISP-005` | 全息字實體已失效 | 更新／移除時實體已被移除或退休；服務會清除該追蹤 |
+| `ACELIB-DISP-006` | 目標 chunk 尚未載入 | 全息字生成位置所在 chunk 未載入；服務不會為此載入 chunk |
+| `ACELIB-DISP-007` | 顯示平台操作失敗 | Bukkit 顯示 API 在正確擁有者上下文執行時拋出例外 |
 
 ### GUI（GUI）
 

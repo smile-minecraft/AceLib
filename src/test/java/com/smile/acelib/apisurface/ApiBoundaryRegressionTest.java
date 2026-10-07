@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs211() throws IOException {
+    void canonicalTopLevelInventoryIs217() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -242,17 +242,21 @@ class ApiBoundaryRegressionTest {
         //       PlaceholderAPI typed 持有者（只在 AVAILABLE 後載入）
         //     - com.smile.acelib.external.VaultEconomyProvider — Vault legacy
         //       純反射包裝（零外部 import，每次呼叫重新解析）
+        // 顯示模組再增加 Supported +5、Internal +1（共 +6）：
+        //   - DisplayService／DisplayResult／DisplayState／DisplayErrorCode／Hologram
+        //     為下游顯示 facade、結果、狀態、錯誤碼與不暴露 Bukkit 實體的快照
+        //   - DisplayServiceControl 為 AceLibPlugin 跨 package 的內部停用入口
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 162,
-            "Supported 數量偏離 canonical 162，實際=" + supported);
+        assertTrue(supported == 167,
+            "Supported 數量偏離 canonical 167，實際=" + supported);
         assertTrue(spi == 24,
             "SPI 數量偏離 canonical 24，實際=" + spi);
-        assertTrue(internal == 25,
-            "Internal 數量偏離 canonical 25，實際=" + internal
+        assertTrue(internal == 26,
+            "Internal 數量偏離 canonical 26，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 211,
-            "top-level inventory 偏離 canonical 211，實際=" + types.size());
+        assertTrue(types.size() == 217,
+            "top-level inventory 偏離 canonical 217，實際=" + types.size());
     }
 
     @Test

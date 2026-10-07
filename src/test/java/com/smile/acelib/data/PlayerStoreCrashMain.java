@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
  * <p>用法有兩段，同一個 class 依第一個參數切換：</p>
  * <pre>
  *   writer  &lt;dbFile&gt; &lt;saveIntervalMs&gt; &lt;progressFile&gt;
- *   verify &lt;dbFile&gt; &lt;uuid&gt; &lt;saveIntervalMs&gt; &lt;progressFile&gt;
+ *   [TEST:P2] 驗證模式：verify &lt;dbFile&gt; &lt;uuid&gt; &lt;saveIntervalMs&gt; &lt;progressFile&gt;（確認異常終止前的保存進度）。
  * </pre>
  *
  * <p><strong>writer</strong>：以真 SQLite store 與真 {@link PlayerDataService}

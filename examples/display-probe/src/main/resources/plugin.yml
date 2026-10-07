@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibDisplayProbe
+main: com.example.acelibdisplayprobe.DisplayProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 每玩家計分板、BossBar 與全息字的 Paper／Folia 實機探針
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+commands:
+  dprobe:
+    description: 執行 AceLib 顯示模組實機探針
+    usage: /dprobe
+    permission: acelibdisplayprobe.use
+permissions:
+  acelibdisplayprobe.use:
+    description: 使用顯示模組實機探針
+    default: op

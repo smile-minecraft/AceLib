@@ -2,6 +2,8 @@ package com.smile.acelib;
 
 import com.smile.acelib.bedrock.BedrockService;
 import com.smile.acelib.command.CommandCatalog;
+import com.smile.acelib.display.DisplayErrorCode;
+import com.smile.acelib.display.DisplayService;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiService;
@@ -50,6 +52,7 @@ public final class AceLibApi {
     private final PlatformCapability capability;
     private final WorldService worldService;
     private final GuiService guiService;
+    private final DisplayService displayService;
     private final ExternalIntegrationService externalService;
     private final BedrockService bedrockService;
     private final CommandCatalog commandCatalog;
@@ -61,6 +64,7 @@ public final class AceLibApi {
                       PlatformCapability capability,
                       WorldService worldService,
                       GuiService guiService,
+                      DisplayService displayService,
                       ExternalIntegrationService externalService,
                       BedrockService bedrockService,
                       CommandCatalog commandCatalog,
@@ -71,6 +75,7 @@ public final class AceLibApi {
         this.capability = Objects.requireNonNull(capability, "capability");
         this.worldService = Objects.requireNonNull(worldService, "worldService");
         this.guiService = Objects.requireNonNull(guiService, "guiService");
+        this.displayService = Objects.requireNonNull(displayService, "displayService");
         this.externalService = Objects.requireNonNull(externalService, "externalService");
         this.bedrockService = bedrockService;
         this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
@@ -99,6 +104,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(),
@@ -132,6 +138,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
             GuiService.forUnavailable(GuiErrorCode.SHUTDOWN),
+            DisplayService.forUnavailable(DisplayErrorCode.SHUTDOWN),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
             BedrockService.forUnavailable(BedrockService.SHUTDOWN),
             CommandCatalog.forUnavailable(),
@@ -160,6 +167,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
             guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.SHUTDOWN),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
             BedrockService.forUnavailable(BedrockService.SHUTDOWN),
             CommandCatalog.forUnavailable(),
@@ -194,6 +202,44 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(Platform.UNKNOWN),
             worldService,
             guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.SHUTDOWN),
+            ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
+            BedrockService.forUnavailable(BedrockService.SHUTDOWN),
+            commandCatalog,
+            () -> false,
+            () -> { /* no-op */ }
+        );
+    }
+
+    /**
+     * 停用狀態的 facade（攜帶既有 worldService + guiService + commandCatalog + displayService）。
+     *
+     * <p>canonical 重載：保留四個 service 的不可變 reference。
+     * 傳入的 {@code displayService} 應為已 {@code shutdownService()} 的實例；
+     * 停用後透過舊參考再操作一律回 {@code FAILED + ACELIB-DISP-002}。</p>
+     *
+     * @param worldService  已 shutdown 的 worldService；不可為 null
+     * @param guiService    已 shutdown 的 guiService；不可為 null
+     * @param commandCatalog 已停用的指令目錄；不可為 null
+     * @param displayService 已停用的顯示服務；不可為 null
+     * @return 不可變的 {@link AceLibApi}
+     * @throws NullPointerException 任何參數為 null
+     * @since 1.4.0
+     */
+    public static AceLibApi shutDown(WorldService worldService, GuiService guiService,
+                                     CommandCatalog commandCatalog,
+                                     DisplayService displayService) {
+        Objects.requireNonNull(worldService, "worldService");
+        Objects.requireNonNull(guiService, "guiService");
+        Objects.requireNonNull(commandCatalog, "commandCatalog");
+        Objects.requireNonNull(displayService, "displayService");
+        return new AceLibApi(
+            AceLibVersion.VERSION,
+            Platform.UNKNOWN,
+            PlatformCapability.forPlatform(Platform.UNKNOWN),
+            worldService,
+            guiService,
+            displayService,
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.SHUTDOWN),
             BedrockService.forUnavailable(BedrockService.SHUTDOWN),
             commandCatalog,
@@ -226,6 +272,7 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(), readyCheck, onReload);
@@ -260,6 +307,7 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             externalService, BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(), readyCheck, onReload);
     }
@@ -292,6 +340,7 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             externalService, bedrockService, CommandCatalog.forUnavailable(),
             readyCheck, onReload);
     }
@@ -334,7 +383,53 @@ public final class AceLibApi {
                                    BooleanSupplier readyCheck,
                                    Runnable onReload) {
         return new AceLibApi(version, platform, capability, worldService, guiService,
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             externalService, bedrockService, commandCatalog, readyCheck, onReload);
+    }
+
+    /**
+     * 已啟用狀態的 instance（11 參數簽章，推薦使用）。
+     *
+     * <p>與 10 參數版本的差異：額外接受對外 {@link DisplayService}
+     * facade，讓每玩家顯示可透過 canonical lookup 取得；
+     * 既有 10 參數版本以 {@code NOT_READY} unavailable facade 填補。</p>
+     *
+     * @param version          plugin 版本字串
+     * @param platform         偵測到的平台
+     * @param capability       對應的 capability profile（不允許 null；請用
+     *                         {@link PlatformCapability#forPlatform(Platform)} 推導）
+     * @param worldService     對外 {@link WorldService} facade（不允許 null）
+     * @param guiService       對外 {@link GuiService} facade（不允許 null）
+     * @param externalService  對外 {@link ExternalIntegrationService} facade
+     *                         （不允許 null；plugin 端必須建立合適的 impl 並傳入）
+     * @param bedrockService   對外 {@link BedrockService} facade（不允許 null；
+     *                         plugin 端必須建立合適的 impl 並傳入）
+     * @param commandCatalog   對外 {@link CommandCatalog} facade（不允許 null；
+     *                         plugin 端必須以 {@link CommandCatalog#forProduction()}
+     *                         建立並傳入）
+     * @param displayService   對外 {@link DisplayService} facade（不允許 null；
+     *                         plugin 端必須以 {@link DisplayService#forProduction}
+     *                         建立並傳入）
+     * @param readyCheck       當前 lifecycle 是否 ready 的 callback
+     * @param onReload         reload 觸發時執行的 callback
+     * @return 不可變的 {@link AceLibApi}
+     * @throws NullPointerException 任何參數為 null
+     * @since 1.4.0
+     */
+    public static AceLibApi ready(String version,
+                                   Platform platform,
+                                   PlatformCapability capability,
+                                   WorldService worldService,
+                                   GuiService guiService,
+                                   ExternalIntegrationService externalService,
+                                   BedrockService bedrockService,
+                                   CommandCatalog commandCatalog,
+                                   DisplayService displayService,
+                                   BooleanSupplier readyCheck,
+                                   Runnable onReload) {
+        return new AceLibApi(version, platform, capability, worldService, guiService,
+            displayService, externalService, bedrockService, commandCatalog,
+            readyCheck, onReload);
     }
 
     /**
@@ -359,6 +454,7 @@ public final class AceLibApi {
         return new AceLibApi(
             version, platform, capability, worldService,
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(), readyCheck, onReload
@@ -374,7 +470,7 @@ public final class AceLibApi {
      * 請改用 7 參數版本。</p>
      *
      * @deprecated 推薦改用 7 參數版本。
- */
+     */
     @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
@@ -385,6 +481,7 @@ public final class AceLibApi {
             version, platform, capability,
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(), readyCheck, onReload
@@ -395,7 +492,7 @@ public final class AceLibApi {
      * 已啟用狀態的 instance（4 參數舊版簽章；為相容既有內部呼叫而保留）。
      *
      * @deprecated 推薦改用 7 參數版本。
- */
+     */
     @Deprecated
     public static AceLibApi ready(String version,
                                    Platform platform,
@@ -406,6 +503,7 @@ public final class AceLibApi {
             PlatformCapability.forPlatform(platform),
             new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY),
             GuiService.forUnavailable(GuiErrorCode.NOT_READY),
+            DisplayService.forUnavailable(DisplayErrorCode.NOT_READY),
             ExternalIntegrationService.forUnavailable(ExternalIntegrationService.NOT_READY),
             BedrockService.forUnavailable(BedrockService.NOT_READY),
             CommandCatalog.forUnavailable(), readyCheck, onReload
@@ -476,6 +574,27 @@ public final class AceLibApi {
  */
     public GuiService getGuiService() {
         return guiService;
+    }
+
+    /**
+     * 取得對外 {@link DisplayService} facade（canonical public API）。
+     *
+     * <p>永不為 null：</p>
+     * <ul>
+     *   <li>未啟用時回傳 {@code NOT_READY} unavailable facade（每次操作回
+     *       {@code FAILED + ACELIB-DISP-001}）</li>
+     *   <li>已啟用且 plugin 尚未 disable 時回傳實際 {@code DisplayServiceImpl}</li>
+     *   <li>已 disable 時回傳 {@code SHUTDOWN} unavailable facade（每次操作回
+     *       {@code FAILED + ACELIB-DISP-002}）</li>
+     * </ul>
+     *
+     * <p>後續插件可放心呼叫所有方法，無需 null 判斷。</p>
+     *
+     * @return 永不為 null 的 {@link DisplayService}
+     * @since 1.4.0
+     */
+    public DisplayService getDisplayService() {
+        return displayService;
     }
 
     /**

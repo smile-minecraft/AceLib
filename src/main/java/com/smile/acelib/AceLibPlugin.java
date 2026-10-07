@@ -27,6 +27,9 @@ import com.smile.acelib.external.PermissionProvider;
 import com.smile.acelib.external.PlaceholderApiIntegrationAdapter;
 import com.smile.acelib.external.PlaceholderProvider;
 import com.smile.acelib.external.VaultIntegrationAdapter;
+import com.smile.acelib.display.DisplayErrorCode;
+import com.smile.acelib.display.DisplayService;
+import com.smile.acelib.display.DisplayServiceControl;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiScopes;
 import com.smile.acelib.gui.GuiService;
@@ -251,6 +254,23 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private volatile org.bukkit.event.Listener guiListener;
     private volatile boolean guiListenerRegistered;
+    /**
+     * 顯示 service facade（AceLib 自身擁有的實例）。
+     *
+     * <p>於 {@link #bindDisplayService(Server)} 建立並透過
+     * {@link #unbindDisplayService()} shutdown。onEnable 之前若被取得，
+     * 一律回 unavailable facade
+     * （{@code ACELIB-DISP-001}）。reload 期間以 commit-or-rollback 語意
+     * 同步重建。退服清理經 {@link #displayQuitListener} 委派
+     * {@code handlePlayerQuit}。</p>
+     */
+    private volatile DisplayService displayService;
+    /**
+     * 顯示退服清理 listener；註冊延後到 {@link #onPluginReady()}
+     *（比照 GUI listener 模式）。reload 時同步重建。
+     */
+    private volatile org.bukkit.event.Listener displayQuitListener;
+    private volatile boolean displayQuitListenerRegistered;
 
     /**
      * 外部插件整合服務 facade。
@@ -353,6 +373,8 @@ public class AceLibPlugin extends JavaPlugin {
         this.worldService = new WorldServiceUnavailableImpl(WorldErrorCode.NOT_READY);
         // guiService 的 NOT_READY unavailable facade；於 onEnable 後被 bindGuiService() 替換。
         this.guiService = GuiService.forUnavailable(GuiErrorCode.NOT_READY);
+        // displayService 的 NOT_READY unavailable facade；於 onEnable 後被 bindDisplayService() 替換。
+        this.displayService = DisplayService.forUnavailable(DisplayErrorCode.NOT_READY);
         // bedrockService 的 NOT_READY unavailable facade；於 onEnable 後被 bindBedrockService() 替換。
         this.bedrockService = BedrockService.forUnavailable(BedrockService.NOT_READY);
         // commandCatalog 的 unavailable 退回實例；於 onEnable 後被 bindCommandCatalog() 替換。
@@ -477,6 +499,9 @@ public class AceLibPlugin extends JavaPlugin {
         // 建立 GUI 服務（world 之後），並註冊 listener。
         bindGuiService(s);
 
+        // 建立顯示服務（GUI 之後），退服清理 listener 註冊延後到 onPluginReady。
+        bindDisplayService(s);
+
         // 建立外部整合服務（world/gui 之後），並向 diagnostics 註冊 integration 模組狀態。
         bindExternalService(s);
 
@@ -496,6 +521,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.externalService,
             this.bedrockService,
             this.commandCatalog,
+            this.displayService,
             () -> ready,
             () -> reload()
         );
@@ -595,6 +621,9 @@ public class AceLibPlugin extends JavaPlugin {
         // GUI 服務 shutdown（清除 listener + 移除所有 session）。
         unbindGuiService();
 
+        // 顯示服務 shutdown（清除 quit listener + 移除自身追蹤的全部顯示）。
+        unbindDisplayService();
+
         // 外部整合服務 shutdown（釋放 registry 資源）並解除 integration 模組狀態註冊。
         unbindExternalService();
 
@@ -605,7 +634,8 @@ public class AceLibPlugin extends JavaPlugin {
         this.server = null;
         this.platformDetector = null;
         // 保留 SHUTDOWN worldService 與 guiService reference，避免 double-fork 既有 contract。
-        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog);
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog,
+            this.displayService);
         // 已持有 provider 的呼叫端改讀 shutdown facade（與 plugin.getApi() 一致），
         // 再清除 plugin 端 reference 協助 GC。
         updateApiProvider(this.api);
@@ -1130,6 +1160,7 @@ public class AceLibPlugin extends JavaPlugin {
         // 若後續 bind 拋錯，既有 caller 讀到的狀態仍可判斷。
         unbindWorldService();
         unbindGuiService();
+        unbindDisplayService();
         // 先 commit 新 scheduler 至 this.scheduler，再 bind GUI service。
         // 順序理由：bindGuiService() 內部讀取 this.scheduler 來建立 SafeSchedulerPlayerContextExecutor，
         // 若 scheduler 仍指向 Phase A 已 disabled 的舊 scheduler，新 GUI service 會
@@ -1141,6 +1172,9 @@ public class AceLibPlugin extends JavaPlugin {
         // reload 成功後重新建立 GUI 服務（既有 guiService 已 shutdown）。
         // 必須在 this.scheduler = newScheduler 之後呼叫。
         bindGuiService(this.server);
+        // reload 成功後重新建立顯示服務（既有 displayService 已 shutdown）。
+        // 必須在 this.scheduler = newScheduler 之後呼叫。
+        bindDisplayService(this.server);
 
         // 在線玩家重接：舊服務 shutdown 已把 dirty flush 回 store，
         // 新服務 registry 為空；逐一重建 session 並等待載入完成，
@@ -1156,6 +1190,7 @@ public class AceLibPlugin extends JavaPlugin {
             this.externalService,
             this.bedrockService,
             this.commandCatalog,
+            this.displayService,
             () -> ready,
             () -> reload()
         );
@@ -1426,12 +1461,14 @@ public class AceLibPlugin extends JavaPlugin {
         // 6. 其餘服務 shutdown + SHUTDOWN facade 替換（內部已 try/catch）
         try { unbindWorldService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): world unbind failed (ignored): " + t); }
         try { unbindGuiService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): gui unbind failed (ignored): " + t); }
+        try { unbindDisplayService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): display unbind failed (ignored): " + t); }
         try { unbindExternalService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): external unbind failed (ignored): " + t); }
         try { unbindBedrockService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): bedrock unbind failed (ignored): " + t); }
 
         // 7. 切換 cached facade 為 shutdown，並讓已持有 provider 的呼叫端讀到 shutdown 語意
         //    （與 onDisable 末尾一致：updateApiProvider 更新 provider 內部快照，再清 reference）。
-        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog);
+        this.api = AceLibApi.shutDown(this.worldService, this.guiService, this.commandCatalog,
+            this.displayService);
         updateApiProvider(this.api);
         this.apiProvider = null;
 
@@ -2179,6 +2216,87 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     /**
+     * 建立並綁定顯示服務。
+     *
+     * <p>production 必須走 SafeScheduler：玩家操作派送到玩家上下文、
+     * 全息字生成派送到位置上下文、實體操作派送到實體上下文。
+     * quit 清理 listener 註冊延後到 {@link #onPluginReady()}
+     * （避免 Bukkit 在 plugin is enabled 之前 allow register）。</p>
+     *
+     * <p>既有 {@code this.displayService} 若仍是 NOT_READY unavailable facade，
+     * 直接覆寫；reload 路徑先經 {@link #unbindDisplayService()} shutdown 舊 impl
+     * 再呼叫本方法重建，避免舊 impl 殘留 READY。</p>
+     *
+     * @param server 當前 Bukkit/Paper/Folia server；不可為 null
+     */
+    private void bindDisplayService(Server server) {
+        Objects.requireNonNull(server, "server");
+        DisplayService newService = DisplayService.forProduction(this, this.scheduler);
+        this.displayService = newService;
+        this.displayQuitListener = new DisplayQuitListener(newService);
+        this.displayQuitListenerRegistered = false;
+        logFine("display service bound to server=" + server.getName());
+    }
+
+    /**
+     * 解除並停用顯示服務。
+     *
+     * <p>解除 quit listener 註冊，然後經內部生命週期停用現有服務
+     * （清除自身追蹤的全部顯示，具冪等性），最後把
+     * {@code this.displayService} 替換為 {@code SHUTDOWN} unavailable facade。
+     * 這個替換保證既有 caller 在 reload 後繼續讀到「服務已停用」的訊號，
+     * 也保證對外 facade 永不為 null。不觸及其他 plugin 的顯示。</p>
+     */
+    private void unbindDisplayService() {
+        org.bukkit.event.Listener oldListener = this.displayQuitListener;
+        if (oldListener != null) {
+            try {
+                HandlerList.unregisterAll(oldListener);
+            } catch (Throwable t) {
+                logFine("displayQuitListener unregister failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.displayQuitListener = null;
+        this.displayQuitListenerRegistered = false;
+        DisplayService old = this.displayService;
+        if (old instanceof DisplayServiceControl control) {
+            try {
+                control.shutdownService();
+            } catch (Throwable t) {
+                logFine("displayService.shutdownService failed during unbind (ignored): "
+                    + t.getMessage());
+            }
+        }
+        this.displayService = DisplayService.forUnavailable(DisplayErrorCode.SHUTDOWN);
+    }
+
+    /**
+     * AceLib 自身顯示實例的退服清理 listener（MONITOR 觀察，不取消亦不修改事件）。
+     *
+     * <p>只清理 AceLib 自身 {@link DisplayService} 追蹤的該玩家顯示，
+     * 不碰其他 plugin 的資源。分派永不拋例外，不中斷其他 listener。</p>
+     */
+    private final class DisplayQuitListener implements Listener {
+
+        private final DisplayService owned;
+
+        DisplayQuitListener(DisplayService owned) {
+            this.owned = Objects.requireNonNull(owned, "owned");
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        void onPlayerQuit(PlayerQuitEvent event) {
+            try {
+                owned.handlePlayerQuit(event == null ? null
+                    : event.getPlayer().getUniqueId());
+            } catch (Throwable t) {
+                logFine("display quit cleanup failed (ignored): " + t.getMessage());
+            }
+        }
+    }
+
+    /**
      * 建立並綁定外部整合服務，並向 diagnostics 註冊 integration 模組狀態。
      *
      * <p>於 onEnable / reload commit 階段呼叫，建立 {@link IntegrationRegistry} 並註冊四個
@@ -2343,6 +2461,10 @@ public class AceLibPlugin extends JavaPlugin {
             server.getPluginManager().registerEvents(guiListener, this);
             guiListenerRegistered = true;
         }
+        if (!displayQuitListenerRegistered && displayQuitListener != null) {
+            server.getPluginManager().registerEvents(displayQuitListener, this);
+            displayQuitListenerRegistered = true;
+        }
         if (!catalogDisableListenerRegistered && catalogDisableListener != null) {
             server.getPluginManager().registerEvents(catalogDisableListener, this);
             catalogDisableListenerRegistered = true;
@@ -2368,6 +2490,7 @@ public class AceLibPlugin extends JavaPlugin {
         }
         registerOneForTest(playerLifecycleListener);
         registerOneForTest(guiListener);
+        registerOneForTest(displayQuitListener);
         if (!catalogDisableListenerRegistered) {
             registerOneForTest(catalogDisableListener);
         }
@@ -2397,6 +2520,9 @@ public class AceLibPlugin extends JavaPlugin {
         }
         if (listener == guiListener) {
             guiListenerRegistered = true;
+        }
+        if (listener == displayQuitListener) {
+            displayQuitListenerRegistered = true;
         }
         if (listener == catalogDisableListener) {
             catalogDisableListenerRegistered = true;

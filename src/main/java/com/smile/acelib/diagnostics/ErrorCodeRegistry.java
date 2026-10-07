@@ -143,6 +143,21 @@ public final class ErrorCodeRegistry {
             "表單服務已停用"));
         m.put("ACELIB-FORM-003", new ErrorCodeInfo(ErrorCategory.FORM,
             "按鈕圖示轉換失敗，已退回純文字"));
+        // DISP（每玩家顯示；常數表見 com.smile.acelib.display.DisplayErrorCode）
+        m.put("ACELIB-DISP-001", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "顯示服務尚未啟用"));
+        m.put("ACELIB-DISP-002", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "顯示服務已停用"));
+        m.put("ACELIB-DISP-003", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "顯示輸入不合法"));
+        m.put("ACELIB-DISP-004", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "目標玩家已離線"));
+        m.put("ACELIB-DISP-005", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "目標全息字實體已失效"));
+        m.put("ACELIB-DISP-006", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "目標 chunk 尚未載入"));
+        m.put("ACELIB-DISP-007", new ErrorCodeInfo(ErrorCategory.DISPLAY,
+            "擁有者上下文內執行失敗"));
         KNOWN = Map.copyOf(m);
     }
 

@@ -12,10 +12,10 @@
 
 ## 統計
 
-- 總數：211 個 public 頂層型別
-- Supported：162
+- 總數：217 個 public 頂層型別
+- Supported：167
 - SPI：24
-- Internal：25
+- Internal：26
 
 ## 分類明細
 
@@ -146,6 +146,17 @@
 | `com.smile.acelib.diagnostics.ModuleStatus` | enum | Supported | 模組狀態列舉；v1 凍結常數順序。 |  | ModuleState；DiagnosticsService。 |
 | `com.smile.acelib.diagnostics.ThrottleDecision` | record | Supported | 節流決策值型別；v1 穩定。 |  | ErrorThrottler。 |
 | `com.smile.acelib.diagnostics.ThrottleStats` | record | Supported | 節流統計值型別；v1 穩定。 |  | ErrorThrottler。 |
+
+### com.smile.acelib.display
+
+| Type | Kind | Classification | Reason | Retention | Main callers |
+| --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.display.DisplayErrorCode` | class | Supported | 每玩家顯示模組錯誤碼常數（ACELIB-DISP-*）；與錯誤登錄表同步。 |  | DisplayService；DisplayResult。 |
+| `com.smile.acelib.display.DisplayResult` | class | Supported | 顯示操作結果值型別，帶狀態、錯誤碼、診斷文字或全息字識別碼。 |  | DisplayService 各操作。 |
+| `com.smile.acelib.display.DisplayService` | interface | Supported | 每玩家計分板、BossBar 與位置型 TextDisplay 的公開 facade；封裝排程、可見性與生命週期清理。 |  | AceLibApi.getDisplayService；下游 plugin。 |
+| `com.smile.acelib.display.DisplayServiceControl` | interface | Internal | 顯示服務內部停用入口；下游不得直接依賴。 | AceLibPlugin（com.smile.acelib）跨 package 在 reload／disable 時停用 DisplayService；生命週期控制不是下游 API。 | AceLibPlugin 執行內部服務停用。 |
+| `com.smile.acelib.display.DisplayState` | enum | Supported | 顯示操作結果狀態（SUCCESS／ACCEPTED／REJECTED／FAILED）。 |  | DisplayResult。 |
+| `com.smile.acelib.display.Hologram` | class | Supported | 全息字不可變快照，提供識別碼、位置與文字，不暴露 Bukkit 實體。 |  | DisplayService.findHologram。 |
 
 ### com.smile.acelib.event
 

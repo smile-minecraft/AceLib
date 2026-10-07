@@ -6,6 +6,13 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 1.4.0-SNAPSHOT 為開發中的預覽版本，尚未發布：GitHub Release 尚未建立，JitPack 尚未提供此版本的公開座標。下游在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0-SNAPSHOT`。已發布版本的取得方式（JitPack `com.github.smile-minecraft:AceLib:v1.3.1`、v1.3.1 GitHub Release）維持不變，見下方 `1.3.1` 節。
 
+### 本階段內容（每玩家顯示）
+
+- 新增 `DisplayService`：每位玩家有獨立計分板與 BossBar，另提供固定位置的原生 `TextDisplay` 全息字；呼叫結果區分已完成、已接受派送、拒絕與失敗。
+- 顯示更新依目標玩家、位置或實體的擁有者上下文派送。計分板清理只在玩家仍使用本服務建立的計分板時還原主板，不覆蓋其他 plugin 後來設定的計分板；shutdown 取消未執行的變更。
+- 全息字建立時預設不可見且不持久化；關閉時的實體清理走原生 entity scheduler，避免被 SafeScheduler 的停用取消路徑攔截。disable 時平台不保證已排程 callback 執行，限制與 Paper／Folia 實機探針見[顯示模組頁](docs/modules/display.md)。
+- 新增錯誤碼 `ACELIB-DISP-001`～`ACELIB-DISP-007`。公開 API surface 與簽章基準已同步；MockBukkit 4.113.1 的 `TextDisplayMock` 未實作 `setVisibleByDefault`，因此後端安全預設由 seam 測試保護、真實顯示行為由實機探針驗證。
+
 ### 本階段內容（測試套件與測試 JAR）
 
 - 以 Gradle `java-test-fixtures` 在單一模組內交付下游單元測試輔助：可控制時鐘（`FakeClock`）、可控制排程與實體退休事件（`FakeSafeScheduler`）、GUI 與表單標準假實作（`FakeGuiService`／`FakeFormService`，可模擬過時回應、重複回應、關閉失敗）、Provider 缺席／停用／重新取得輔助（`FakeExternalIntegrationService`），以及真實作與假實作共用的服務契約測試。

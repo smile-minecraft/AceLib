@@ -68,6 +68,9 @@ public enum ErrorCategory {
     /** 表單服務相關錯誤（{@code ACELIB-FORM-*}）。 */
     FORM("FORM"),
 
+    /** 每玩家顯示相關錯誤（{@code ACELIB-DISP-*}）。 */
+    DISPLAY("DISP"),
+
     /** 診斷／除錯模組自身錯誤（{@code ACELIB-DBG-*}）。 */
     DEBUG("DBG"),
 
