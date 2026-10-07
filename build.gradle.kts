@@ -132,6 +132,15 @@ dependencies {
     // 版本區分子 artifact（mockbukkit-v26.1.2 內含 paper-api 26.1.2）。
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.1.2:4.113.1")
 
+    // 逐玩家儲存的真 SQLite 驗證（SqlitePlayerDataStore / 轉換 / 增量寫入 / autosave）。
+    // 僅測試依賴：運行期 driver 由 plugin.yml `libraries:` 在伺服器端下載（見 plugin.yml），
+    // 不進 runtime classpath、不進 POM，也不改 t01 收口的 runtime JAR 產物閘門。
+    // 版本與 plugin.yml libraries 固定一致，避免測到不同 driver 行為。
+    // isTransitive=false：sqlite-jdbc 的 POM 帶 junit 等測試期依賴，與本專案
+    // 已鎖定的 junit-bom 5.11.0 無關；只取 driver jar 本體，與其他 compileOnly
+    // 依賴的處理方式一致。
+    testImplementation("org.xerial:sqlite-jdbc:3.50.3.0") { isTransitive = false }
+
     // 測試輔助 fixtures（下游單元測試用假實作與服務契約，需隨 test-fixtures jar 發布）：
     // 只用公開 API＋Bukkit 型別，不依賴 MockBukkit／Mockito，確保下游輕量引用。
     // 契約基底含 JUnit 註解，故 junit-jupiter 走 testFixturesApi（隨 variant 傳遞）；

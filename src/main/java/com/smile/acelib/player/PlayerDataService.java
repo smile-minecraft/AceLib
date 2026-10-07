@@ -3,21 +3,28 @@ package com.smile.acelib.player;
 import com.smile.acelib.data.DataStore;
 import com.smile.acelib.data.DataStoreException;
 import com.smile.acelib.data.MemoryRecord;
+import com.smile.acelib.data.PlayerDataStore;
 import com.smile.acelib.data.Record;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 玩家資料服務。
@@ -97,16 +106,66 @@ public final class PlayerDataService {
     /** {@link #waitForState} 的輪詢間隔。 */
     private static final long WAIT_FOR_STATE_POLL_MS = 10L;
 
-    private final DataStore store;
+    /** 逐玩家儲存後端；1.4.0 主要路徑。與 {@link #legacyStore} 互斥。 */
+    private final PlayerDataStore playerStore;
+    /**
+     * 舊版整棵 record tree 儲存後端；僅為相容既有 {@code DataStore} 建構子而保留。
+     * 與 {@link #playerStore} 互斥：兩者恰有一個非 null。
+     */
+    private final DataStore legacyStore;
     private final Executor ioExecutor;
+    /** 定期保存週期（毫秒）。 */
+    private final long saveIntervalMillis;
+    /**
+     * 定期保存排程器；舊版 {@link DataStore} 建構子不啟用（為 null）。
+     *
+     * <p>獨立於 {@link #serialStoreExecutor}：定時觸發不應佔用儲存序列化通道。</p>
+     */
+    private final ScheduledExecutorService autosaveExecutor;
+    /** 定期保存排程句柄；{@link #shutdown()} 時取消。 */
+    private final ScheduledFuture<?> autosaveFuture;
+    /**
+     * 資料就緒 listener；每次 {@link #addReadyListener} 加一項，解除時移除。
+     *
+     * <p>用 {@link CopyOnWriteArrayList}：讀取發生在 I/O executor，註冊／解除
+     * 來自任意執行緒（多半是主執行緒），避免併發修改例外。</p>
+     */
+    private final CopyOnWriteArrayList<ReadyListenerEntry> readyListeners =
+        new CopyOnWriteArrayList<>();
     /**
      * 內部 per-store 序列 executor — 所有 {@code store.root()} / {@code store.save()}
      * 存取皆透過此單執行緒，確保對非 thread-safe 的 {@link DataStore}
      * 內部 map 不會發生 race。
      */
     private final java.util.concurrent.ExecutorService serialStoreExecutor;
-    /** 內部 executor 的 graceful shutdown timeout。 */
+    /**
+     * 每位玩家「上次成功落盤的欄位內容」，作為增量寫入的差分基準。
+     *
+     * <p>只在 {@link #serialStoreExecutor} 上讀寫，因此不需要額外同步；
+     * 玩家離線並成功保存後移除，避免快取無限增長。</p>
+     */
+    private final ConcurrentMap<UUID, Map<String, Object>> persistedFields =
+        new ConcurrentHashMap<>();
+    /** 內部 executor 的 graceful shutdown timeout；同時是 flush 等待的預設上限。 */
     private static final long SERIAL_EXECUTOR_TERMINATION_MS = 2_000L;
+    /** 單次 store 讀取（join 載入、離線讀取）的等待上限。 */
+    private static final long LOAD_TIMEOUT_MS = 5_000L;
+    /**
+     * 單批 flush 的等待上限（毫秒）。
+     *
+     * <p>逾時不等於保存成功：{@link #runFlushBatch} 會取消任務並以
+     * {@code ACELIB-PLAYER-008} 回報，dirty 全數保留供下次重試。預設值取
+     * {@link #SERIAL_EXECUTOR_TERMINATION_MS}，讓 flush 與 executor 終止有同一個
+     * 時間界；測試可注入更短的上限以取得決定性的逾時行為。</p>
+     */
+    private final long flushTimeoutMillis;
+    /**
+     * 定期保存預設週期（毫秒）。
+     *
+     * <p>60 秒是「伺服器異常結束時最多遺失一個保存週期」與寫入量之間的取捨：
+     * 週期越短遺失越少，但每個週期都會產生交易。</p>
+     */
+    public static final long DEFAULT_SAVE_INTERVAL_MS = 60_000L;
     private final PlayerSessionRegistry registry = new PlayerSessionRegistry();
     /**
      * 玩家資料快取：uuid → PlayerRecordView（持有 LockedPlayerRecord + dirty flag）。
@@ -154,33 +213,123 @@ public final class PlayerDataService {
      * @throws PlayerStateException     {@code store} 未初始化（{@code ACELIB-PLAYER-006}）
      */
     public PlayerDataService(DataStore store, Executor ioExecutor) {
-        this.store = Objects.requireNonNull(store, "store");
+        this.legacyStore = Objects.requireNonNull(store, "store");
+        this.playerStore = null;
         this.ioExecutor = Objects.requireNonNull(ioExecutor, "ioExecutor");
         if (!store.isInitialized()) {
             throw new PlayerStateException("ACELIB-PLAYER-006",
                 "DataStore must be initialized before constructing PlayerDataService; "
                     + "name=" + store.name() + ", isInitialized=" + store.isInitialized());
         }
-        this.serialStoreExecutor = createSerialStoreExecutor(store);
+        this.serialStoreExecutor = createSerialStoreExecutor(store.name());
+        this.autosaveExecutor = null;
+        this.autosaveFuture = null;
+        this.saveIntervalMillis = DEFAULT_SAVE_INTERVAL_MS;
+        this.flushTimeoutMillis = SERIAL_EXECUTOR_TERMINATION_MS;
+    }
+
+    /**
+     * 以逐玩家 store 建立服務，並啟用定期保存。
+     *
+     * <p>這是 1.4.0 的主要建構路徑：資料以「一位玩家一組欄位」落盤，
+     * 定期保存只寫有變動的欄位。</p>
+     *
+     * @param playerStore       已 {@code init()} 的 {@link PlayerDataStore}；不可為 null
+     * @param ioExecutor        I/O 用的 executor；不可為 null，且<strong>不會被本服務關閉</strong>
+     * @param saveIntervalMillis 定期保存週期（毫秒）；必須為正數
+     * @throws NullPointerException     任何參數為 null
+     * @throws IllegalArgumentException {@code saveIntervalMillis} 非正數
+     * @throws PlayerStateException     {@code playerStore} 尚未 {@code init()}
+     *                              （{@code ACELIB-PLAYER-006}）
+     */
+    public PlayerDataService(PlayerDataStore playerStore, Executor ioExecutor,
+            long saveIntervalMillis) {
+        this(playerStore, ioExecutor, saveIntervalMillis,
+            SERIAL_EXECUTOR_TERMINATION_MS);
+    }
+
+    /**
+     * 以逐玩家 store 建立服務，啟用定期保存並自訂單批 flush 的等待上限。
+     *
+     * <p>逾時語意與三參數建構子相同：逾時以 {@code ACELIB-PLAYER-008} 回報且
+     * <strong>不等於保存成功</strong>，dirty 保留供下次重試。</p>
+     *
+     * @param playerStore       已 {@code init()} 的 {@link PlayerDataStore}；不可為 null
+     * @param ioExecutor        I/O 用的 executor；不可為 null，且<strong>不會被本服務關閉</strong>
+     * @param saveIntervalMillis 定期保存週期（毫秒）；必須為正數
+     * @param flushTimeoutMillis 單批 flush 的等待上限（毫秒）；必須為正數
+     * @throws NullPointerException     任何參數為 null
+     * @throws IllegalArgumentException {@code saveIntervalMillis} 或
+     *                                  {@code flushTimeoutMillis} 非正數
+     * @throws PlayerStateException     {@code playerStore} 尚未 {@code init()}
+     *                              （{@code ACELIB-PLAYER-006}）
+     * @since 1.4.0
+     */
+    public PlayerDataService(PlayerDataStore playerStore, Executor ioExecutor,
+            long saveIntervalMillis, long flushTimeoutMillis) {
+        this.playerStore = Objects.requireNonNull(playerStore, "playerStore");
+        this.legacyStore = null;
+        this.ioExecutor = Objects.requireNonNull(ioExecutor, "ioExecutor");
+        if (!playerStore.isInitialized()) {
+            throw new PlayerStateException("ACELIB-PLAYER-006",
+                "PlayerDataStore must be initialized before constructing PlayerDataService; "
+                    + "name=" + playerStore.name()
+                    + ", isInitialized=" + playerStore.isInitialized());
+        }
+        if (saveIntervalMillis <= 0) {
+            throw new IllegalArgumentException(
+                "saveIntervalMillis 必須為正數：" + saveIntervalMillis);
+        }
+        if (flushTimeoutMillis <= 0) {
+            throw new IllegalArgumentException(
+                "flushTimeoutMillis 必須為正數：" + flushTimeoutMillis);
+        }
+        this.saveIntervalMillis = saveIntervalMillis;
+        this.flushTimeoutMillis = flushTimeoutMillis;
+        this.serialStoreExecutor = createSerialStoreExecutor(playerStore.name());
+        this.autosaveExecutor = createAutosaveExecutor();
+        this.autosaveFuture = scheduleAutosave(saveIntervalMillis);
     }
 
     /**
      * 建立 per-store 序列 executor — 單一 daemon thread，名稱含 store name 以利除錯。
      */
-    private static java.util.concurrent.ExecutorService createSerialStoreExecutor(DataStore store) {
-        final String storeName = store.name();
+    private static java.util.concurrent.ExecutorService createSerialStoreExecutor(
+            String storeName) {
+        final String name = storeName;
         ThreadFactory tf = new ThreadFactory() {
             private final AtomicLong serial = new AtomicLong(0);
 
             @Override
             public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "acelib-player-store-serial-" + storeName + "-"
+                Thread t = new Thread(r, "acelib-player-store-serial-" + name + "-"
                     + serial.incrementAndGet());
                 t.setDaemon(true);
                 return t;
             }
         };
         return Executors.newSingleThreadExecutor(tf);
+    }
+
+    /**
+     * 建立定期保存用的排程器 — 單一 daemon thread。
+     *
+     * <p>獨立於 serial store executor：定時觸發本身不應佔用儲存序列化通道，
+     * 避免排程延遲時把儲存工作堵住。</p>
+     */
+    private static ScheduledExecutorService createAutosaveExecutor() {
+        ThreadFactory tf = runnable -> {
+            Thread thread = new Thread(runnable, "acelib-player-autosave");
+            thread.setDaemon(true);
+            return thread;
+        };
+        return Executors.newSingleThreadScheduledExecutor(tf);
+    }
+
+    private ScheduledFuture<?> scheduleAutosave(long saveIntervalMillis) {
+        return autosaveExecutor.scheduleWithFixedDelay(
+            () -> runAutosaveCycle(), saveIntervalMillis, saveIntervalMillis,
+            TimeUnit.MILLISECONDS);
     }
 
     // -----------------------------------------------------------------
@@ -318,6 +467,9 @@ public final class PlayerDataService {
                 }
                 mergeRetainedDirty(uuid, view);
                 session.transitionTo(PlayerSessionState.READY);
+                // 資料就緒通知排在 READY 之後：listener 觀察 session 狀態時看到的
+                // 是已就緒的 session。通知失敗只記錄、不影響 session 與載入結果。
+                notifyDataReady(uuid, view);
                 future.complete(null);
             } catch (Throwable t) {
                 // 載入失敗：標記 session ENDED 並移除
@@ -403,7 +555,7 @@ public final class PlayerDataService {
                 }
                 view = records.remove(uuid);
                 try {
-                    if (view != null && view.dirty.get()) {
+                    if (view != null && view.dirty()) {
                         // 委派給 serialStoreExecutor 同步執行 root()/save()
                         // （saveToStoreSerial 內部已包含 store.save()，
                         //  故不需在外部再呼叫一次 — 否則會在 ioExecutor 執行
@@ -438,6 +590,9 @@ public final class PlayerDataService {
                 session.transitionTo(PlayerSessionState.ENDED);
                 registry.endSession(uuid);
                 pendingQuits.remove(uuid, future);
+                // 玩家已離線且資料確實落盤：差分基準不再需要，移除避免快取
+                // 隨累積玩家數無限增長。重登時會重新從 store 載入基準。
+                persistedFields.remove(uuid);
                 future.complete(null);
             } catch (Throwable t) {
                 // 任何其他例外：仍需結束 session 避免殘留
@@ -493,7 +648,7 @@ public final class PlayerDataService {
             throw new PlayerStateException("ACELIB-PLAYER-005",
                 "no active session for uuid=" + uuid + " (cannot mark dirty)");
         }
-        view.dirty.set(true);
+        view.markDirty();
     }
 
     /**
@@ -643,7 +798,7 @@ public final class PlayerDataService {
      */
     private void mergeRetainedDirty(UUID uuid, PlayerRecordView fresh) {
         records.merge(uuid, fresh, (orphan, loaded) -> {
-            if (orphan.dirty.get()) {
+            if (orphan.dirty()) {
                 Map<String, Object> retained = orphan.record.snapshotLocked();
                 for (String key : loaded.record.keys()) {
                     if (!retained.containsKey(key)) {
@@ -653,7 +808,7 @@ public final class PlayerDataService {
                 for (Map.Entry<String, Object> entry : retained.entrySet()) {
                     loaded.record.set(entry.getKey(), entry.getValue());
                 }
-                loaded.dirty.set(true);
+                loaded.markDirty();
             }
             return loaded;
         });
@@ -729,8 +884,33 @@ public final class PlayerDataService {
         // 3. 只有成功保存後才清除 session registry 與 records map。
         registry.clear();
         records.clear();
-        // 4. graceful 終止 serialStoreExecutor
+        // 4. 停止定期保存排程，再終止 serialStoreExecutor：
+        //    順序不可顛倒，否則排程可能在 executor 終止後再投遞任務。
+        stopAutosaveScheduler();
         shutdownSerialExecutor();
+    }
+
+    /**
+     * 停止內部定期保存排程（冪等；未啟用定期保存時為 no-op）。
+     */
+    private void stopAutosaveScheduler() {
+        if (autosaveExecutor == null) {
+            return;
+        }
+        ScheduledFuture<?> pending = autosaveFuture;
+        if (pending != null) {
+            pending.cancel(false);
+        }
+        autosaveExecutor.shutdown();
+        try {
+            if (!autosaveExecutor.awaitTermination(
+                    SERIAL_EXECUTOR_TERMINATION_MS, TimeUnit.MILLISECONDS)) {
+                autosaveExecutor.shutdownNow();
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            autosaveExecutor.shutdownNow();
+        }
     }
 
     /**
@@ -790,30 +970,63 @@ public final class PlayerDataService {
      */
     private void flushAllDirtySync() {
         // 快照 dirty record（避免 ConcurrentModification）
-        Map<UUID, PlayerRecordView> snapshot = new LinkedHashMap<>();
-        for (Map.Entry<UUID, PlayerRecordView> e : records.entrySet()) {
-            if (e.getValue().dirty.get()) {
-                snapshot.put(e.getKey(), e.getValue());
-            }
-        }
+        Map<UUID, PlayerRecordView> snapshot = dirtySnapshot();
         if (snapshot.isEmpty()) {
             return;
         }
-        // 同步委派給 serialStoreExecutor
+        runFlushBatch(snapshot, flushTimeoutMillis);
+    }
+
+    /**
+     * 快照目前所有有未落盤變更的玩家。
+     *
+     * @return uuid → view（僅含 dirty）
+     */
+    private Map<UUID, PlayerRecordView> dirtySnapshot() {
+        Map<UUID, PlayerRecordView> snapshot = new LinkedHashMap<>();
+        for (Map.Entry<UUID, PlayerRecordView> e : records.entrySet()) {
+            if (e.getValue().dirty()) {
+                snapshot.put(e.getKey(), e.getValue());
+            }
+        }
+        return snapshot;
+    }
+
+    /**
+     * 在 serial store executor 上保存整批，並在成功後推進已落盤序號。
+     *
+     * <p>逐玩家提交（{@link PlayerDataStore} 的每筆變更自成一交易），整批所有寫入
+     * 成功後才推進任何已落盤序號。任一玩家失敗時整個快照仍保持 dirty；已提交的
+     * 逐玩家 store 寫入會在重試時由差分基準收斂為 no-op，再確認整批保存。</p>
+     *
+     * @param snapshot 待保存的玩家
+     * @param timeoutMillis 等待上限
+     * @throws PlayerStateException 保存失敗（{@code ACELIB-PLAYER-003}）、
+     *                              逾時或中斷（{@code ACELIB-PLAYER-008}）
+     */
+    private void runFlushBatch(Map<UUID, PlayerRecordView> snapshot, long timeoutMillis) {
         Future<?> flush;
         try {
             flush = serialStoreExecutor.submit(() -> {
+                // 舊版 DataStore：先把整批寫進記憶體 tree，再呼叫一次 save() 落盤，
+                // 因此這裡只收集序號、不逐位 markSaved。
+                List<Map.Entry<UUID, Long>> written = new ArrayList<>();
                 for (Map.Entry<UUID, PlayerRecordView> e : snapshot.entrySet()) {
-                    saveToStoreInternal(e.getKey(), e.getValue());
+                    written.add(Map.entry(e.getKey(),
+                        writePlayerToStore(e.getKey(), e.getValue())));
                 }
-                store.save();
+                flushLegacyStoreIfNeeded();
+                // 確認落盤後才推進序號：save() 失敗時整批仍為 dirty，下次完整重寫。
+                for (Map.Entry<UUID, Long> entry : written) {
+                    snapshot.get(entry.getKey()).markSaved(entry.getValue());
+                }
             });
         } catch (RejectedExecutionException rejected) {
             throw flushFailure("ACELIB-PLAYER-008", snapshot,
                 "serial flush task rejected", rejected);
         }
         try {
-            flush.get(SERIAL_EXECUTOR_TERMINATION_MS, TimeUnit.MILLISECONDS);
+            flush.get(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (ExecutionException execution) {
             Throwable cause = execution.getCause() == null ? execution : execution.getCause();
             throw flushFailure("ACELIB-PLAYER-003", snapshot,
@@ -827,6 +1040,53 @@ public final class PlayerDataService {
             flush.cancel(true);
             throw flushFailure("ACELIB-PLAYER-008", snapshot,
                 "serial flush interrupted", interrupted);
+        }
+    }
+
+    /**
+     * 把單一玩家的資料寫進 store，回傳「快照當下」的變更序號。
+     *
+     * <p>本方法<strong>不</strong>推進已落盤序號：呼叫端必須在確認資料真的
+     * 落盤之後，才用回傳的序號呼叫 {@link PlayerRecordView#markSaved(long)}。
+     * 舊版 {@link DataStore} 要等 {@link #flushLegacyStoreIfNeeded()} 成功才算
+     * 落盤，提前 markSaved 會讓保存失敗的變更被當成已保存、永遠不再重試。</p>
+     *
+     * <p>必須在 {@link #serialStoreExecutor} 上呼叫。</p>
+     *
+     * @param uuid 玩家 UUID
+     * @param view 該玩家的資料視圖
+     * @return 寫入當下的 {@code changeSeq}，供稍後 {@code markSaved} 使用
+     */
+    private long writePlayerToStore(UUID uuid, PlayerRecordView view) {
+        long seqAtSnapshot = view.changeSeq.get();
+        saveToStoreInternal(uuid, view);
+        persistedFields.put(uuid, view.record.snapshotLocked());
+        return seqAtSnapshot;
+    }
+
+    /**
+     * 舊版 {@link DataStore} 的一次完整保存：寫入、落盤、確認成功後才標記已保存。
+     *
+     * <p>必須在 {@link #serialStoreExecutor} 上呼叫。</p>
+     *
+     * @param uuid 玩家 UUID
+     * @param view 該玩家的資料視圖
+     */
+    private void saveOnePlayer(UUID uuid, PlayerRecordView view) {
+        long seqAtSnapshot = writePlayerToStore(uuid, view);
+        // 逐玩家 store 的變更在 applyChanges 內自成一交易，這裡是 no-op；
+        // 舊版 DataStore 才是真正把整棵 tree 寫進檔案的步驟。
+        flushLegacyStoreIfNeeded();
+        view.markSaved(seqAtSnapshot);
+    }
+
+    /**
+     * 舊版 {@link DataStore} 路徑需要額外呼叫一次 {@code save()} 落盤整棵 tree；
+     * 逐玩家 store 的變更在 {@code applyChanges} 內自成一交易，不必再呼叫。
+     */
+    private void flushLegacyStoreIfNeeded() {
+        if (legacyStore != null) {
+            legacyStore.save();
         }
     }
 
@@ -881,10 +1141,8 @@ public final class PlayerDataService {
                     + "cannot save uuid=" + uuid);
         }
         try {
-            serialStoreExecutor.submit(() -> {
-                saveToStoreInternal(uuid, view);
-                store.save();
-            }).get(5, TimeUnit.SECONDS);
+            serialStoreExecutor.submit(() -> saveOnePlayer(uuid, view))
+                .get(5, TimeUnit.SECONDS);
         } catch (java.util.concurrent.ExecutionException ee) {
             Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
             if (cause instanceof RuntimeException re) {
@@ -934,8 +1192,16 @@ public final class PlayerDataService {
      * snapshot 共用同一把 lock。</p>
      */
     private PlayerRecordView loadFromStoreInternal(UUID uuid) {
+        if (playerStore != null) {
+            Optional<Record> stored = playerStore.load(uuid);
+            Map<String, Object> snapshot = copyToMap(stored);
+            // 剛從 store 讀出的內容就是「已落盤的基準」：預先填入差分基準，
+            // 讓第一次保存不必再讀一次 store。
+            persistedFields.put(uuid, new LinkedHashMap<>(snapshot));
+            return new PlayerRecordView(new LockedPlayerRecord(new MemoryRecord("", snapshot)));
+        }
         Map<String, Object> snapshot = new LinkedHashMap<>();
-        Record root = store.root();
+        Record root = legacyStore.root();
         Record playersNode = root.getRecord(PLAYER_ROOT, null);
         if (playersNode != null) {
             Object playerData = playersNode.get(uuid.toString());
@@ -959,9 +1225,286 @@ public final class PlayerDataService {
      * 取得，確保與 caller 正在進行的 mutate 操作互斥。</p>
      */
     private void saveToStoreInternal(UUID uuid, PlayerRecordView view) {
-        Record root = store.root();
-        Map<String, Object> snapshot = new LinkedHashMap<>(view.record.snapshotLocked());
+        Map<String, Object> snapshot = view.record.snapshotLocked();
+        if (playerStore != null) {
+            // 逐玩家 store：以快照差分只送變動欄位；值未變的欄位由 store 判斷後跳過。
+            List<PlayerDataStore.FieldChange> changes = diffAgainstPersisted(uuid, snapshot);
+            if (!changes.isEmpty()) {
+                playerStore.applyChanges(changes);
+            }
+            return;
+        }
+        Record root = legacyStore.root();
         root.set(PLAYER_ROOT + "." + uuid.toString(), snapshot);
+    }
+
+    /**
+     * 計算「目前快照」相對於「上次落盤內容」的欄位差分。
+     *
+     * <p>只送新增或值變了的欄位，以及需要移除的欄位；值相同的欄位完全不進批次，
+     * 因此不會在底層產生寫入。</p>
+     *
+     * @param uuid     玩家 UUID
+     * @param snapshot 目前快照（已於 record lock 下取得）
+     * @return 欄位變更清單；無變更時為空
+     */
+    private List<PlayerDataStore.FieldChange> diffAgainstPersisted(UUID uuid,
+            Map<String, Object> snapshot) {
+        Map<String, Object> persisted = persistedFields.get(uuid);
+        if (persisted == null) {
+            persisted = loadPersistedFields(uuid);
+        }
+        List<PlayerDataStore.FieldChange> changes = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
+            if (!Objects.deepEquals(persisted.get(entry.getKey()), entry.getValue())) {
+                changes.add(PlayerDataStore.FieldChange.upsert(
+                    uuid, entry.getKey(), entry.getValue()));
+            }
+        }
+        for (String field : persisted.keySet()) {
+            if (!snapshot.containsKey(field)) {
+                changes.add(PlayerDataStore.FieldChange.deletion(uuid, field));
+            }
+        }
+        return changes;
+    }
+
+    /**
+     * 讀出某位玩家目前在 store 中的欄位（作為差分基準）。
+     *
+     * <p>結果快取於 {@link #persistedFields}，並在該玩家保存成功後更新為新快照。</p>
+     */
+    private Map<String, Object> loadPersistedFields(UUID uuid) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        playerStore.load(uuid).ifPresent(record -> {
+            for (String field : record.keys()) {
+                fields.put(field, record.get(field));
+            }
+        });
+        return fields;
+    }
+
+    // -----------------------------------------------------------------
+    // 定期保存、離線讀取、資料就緒通知（1.4.0）
+    // -----------------------------------------------------------------
+
+    /**
+     * 立即執行一次定期保存，把所有有未落盤變更的玩家寫回 store。
+     *
+     * <p>定期排程本來會在每個保存週期自動呼叫；本方法讓呼叫端（測試、維運指令、
+     * 需要立即落盤的流程）能主動觸發同一條路徑。</p>
+     *
+     * <p><strong>成功語意</strong>：future 正常完成代表該次快照的所有玩家都已落盤，
+     * 且已落盤序號已推進。<strong>失敗或逾時不代表成功</strong>：失敗者與尚未處理的
+     * 玩家保留未落盤狀態，下次週期或重試會重寫。</p>
+     *
+     * @return 保存完成時完成的 future；失敗時以
+     *         {@link PlayerStateException}（{@code ACELIB-PLAYER-003}）／
+     *         {@link DataStoreException} 失敗完成，逾時為 {@code ACELIB-PLAYER-008}
+     * @throws NullPointerException 不會（無參數）
+     */
+    public CompletableFuture<Void> autosaveNow() {
+        Map<UUID, PlayerRecordView> snapshot = dirtySnapshot();
+        if (snapshot.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        inFlightOps.incrementAndGet();
+        // 實際保存發生在 serialStoreExecutor；這裡把「等待完成」放在呼叫端的
+        // I/O executor 上，讓子呼叫端可以在自己的執行緒 observe 結果。
+        try {
+            ioExecutor.execute(() -> {
+                try {
+                    runFlushBatch(snapshot, flushTimeoutMillis);
+                    future.complete(null);
+                } catch (Throwable failure) {
+                    future.completeExceptionally(failure);
+                } finally {
+                    inFlightOps.decrementAndGet();
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            inFlightOps.decrementAndGet();
+            future.completeExceptionally(flushFailure("ACELIB-PLAYER-008", snapshot,
+                "autosave dispatch rejected", rejected));
+        }
+        return future;
+    }
+
+    /**
+     * 讀取離線玩家的資料。
+     *
+     * <p>不需要該玩家有 active session；資料來自 store 的實際內容，
+     * 因此刪除過的欄位不會在此復活。</p>
+     *
+     * <p>讀取在內部 serial store executor 上執行（store 非 thread-safe），
+     * 呼叫端會同步等待結果；因此不應在 region 執行緒上呼叫長時間的讀取。</p>
+     *
+     * @param uuid 玩家 UUID；不可為 null
+     * @return 該玩家目前的資料；從未寫入過時為 empty
+     * @throws NullPointerException 當 {@code uuid} 為 null
+     * @throws PlayerStateException  服務已關閉（{@code ACELIB-PLAYER-007}）、
+     *                               內部 executor 已終止或讀取失敗
+     *                               （{@code ACELIB-PLAYER-008}）／
+     *                               {@code ACELIB-PLAYER-002}
+     */
+    public Optional<Record> getOfflineData(UUID uuid) {
+        Objects.requireNonNull(uuid, "uuid");
+        ensureNotShutdown();
+        if (playerStore == null) {
+            throw new PlayerStateException("ACELIB-PLAYER-006",
+                "getOfflineData requires a per-player PlayerDataStore; this service was "
+                    + "constructed with a legacy DataStore, which cannot read a player "
+                    + "without an active session");
+        }
+        if (serialExecutorTerminated.get()) {
+            throw new PlayerStateException("ACELIB-PLAYER-008",
+                "internal serial store executor has been terminated; "
+                    + "cannot read uuid=" + uuid);
+        }
+        try {
+            Callable<Optional<Record>> read = () -> playerStore.load(uuid)
+                .map(found -> (Record) new MemoryRecord("", toFieldMap(found)));
+            Optional<Record> loaded = serialStoreExecutor
+                .submit(read)
+                .get(LOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            return loaded;
+        } catch (ExecutionException ee) {
+            Throwable cause = ee.getCause() == null ? ee : ee.getCause();
+            throw new PlayerStateException("ACELIB-PLAYER-002",
+                "failed to read offline player data for uuid=" + uuid + ": "
+                    + cause.getMessage(), cause);
+        } catch (TimeoutException te) {
+            throw new PlayerStateException("ACELIB-PLAYER-008",
+                "offline read timed out for uuid=" + uuid);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new PlayerStateException("ACELIB-PLAYER-008",
+                "offline read interrupted for uuid=" + uuid);
+        }
+    }
+
+    /**
+     * 把 record 的頂層欄位拷貝成可獨立持有的 map。
+     *
+     * <p>回傳新 map：record 內部的 map 不得被當成差分基準直接共用，
+     * 否則後續對 record 的變更會回頭改寫「上次落盤的內容」。</p>
+     *
+     * @param record 來源 record；不可為 null
+     * @return 欄位名 → 值的新 map
+     */
+    private static Map<String, Object> toFieldMap(Record record) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        for (String field : record.keys()) {
+            fields.put(field, record.get(field));
+        }
+        return fields;
+    }
+
+    /**
+     * {@link #toFieldMap(Record)} 的 Optional 版本；無資料時回傳空 map。
+     *
+     * @param record 來源 record；不可為 null
+     * @return 欄位名 → 值的新 map；{@code record} 為 empty 時為空 map
+     */
+    private static Map<String, Object> copyToMap(Optional<Record> record) {
+        return record.map(PlayerDataService::toFieldMap).orElseGet(LinkedHashMap::new);
+    }
+
+    /**
+     * 註冊資料就緒 listener。
+     *
+     * <p>在玩家資料載入完成、session 進入 {@link PlayerSessionState#READY} 之後
+     * 呼叫一次；載入失敗時不呼叫。回呼在 I/O executor 上執行，要操作玩家或世界
+     * 必須再用安全排程送回正確上下文。</p>
+     *
+     * <p>為什麼不是 Bukkit Event：資料在 I/O 執行緒就緒，Paper 的同步 Event 須在
+     * 主執行緒 dispatch、Folia 須在玩家所屬 region dispatch，兩者都不適用。</p>
+     *
+     * @param listener listener；不可為 null
+     * @return 註冊 handle；{@link PlayerDataReadyListener.Registration#close()} 後不再收到通知
+     * @throws NullPointerException 當 {@code listener} 為 null
+     */
+    public PlayerDataReadyListener.Registration addReadyListener(
+            PlayerDataReadyListener listener) {
+        Objects.requireNonNull(listener, "listener");
+        ReadyListenerRegistration registration = new ReadyListenerRegistration();
+        readyListeners.add(new ReadyListenerEntry(listener, registration));
+        return new PlayerDataReadyListener.Registration() {
+            @Override
+            public void close() {
+                registration.close();
+                readyListeners.removeIf(
+                    entry -> entry.registration() == registration);
+            }
+
+            @Override
+            public boolean isClosed() {
+                return registration.isClosed();
+            }
+        };
+    }
+
+    /**
+     * 依序通知資料就緒 listener。
+     *
+     * <p>單一 listener 失敗只記錄、不中斷其餘 listener，也不影響 session 狀態。</p>
+     */
+    private void notifyDataReady(UUID uuid, PlayerRecordView view) {
+        for (ReadyListenerEntry entry : readyListeners) {
+            if (entry.registration().isClosed()) {
+                continue;
+            }
+            try {
+                entry.listener().onPlayerDataReady(uuid, view.record);
+            } catch (Throwable failure) {
+                Logger.getLogger("AceLib").log(Level.WARNING,
+                    "[ACELIB-PLAYER-009] player data ready listener failed for uuid="
+                        + uuid + ": " + failure);
+            }
+        }
+    }
+
+    /**
+     * 定期保存排程觸發的執行體。
+     *
+     * <p>失敗只記錄（{@code ACELIB-PLAYER-009}）不中斷排程：下一個週期會重試，
+     * 未落盤的資料仍保留在快取中。</p>
+     */
+    private void runAutosaveCycle() {
+        if (shutdown.get()) {
+            return;
+        }
+        Map<UUID, PlayerRecordView> snapshot = dirtySnapshot();
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        try {
+            runFlushBatch(snapshot, flushTimeoutMillis);
+        } catch (Throwable failure) {
+            Logger.getLogger("AceLib").log(Level.WARNING,
+                "[ACELIB-PLAYER-009] periodic save failed for " + snapshot.size()
+                    + " player(s): " + failure.getMessage()
+                    + "; changes stay dirty and will be retried on the next cycle");
+        }
+    }
+
+    /**
+     * 目前仍有未落盤變更的玩家數（package-private test seam）。
+     *
+     * @return dirty 玩家數
+     */
+    int dirtyPlayerCountForTest() {
+        return dirtySnapshot().size();
+    }
+
+    /**
+     * 內部定期保存排程器是否已終止（package-private test seam）。
+     *
+     * @return true 表示已終止；未啟用定期保存的建構子一律為 true
+     */
+    boolean isAutosaveTerminatedForTest() {
+        return autosaveExecutor == null || autosaveExecutor.isShutdown();
     }
 
     /**
@@ -1060,14 +1603,68 @@ public final class PlayerDataService {
     }
 
     /**
-     * 玩家資料快取視圖：包裝 {@link LockedPlayerRecord} + dirty 旗標。
+     * 玩家資料快取視圖：包裝 {@link LockedPlayerRecord} + 變更序號。
+     *
+     * <p>{@link #changeSeq} 取代單純的 dirty 旗標：每次 {@code markDirty} 遞增，
+     * 保存時記下當下的序號，提交成功後才把「已落盤序號」推到該值。這讓保存期間
+     * 發生的新變更不會被這次提交誤清——舊旗標做不到這件事，結果是新值永遠不會落盤。</p>
      */
     private static final class PlayerRecordView {
         final LockedPlayerRecord record;
-        final AtomicBoolean dirty = new AtomicBoolean(false);
+        final AtomicLong changeSeq = new AtomicLong();
+        volatile long savedSeq = 0L;
 
         PlayerRecordView(LockedPlayerRecord record) {
             this.record = record;
+        }
+
+        /** 是否有尚未落盤的變更。 */
+        boolean dirty() {
+            return changeSeq.get() > savedSeq;
+        }
+
+        /** 標記一次變更。 */
+        void markDirty() {
+            changeSeq.incrementAndGet();
+        }
+
+        /**
+         * 提交成功後推進已落盤序號。
+         *
+         * @param seq 保存開始時觀察到的序號；期間若再變更，序號已大於此值，
+         *            因此 dirty 仍為 true
+         */
+        void markSaved(long seq) {
+            savedSeq = seq;
+        }
+    }
+
+    /**
+     * 資料就緒 listener 的註冊項。
+     *
+     * @param listener   listener 本體
+     * @param registration 對外的 handle
+     */
+    private record ReadyListenerEntry(PlayerDataReadyListener listener,
+            ReadyListenerRegistration registration) {
+    }
+
+    /**
+     * {@link PlayerDataReadyListener.Registration} 的實作。
+     */
+    private static final class ReadyListenerRegistration
+            implements PlayerDataReadyListener.Registration {
+
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+
+        @Override
+        public void close() {
+            closed.set(true);
+        }
+
+        @Override
+        public boolean isClosed() {
+            return closed.get();
         }
     }
 }

@@ -8,6 +8,7 @@ import com.smile.acelib.data.DataStore;
 import com.smile.acelib.data.DataStoreException;
 import com.smile.acelib.data.JsonCodecImpl;
 import com.smile.acelib.data.JsonFileDataStore;
+import com.smile.acelib.data.Record;
 import com.smile.acelib.data.SchemaVersion;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
@@ -114,6 +115,48 @@ class PlayerDataServiceShutdownFailureTest {
         service.shutdown();
 
         assertEquals(2, saveCalls.get(), "shutdown 前 quit 重試必須成功保存 dirty record");
+        delegate.close();
+    }
+
+    @Test
+    void shutdown_batchSaveFailure_keepsAllPlayersDirtyForRetry() throws IOException {
+        DataStore delegate = newStore("batch-save-retry.json");
+        AtomicInteger saveCalls = new AtomicInteger();
+        // 第一次 save() 失敗、第二次成功：驗證失敗的那一輪沒有把任何一位
+        // 玩家標記成已保存，否則重試時資料會被當成已落盤而永遠不重寫。
+        DataStore failOnceStore = proxy(delegate, (method, args) -> {
+            if (method.getName().equals("save")
+                && saveCalls.incrementAndGet() == 1) {
+                throw new DataStoreException("ACELIB-DATA-001", "injected first save failure");
+            }
+            return null;
+        });
+        PlayerDataService service = new PlayerDataService(failOnceStore, Runnable::run);
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        service.onPlayerJoin(first, "alice").join();
+        service.onPlayerJoin(second, "bob").join();
+        service.getData(first).orElseThrow().set("keep", "first");
+        service.getData(second).orElseThrow().set("keep", "second");
+        service.markDirty(first);
+        service.markDirty(second);
+
+        assertThrows(PlayerStateException.class, service::shutdown);
+
+        // 失敗後 shutdown flag 回滾、服務仍可用：重試必須真的再寫一次，
+        // 而且兩位玩家的資料都要落地（成功 shutdown 會清掉記憶體快取，
+        // 因此驗證的是 store 裡的實際內容）。
+        service.shutdown();
+        assertTrue(saveCalls.get() >= 2,
+            "第一次 save 失敗後重試必須再次呼叫 save()，實際呼叫次數："
+                + saveCalls.get());
+        Record root = delegate.root();
+        String firstPath = "players." + first;
+        String secondPath = "players." + second;
+        assertEquals("first", root.getString(firstPath + ".keep", null),
+            "重試後第一位玩家的資料必須真的落地");
+        assertEquals("second", root.getString(secondPath + ".keep", null),
+            "重試後第二位玩家的資料必須真的落地");
         delegate.close();
     }
 

@@ -1909,6 +1909,11 @@
          <sha256 value="e67459d4882424ac6374f40db1c8f4a2e88946b340ba072c80be932a2be4644d"/>
       </artifact>
    </component>
+   <component group="org.junit" name="junit-bom" version="5.12.2">
+      <artifact name="junit-bom-5.12.2.pom">
+         <sha256 value="cef80fec86454f6806bfb0df24669b5c6f32e2cb728539ea859f47dfdc9bbc17"/>
+      </artifact>
+   </component>
    <component group="org.junit" name="junit-bom" version="5.13.1">
       <artifact name="junit-bom-5.13.1.module">
          <sha256 value="33c07ab9724790a6e5859ba07d69117ac530439724545a81c4179e3272c75de8"/>
@@ -2655,6 +2660,14 @@
       </artifact>
       <artifact name="spring-framework-bom-5.3.39.pom">
          <sha256 value="f6d481093e75767cba1ac7e1db38f8f692cbe3e38744693371a75aeb21c6148b"/>
+      </artifact>
+   </component>
+   <component group="org.xerial" name="sqlite-jdbc" version="3.50.3.0">
+      <artifact name="sqlite-jdbc-3.50.3.0.jar">
+         <sha256 value="a3f53a2aa15ae9425a9e793bbe9c8e5288febeb4b65ef5c1a4e80d4c2045cf08"/>
+      </artifact>
+      <artifact name="sqlite-jdbc-3.50.3.0.pom">
+         <sha256 value="6797d7680a14ffe15b09be25d7becaa28e82bc5d8b5d9deb465b038f95014ec8"/>
       </artifact>
    </component>
    <component group="org.yaml" name="snakeyaml" version="2.2">

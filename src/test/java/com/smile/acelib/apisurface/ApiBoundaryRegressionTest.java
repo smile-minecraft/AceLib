@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs179() throws IOException {
+    void canonicalTopLevelInventoryIs197() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -173,6 +173,19 @@ class ApiBoundaryRegressionTest {
         //   Internal +1（介面流程）：
         //     - com.smile.acelib.gui.GuiServiceControl — 內部生命週期入口
         //       （AceLibPlugin 跨 package 停用；公開 shutdown 已於 1.4.0 移除）
+        //   Supported +3、SPI +3（逐玩家儲存與玩家資料模型）：
+        //     - com.smile.acelib.data.PlayerDataStore（interface, SPI）— 逐玩家儲存
+        //       SPI；不保執行緒安全，實作者自行序列化操作
+        //     - com.smile.acelib.data.PlayerDataStores（class）— 建立工廠
+        //       （sqlite 預設／jdbc 換 MySQL／fromDataStore 相容既有 store）
+        //     - com.smile.acelib.data.PlayerDataConverter（class）— 舊 JSON／JDBC
+        //       玩家資料轉換入口（只補缺漏、來源零刪除、備份＋三層校驗報告）
+        //     - com.smile.acelib.data.PlayerDataCodec（interface, SPI）— record
+        //       資料模型與頂層欄位的編解碼 extension point
+        //     - com.smile.acelib.data.RecordPlayerDataCodec（class）— 以 component
+        //       名對映欄位的預設 codec 實作
+        //     - com.smile.acelib.player.PlayerDataReadyListener（interface, SPI）—
+        //       資料就緒回呼；I/O executor 執行緒，故非 Bukkit Event
         //   Supported +8、SPI +4（型別化指令框架）：
         //     - com.smile.acelib.command.Arguments（class）— 八種型別化引數工廠
         //       （玩家／離線玩家／整數／小數／時間長度／世界／列舉／材質）；
@@ -201,15 +214,15 @@ class ApiBoundaryRegressionTest {
         //       executes 委派回呼，維持 dispatch 單一真相來源
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 154,
-            "Supported 數量偏離 canonical 154，實際=" + supported);
-        assertTrue(spi == 16,
-            "SPI 數量偏離 canonical 16，實際=" + spi);
+        assertTrue(supported == 157,
+            "Supported 數量偏離 canonical 157，實際=" + supported);
+        assertTrue(spi == 19,
+            "SPI 數量偏離 canonical 19，實際=" + spi);
         assertTrue(internal == 21,
             "Internal 數量偏離 canonical 21，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 191,
-            "top-level inventory 偏離 canonical 191，實際=" + types.size());
+        assertTrue(types.size() == 197,
+            "top-level inventory 偏離 canonical 197，實際=" + types.size());
     }
 
     @Test

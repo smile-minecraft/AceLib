@@ -17,6 +17,14 @@ depend: []
 # （現代 Paper 採 access-backed classloader group，僅對宣告的 depend/softdepend 開放），
 # 否則即使改用正確的 plugin classloader 也看不到 marker class。
 softdepend: [floodgate, Vault, LuckPerms, PlaceholderAPI]
+# 逐玩家儲存預設使用 SQLite，需要 JDBC driver。版本與 build.gradle.kts 的
+# testImplementation("org.xerial:sqlite-jdbc") 固定一致，確保測試與運行期行為相同。
+# Paper 會在首次啟動時從 Maven Central（Paper mirror）自動下載到
+# libraries/；離線環境請事先把該 jar 放進 libraries/，否則玩家資料服務會以
+# ACELIB-DATA-012 拒絕啟動（不影響 AceLib 其他功能）。
+# 不使用 Paper 內建的 sqlite-jdbc：官方標註為 eventually to be removed。
+libraries:
+  - org.xerial:sqlite-jdbc:3.50.3.0
 # v1.4.0 起指令改經 Paper Brigadier 生命週期註冊（LifecycleEvents.COMMANDS），
 # 不再需要 commands 宣告；acelib.admin 權限節點保留（requires＋dispatch 共用）。
 permissions:

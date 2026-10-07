@@ -121,6 +121,8 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-DATA-009` | 無可用 migration | 偵測到舊版本但 chain 中無對應 from |
 | `ACELIB-DATA-010` | on-disk schema 版本比 current 新 | 拒絕降版覆寫既有資料 |
 | `ACELIB-DATA-011` | 非法 SQL identifier | JdbcDataStore table 名稱驗證失敗 |
+| `ACELIB-DATA-012` | SQLite driver 缺席 | 逐玩家 store 預設 SQLite 後端需要 `org.xerial:sqlite-jdbc` 在 classpath；plugin 由 `plugin.yml` 的 `libraries:` 下載，函式庫使用者須自行提供。缺席時 `init()` 失敗（不影響 AceLib 其他模組） |
+| `ACELIB-DATA-013` | 玩家資料轉換校驗未通過 | 舊 JSON／JDBC 玩家資料轉換後的三層校驗（筆數／內容雜湊／逐玩家完整性）不通過。來源資料與備份都保持完整，未回滾來源；處理方式為讀取 `backup/conversion-*.json` 報告找出失敗玩家後人工處理 |
 
 ### 玩家狀態（PLAYER）
 
@@ -131,9 +133,10 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-PLAYER-003` | 資料保存失敗 | I/O 或序列化錯誤 |
 | `ACELIB-PLAYER-004` | session 重複登入 | 同一 UUID 已有 active session；舊 session 尚在 UNLOADING（quit 保存進行中）時新 join 改為鏈接舊 quit、完成後自動重試（成功／保存失敗皆重試），僅無 quit 進行中的重複登入才同步拋出 |
 | `ACELIB-PLAYER-005` | session 未找到 | caller 對未登入 UUID 操作 |
-| `ACELIB-PLAYER-006` | DataStore 未初始化 | store 尚未綁定 |
+| `ACELIB-PLAYER-006` | 玩家資料服務不可用 | store 尚未綁定／初始化，或舊玩家資料轉換失敗而依 fail-closed 規則未啟動服務；修復原因後重新啟動或 reload |
 | `ACELIB-PLAYER-007` | 服務已關閉 | disable/shutdown 後呼叫 join/quit |
 | `ACELIB-PLAYER-008` | 內部 serial executor 終止失敗 | serial executor 異常關閉；shutdown flush 逾時／中斷亦用此碼（dirty 保留、可重試；逾時不等於 flush 成功） |
+| `ACELIB-PLAYER-009` | 資料就緒通知失敗 | 資料載入完成並轉為 READY 後，通知 listener 失敗（單一 listener 拋錯不影響 session 與其他 listener；session 仍為 READY，資料可用） |
 
 ### 世界操作（WORLD）
 

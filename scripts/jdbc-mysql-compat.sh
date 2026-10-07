@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 #
-# scripts/jdbc-mysql-compat.sh — JdbcDataStore 真實 MySQL / MariaDB 相容驗證。
+# scripts/jdbc-mysql-compat.sh — 真實 MySQL / MariaDB 相容驗證。
 #
-# 對臨時容器（mysql:8.4、mariadb:11.4）執行 JdbcCompatSuite：
-# 新庫（utf8mb4）驗證新形狀建表/長 key/emoji/大值/隔離/重讀，
-# 舊庫（latin1 + 舊 DDL 預建表）驗證舊資料載入與升級遷移，
-# 同時擷取 SHOW CREATE TABLE 與版本輸出存檔。
+# 對臨時容器（mysql:8.4、mariadb:11.4）執行兩套案例集：
+#   JdbcCompatSuite        通用 key-value store：新庫（utf8mb4）驗證新形狀建表、
+#                          長 key/emoji/大值/隔離/重讀；舊庫（latin1 + 舊 DDL 預建表）
+#                          驗證舊資料載入與升級遷移。
+#   PlayerStoreCompatSuite 逐玩家 store：每玩家隔離、增量 upsert（未變欄位不重寫）、
+#                          欄位／玩家刪除、跨玩家並行變動、交易失敗整批 rollback、
+#                          舊 acelib_data_kv 玩家資料轉換（其他 store 零遺失、零刪除）。
+# 同時擷取 SHOW CREATE TABLE、轉換校驗報告樣本與版本輸出存檔。
 #
 # 設計紀律：
 #   - 容器一律臨時（--rm，結束即清理；trap 保證 stop），不變更 host 服務。
@@ -62,7 +66,13 @@ fi
 
 # 編譯測試類別（JdbcCompatMain 住在 test source set）
 ./gradlew testClasses --console=plain -q
-CP="$ROOT/build/classes/java/main:$ROOT/build/classes/java/test:$ROOT/build/resources/main:$MYSQL_JAR:$MARIADB_JAR"
+SQLITE_JAR="$(find "${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.xerial/sqlite-jdbc/3.50.3.0" \
+    -type f -name 'sqlite-jdbc-3.50.3.0.jar' -print -quit 2>/dev/null || true)"
+if [ -z "$SQLITE_JAR" ]; then
+    echo "sqlite-jdbc 3.50.3.0 is missing from the Gradle cache" >&2
+    exit 2
+fi
+CP="$ROOT/build/classes/java/main:$ROOT/build/classes/java/test:$ROOT/build/resources/main:$MYSQL_JAR:$MARIADB_JAR:$SQLITE_JAR"
 
 MYSQL_C="acelib-compat-mysql"
 MARIA_C="acelib-compat-mariadb"
@@ -110,9 +120,29 @@ run_engine() { # container client freshDb label port scheme
             "$scheme://127.0.0.1:$port/$fresh?useSSL=false&allowPublicKeyRetrieval=true" \
             "$scheme://127.0.0.1:$port/acelib_legacy?useSSL=false&allowPublicKeyRetrieval=true" \
             "$DB_USER" "$DB_PASSWORD" "$label" || true
+        echo "--- PlayerStoreCompatSuite（逐玩家：增量 upsert / 刪除 / 並行 / 交易 rollback / 舊資料轉換） ---"
+        # workDir 放逐玩家轉換案例的 SQLite 目標檔與備份／校驗報告；每個引擎用
+        # 獨立子目錄，避免兩個引擎的備份互相覆蓋。
+        safe_label="${label//[^[:alnum:]_-]/_}"
+        player_work="$(mktemp -d "${TMPDIR:-/tmp}/acelib-player-compat-${safe_label}.XXXXXX")"
+        # shellcheck disable=SC2086
+        java -cp "$CP" com.smile.acelib.data.PlayerStoreCompatMain \
+            "$scheme://127.0.0.1:$port/$fresh?useSSL=false&allowPublicKeyRetrieval=true" \
+            "$scheme://127.0.0.1:$port/acelib_legacy?useSSL=false&allowPublicKeyRetrieval=true" \
+            "$DB_USER" "$DB_PASSWORD" "$label" "$player_work" || true
+        echo "--- PlayerDataConverter 校驗報告樣本 ---"
+        for report in "$player_work"/player-store-compat-backup/conversion-*.json; do
+            [ -e "$report" ] || continue
+            head -c 1200 "$report"
+            echo
+        done
+        rm -r -- "$player_work"
         echo "--- SHOW CREATE TABLE after suite (fresh db) ---"
         docker exec "$c" "$client" -u"$DB_USER" -p"$DB_PASSWORD" "$fresh" \
             -e "SHOW CREATE TABLE acelib_data_kv;"
+        echo "--- SHOW CREATE TABLE acelib_player_data (fresh db) ---"
+        docker exec "$c" "$client" -u"$DB_USER" -p"$DB_PASSWORD" "$fresh" \
+            -e "SHOW CREATE TABLE acelib_player_data;"
         echo "--- SHOW CREATE TABLE after suite (legacy db, upgraded) ---"
         docker exec "$c" "$client" -u"$DB_USER" -p"$DB_PASSWORD" "acelib_legacy" \
             -e "SHOW CREATE TABLE acelib_data_kv;"

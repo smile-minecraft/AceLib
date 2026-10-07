@@ -12,9 +12,9 @@
 
 ## 統計
 
-- 總數：191 個 public 頂層型別
-- Supported：154
-- SPI：16
+- 總數：197 個 public 頂層型別
+- Supported：157
+- SPI：19
 - Internal：21
 
 ## 分類明細
@@ -115,6 +115,10 @@
 | `com.smile.acelib.data.DataStore` | interface | Supported | 資料儲存服務介面。 |  | PlayerDataService；消費者。 |
 | `com.smile.acelib.data.DataStoreException` | class | Supported | 資料儲存例外；v1 契約。 |  | DataStore 實作；PlayerDataService。 |
 | `com.smile.acelib.data.JdbcDataStore` | class | Internal | DataStore 的 JDBC 內部實作；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 組裝 DataStore；v1 前保留 public。 | AceLibPlugin 組裝。 |
+| `com.smile.acelib.data.PlayerDataCodec` | interface | SPI | record 資料模型與頂層欄位之間的編解碼介面（extension point）；下游可改用別名或加密欄位映射；文件須寫明資料與模型不符時不猜、不填預設值的責任。 |  | RecordPlayerDataCodec；下游自備映射。 |
+| `com.smile.acelib.data.PlayerDataConverter` | class | Supported | 既有玩家資料（舊 JSON 檔／舊 acelib_data_kv players 列）轉換為逐玩家 store 的入口；同步執行、只補缺漏、來源零刪除，並留下備份與三層校驗報告。 |  | AceLibPlugin 啟動轉換；下游自備舊資料的遷移。 |
+| `com.smile.acelib.data.PlayerDataStore` | interface | SPI | 逐玩家儲存 SPI（extension point）：一位玩家一組頂層欄位、由 store 自行增量落盤；實作者須自行序列化所有操作（介面不保執行緒安全）並在 close 後拒絕操作。 |  | PlayerDataStores 工廠；SqlitePlayerDataStore；JdbcPlayerDataStore；PlayerDataService。 |
+| `com.smile.acelib.data.PlayerDataStores` | class | Supported | 逐玩家 store 建立工廠（sqlite 預設／jdbc 可換 MySQL／fromDataStore 相容既有 key-value store）；下游取用 store 的唯一入口，不需依賴內部實作類別。 |  | AceLibPlugin 組裝；下游自建玩家資料儲存。 |
 | `com.smile.acelib.data.JsonCodec` | interface | SPI | 消費者實作的 JSON 編解碼介面（extension point）；寫明 round-trip 白名單責任。 |  | JsonFileDataStore；消費者實作。 |
 | `com.smile.acelib.data.JsonCodecImpl` | class | Internal | JsonCodec 的內部預設實作；非消費者 API。 | AceLibPlugin 與多個 data/player 測試跨 package 建構預設 codec；v1 前保留 public。 | JsonFileDataStore。 |
 | `com.smile.acelib.data.JsonFileDataStore` | class | Internal | DataStore 的 JSON 檔案內部實作；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 組裝 DataStore；v1 前保留 public。 | AceLibPlugin。 |
@@ -122,6 +126,7 @@
 | `com.smile.acelib.data.MigrationChain` | class | Supported | 資料遷移鏈值型別，串接 DataMigration；v1 穩定。 |  | DataStore 遷移；DataMigration。 |
 | `com.smile.acelib.data.MigrationResult` | record | Supported | 資料遷移結果值型別；v1 穩定。 |  | DataMigration；MigrationChain。 |
 | `com.smile.acelib.data.Record` | interface | SPI | 消費者實作的資料記錄介面（extension point）；定義 path/getter 契約。 |  | DataStore；消費者實作。 |
+| `com.smile.acelib.data.RecordPlayerDataCodec` | class | Supported | 以 record component 名對映頂層欄位的預設 PlayerDataCodec 實作；型別不符時以 ACELIB-DATA-002 失敗並帶出問題欄位。 |  | 下游以 record 定義玩家資料模型。 |
 | `com.smile.acelib.data.SchemaVersion` | record | Supported | 資料 schema 版本值型別（major.minor）；v1 凍結結構。 |  | DataStore；MigrationResult；Record。 |
 
 ### com.smile.acelib.diagnostics
@@ -253,6 +258,7 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.player.PlayerCooldownService` | class | Supported | 玩家冷卻服務；v1 穩定。 |  | 消費者；PlayerDataService。 |
+| `com.smile.acelib.player.PlayerDataReadyListener` | interface | SPI | 資料就緒回呼（extension point）：session 轉為 READY 後通知一次，於 I/O executor 執行緒呼叫（非主執行緒／非 region），故不是 Bukkit Event；實作者須自行把後續操作送回正確上下文。 |  | PlayerDataService。 |
 | `com.smile.acelib.player.PlayerDataService` | class | Supported | 玩家資料/會話服務；v1 穩定。 |  | 消費者；AceLibPlugin。 |
 | `com.smile.acelib.player.PlayerSession` | class | Supported | 玩家會話值型別；v1 穩定。 |  | PlayerDataService；PlayerSessionRegistry。 |
 | `com.smile.acelib.player.PlayerSessionRegistry` | class | Supported | 玩家會話註冊/追蹤服務；v1 穩定。 |  | PlayerDataService。 |

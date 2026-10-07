@@ -634,6 +634,38 @@
       "method success(com.smile.acelib.data.SchemaVersion,java.util.List<com.smile.acelib.data.SchemaVersion>) : com.smile.acelib.data.MigrationResult",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.data.PlayerDataCodec": [
+      "method decode(com.smile.acelib.data.Record) : T",
+      "method encode(T) : com.smile.acelib.data.Record"
+    ],
+    "com.smile.acelib.data.PlayerDataConverter": [
+      "method fromLegacyJdbcStore(java.lang.String,java.lang.String,javax.sql.DataSource,com.smile.acelib.data.PlayerDataStore,java.nio.file.Path) : com.smile.acelib.data.PlayerDataConverter$Result",
+      "method fromLegacyJsonFile(java.nio.file.Path,com.smile.acelib.data.PlayerDataStore,java.nio.file.Path) : com.smile.acelib.data.PlayerDataConverter$Result",
+      "method markerPath(java.nio.file.Path) : java.nio.file.Path"
+    ],
+    "com.smile.acelib.data.PlayerDataStore": [
+      "method applyChanges(java.util.List<com.smile.acelib.data.PlayerDataStore$FieldChange>) : void",
+      "method close() : void",
+      "method deletePlayer(java.util.UUID) : void",
+      "method fieldCount(java.util.UUID) : int",
+      "method init() : void",
+      "method isClosed() : boolean",
+      "method isInitialized() : boolean",
+      "method load(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
+      "method name() : java.lang.String",
+      "method owner() : java.lang.String",
+      "method revisionOf(java.util.UUID,java.lang.String) : long",
+      "method schemaVersion() : com.smile.acelib.data.SchemaVersion"
+    ],
+    "com.smile.acelib.data.PlayerDataStores": [
+      "field DEFAULT_OWNER : java.lang.String",
+      "field DEFAULT_TABLE : java.lang.String",
+      "method fromDataStore(com.smile.acelib.data.DataStore) : com.smile.acelib.data.PlayerDataStore",
+      "method jdbc(javax.sql.DataSource,com.smile.acelib.data.SchemaVersion) : com.smile.acelib.data.PlayerDataStore",
+      "method jdbc(javax.sql.DataSource,com.smile.acelib.data.SchemaVersion,java.lang.String,java.lang.String) : com.smile.acelib.data.PlayerDataStore",
+      "method sqlite(java.nio.file.Path,com.smile.acelib.data.SchemaVersion) : com.smile.acelib.data.PlayerDataStore",
+      "method sqlite(java.nio.file.Path,com.smile.acelib.data.SchemaVersion,java.lang.String,java.lang.String) : com.smile.acelib.data.PlayerDataStore"
+    ],
     "com.smile.acelib.data.Record": [
       "method copy() : com.smile.acelib.data.Record",
       "method get(java.lang.String) : java.lang.Object",
@@ -649,6 +681,12 @@
       "method keys() : java.util.Set<java.lang.String>",
       "method remove(java.lang.String) : boolean",
       "method set(java.lang.String,java.lang.Object) : java.lang.Object"
+    ],
+    "com.smile.acelib.data.RecordPlayerDataCodec": [
+      "ctor(java.lang.Class<T>)",
+      "method decode(com.smile.acelib.data.Record) : T",
+      "method encode(T) : com.smile.acelib.data.Record",
+      "method type() : java.lang.Class<T>"
     ],
     "com.smile.acelib.data.SchemaVersion": [
       "ctor(int,int)",
@@ -1509,10 +1547,19 @@
       "method trackedPlayerCount() : int",
       "method tryAcquire(java.util.UUID,java.lang.String,long) : boolean"
     ],
+    "com.smile.acelib.player.PlayerDataReadyListener": [
+      "method onPlayerDataReady(java.util.UUID,com.smile.acelib.data.Record) : void"
+    ],
     "com.smile.acelib.player.PlayerDataService": [
       "ctor(com.smile.acelib.data.DataStore,java.util.concurrent.Executor)",
+      "ctor(com.smile.acelib.data.PlayerDataStore,java.util.concurrent.Executor,long)",
+      "ctor(com.smile.acelib.data.PlayerDataStore,java.util.concurrent.Executor,long,long)",
+      "field DEFAULT_SAVE_INTERVAL_MS : long",
       "method activeSessionCount() : int",
+      "method addReadyListener(com.smile.acelib.player.PlayerDataReadyListener) : com.smile.acelib.player.PlayerDataReadyListener$Registration",
+      "method autosaveNow() : java.util.concurrent.CompletableFuture<java.lang.Void>",
       "method getData(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
+      "method getOfflineData(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
       "method getSession(java.util.UUID) : java.util.Optional<com.smile.acelib.player.PlayerSession>",
       "method isShutdown() : boolean",
       "method markDirty(java.util.UUID) : void",

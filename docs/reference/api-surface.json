@@ -608,6 +608,42 @@
       "mainCallers": "DataStore 實作；PlayerDataService。"
     },
     {
+      "fqcn": "com.smile.acelib.data.PlayerDataCodec",
+      "package": "com.smile.acelib.data",
+      "simpleName": "PlayerDataCodec",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "record 資料模型與頂層欄位之間的編解碼介面（extension point）；下游可改用別名或加密欄位映射；文件須寫明資料與模型不符時不猜、不填預設值的責任。",
+      "mainCallers": "RecordPlayerDataCodec；下游自備映射。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.PlayerDataConverter",
+      "package": "com.smile.acelib.data",
+      "simpleName": "PlayerDataConverter",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "既有玩家資料（舊 JSON 檔／舊 acelib_data_kv players 列）轉換為逐玩家 store 的入口；同步執行、只補缺漏、來源零刪除，並留下備份與三層校驗報告。",
+      "mainCallers": "AceLibPlugin 啟動轉換；下游自備舊資料的遷移。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.PlayerDataStore",
+      "package": "com.smile.acelib.data",
+      "simpleName": "PlayerDataStore",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "逐玩家儲存 SPI（extension point）：一位玩家一組頂層欄位、由 store 自行增量落盤；實作者須自行序列化所有操作（介面不保執行緒安全）並在 close 後拒絕操作。",
+      "mainCallers": "PlayerDataStores 工廠；SqlitePlayerDataStore；JdbcPlayerDataStore；PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.PlayerDataStores",
+      "package": "com.smile.acelib.data",
+      "simpleName": "PlayerDataStores",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "逐玩家 store 建立工廠（sqlite 預設／jdbc 可換 MySQL／fromDataStore 相容既有 key-value store）；下游取用 store 的唯一入口，不需依賴內部實作類別。",
+      "mainCallers": "AceLibPlugin 組裝；下游自建玩家資料儲存。"
+    },
+    {
       "fqcn": "com.smile.acelib.data.JdbcDataStore",
       "package": "com.smile.acelib.data",
       "simpleName": "JdbcDataStore",
@@ -682,6 +718,15 @@
       "classification": "SPI",
       "reason": "消費者實作的資料記錄介面（extension point）；定義 path/getter 契約。",
       "mainCallers": "DataStore；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.data.RecordPlayerDataCodec",
+      "package": "com.smile.acelib.data",
+      "simpleName": "RecordPlayerDataCodec",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "以 record component 名對映頂層欄位的預設 PlayerDataCodec 實作；型別不符時以 ACELIB-DATA-002 失敗並帶出問題欄位。",
+      "mainCallers": "下游以 record 定義玩家資料模型。"
     },
     {
       "fqcn": "com.smile.acelib.data.SchemaVersion",
@@ -1463,6 +1508,15 @@
       "classification": "Supported",
       "reason": "玩家冷卻服務；v1 穩定。",
       "mainCallers": "消費者；PlayerDataService。"
+    },
+    {
+      "fqcn": "com.smile.acelib.player.PlayerDataReadyListener",
+      "package": "com.smile.acelib.player",
+      "simpleName": "PlayerDataReadyListener",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "資料就緒回呼（extension point）：session 轉為 READY 後通知一次，於 I/O executor 執行緒呼叫（非主執行緒／非 region），故不是 Bukkit Event；實作者須自行把後續操作送回正確上下文。",
+      "mainCallers": "PlayerDataService。"
     },
     {
       "fqcn": "com.smile.acelib.player.PlayerDataService",

@@ -8,10 +8,10 @@ import com.smile.acelib.command.CatalogMeta;
 import com.smile.acelib.command.CommandCatalog;
 import com.smile.acelib.command.CommandRegistry;
 import com.smile.acelib.command.CommandSpec;
-import com.smile.acelib.data.DataStore;
-import com.smile.acelib.data.JsonCodec;
-import com.smile.acelib.data.JsonCodecImpl;
-import com.smile.acelib.data.JsonFileDataStore;
+import com.smile.acelib.data.DataStoreException;
+import com.smile.acelib.data.PlayerDataConverter;
+import com.smile.acelib.data.PlayerDataStore;
+import com.smile.acelib.data.PlayerDataStores;
 import com.smile.acelib.data.SchemaVersion;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
@@ -44,20 +44,27 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bukkit.Server;
@@ -66,6 +73,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
@@ -120,6 +128,13 @@ public class AceLibPlugin extends JavaPlugin {
     /** Plugin 標籤，用於 fallback logger。 */
     private static final String LOG_NAME = "AceLib";
 
+    /** 逐玩家資料的 SQLite 資料庫檔名（位於 plugin 資料夾）。 */
+    private static final String PLAYER_DATA_DB_FILE = "players.db";
+    /** 1.4.0 之前的玩家資料檔名；僅作為一次性轉換來源讀取。 */
+    private static final String LEGACY_PLAYER_DATA_FILE = "player-data.json";
+    /** 轉換備份與校驗報告的輸出子目錄（位於 plugin 資料夾）。 */
+    private static final String PLAYER_DATA_BACKUP_DIR = "backup";
+
     /** 平台偵測錯誤代碼（未知環境警告）。 */
     private static final String PLATFORM_UNKNOWN_ERROR_CODE = "ACELIB-PLAT-004";
 
@@ -157,7 +172,7 @@ public class AceLibPlugin extends JavaPlugin {
      * 當前綁定的 {@link PlayerDataService}。
      *
      * <p>於 onEnable 建立並 register Bukkit
-     * {@code PlayerJoinEvent}/{@code PlayerQuitEvent} listener 將事件委派給 service。
+     * listener 將 async pre-login、join 與 quit 事件委派給同一個 service。
      * onDisable 時 shutdown service（flush dirty 資料、reject new work、清除 in-flight
      * tracking），reload 時 shutdown + 重建（保留既有 API 語意）。</p>
      *
@@ -182,6 +197,16 @@ public class AceLibPlugin extends JavaPlugin {
      * {@link #createPlayerIoExecutor()} 的自建 pool）。</p>
      */
     private volatile ExecutorService playerIoExecutor;
+    /**
+     * 當前 {@link PlayerDataService} 使用的逐玩家 store。
+     *
+     * <p>持有 reference 是為了在 reload / onDisable 時能確實關閉底層連線：
+     * {@link PlayerDataService#shutdown()} 只停止排程與 flush，<strong>不</strong>
+     * 關閉它所注入的 store（store 屬注入資源，壽命由擁有者決定）。
+     * 順序不可顛倒：先 shutdown 服務（flush 完成）再關 store，
+     * 否則 flush 會撞上已關閉的連線。</p>
+     */
+    private volatile PlayerDataStore playerDataStore;
 
     /**
      * v1.4.0 管理指令（{@code /acelib status}）使用的型別化指令註冊器。
@@ -529,6 +554,7 @@ public class AceLibPlugin extends JavaPlugin {
         // service reference 也無法新增工作。
         if (oldListener != null) {
             HandlerList.unregisterAll(oldListener);
+            oldListener.close();
             this.playerLifecycleListener = null;
         }
         this.playerLifecycleRegistered = false;
@@ -555,6 +581,8 @@ public class AceLibPlugin extends JavaPlugin {
         // 自建 io pool 隨舊服務釋放（service.shutdown 不關閉外部注入的 executor，
         // 本欄位只追蹤自建 pool，可安全關閉）。
         shutdownPlayerIoExecutor();
+        // store 在服務 shutdown（已 flush）之後才關閉：順序不可顛倒。
+        closePlayerDataStore();
 
         // world 服務 shutdown（標記 stopped、取消 in-flight handle、
         // 註冊 FAILED module state）。順序置於 player 與 scheduler 卸載之後，
@@ -1059,6 +1087,7 @@ public class AceLibPlugin extends JavaPlugin {
                 rollbackReload(newScheduler, ds, oldMeta, oldScheduler);
                 if (oldListener != null) {
                     HandlerList.unregisterAll(oldListener);
+                    oldListener.close();
                 }
                 this.playerLifecycleRegistered = false;
                 this.ready = false;
@@ -1080,11 +1109,16 @@ public class AceLibPlugin extends JavaPlugin {
         }
         if (oldListener != null) {
             HandlerList.unregisterAll(oldListener);
+            oldListener.close();
         }
         this.playerLifecycleRegistered = false;
         // 舊 player 服務已 shutdown（flush 完成、in-flight 排空）：關閉其自建 io pool。
         // 失敗路徑（上方已 return）不關閉——舊服務仍存活且使用該 pool。
         shutdownPlayerIoExecutor();
+        // 舊 store 在服務 shutdown（已完成最後一批 flush）之後才關閉，且必須早於
+        // bindPlayerDataService：後者會覆寫 playerDataStore 欄位，先關才不會
+        // 誤關新 store。順序：service flush → 關 store → 關 io pool → rebind。
+        closePlayerDataStore();
         bindPlayerDataService(this.server);
         // 先釋放舊 world/gui 服務（unregister 舊 GUI listener + shutdown 舊 impl），
         // 再 commit 新 scheduler 並重建。順序理由：未釋放就覆寫會留下雙 listener
@@ -1356,6 +1390,7 @@ public class AceLibPlugin extends JavaPlugin {
                 logSevereWithCode(RELOAD_DIAGNOSTICS_FAILURE_CODE,
                     "reload(INCOMPATIBLE): player lifecycle listener unbind failed (ignored): " + t);
             }
+            oldListener.close();
             this.playerLifecycleListener = null;
             this.playerLifecycleRegistered = false;
         }
@@ -1381,6 +1416,10 @@ public class AceLibPlugin extends JavaPlugin {
             logFine("reload(INCOMPATIBLE): player io executor shutdown failed (ignored): "
                 + t.getMessage());
         }
+        // store 在服務 shutdown（已 flush）之後關閉；降級路徑不會 rebind 新 service，
+        // 因此此處是釋放 SQLite 連線的最後時機（closePlayerDataStore 內部冪等且
+        // 已 try/catch，不會中斷 teardown）。
+        closePlayerDataStore();
         // 6. 其餘服務 shutdown + SHUTDOWN facade 替換（內部已 try/catch）
         try { unbindWorldService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): world unbind failed (ignored): " + t); }
         try { unbindGuiService(); } catch (Throwable t) { logFine("reload(INCOMPATIBLE): gui unbind failed (ignored): " + t); }
@@ -1712,12 +1751,16 @@ public class AceLibPlugin extends JavaPlugin {
      *
      * <p>綁定內容：</p>
      * <ol>
-     *   <li>於 {@code plugins/<pluginFolder>/player-data.json} 建立
-     *       {@link JsonFileDataStore}（不存在則自動 init；存在則 migrate）</li>
-     *   <li>建立 {@link PlayerDataService}，內部 serial executor 為單一 daemon
-     *       thread；對 store 的 root()/save() 存取皆序列化</li>
+     *   <li>於 {@code plugins/<pluginFolder>/players.db} 建立 SQLite 逐玩家 store
+     *       （不存在則自動 init）</li>
+     *   <li>若舊版 {@code player-data.json} 仍存在且尚未轉換，執行一次性同步轉換
+     *       （備份 → 寫入 → 三層校驗 → 寫 marker）；失敗則關閉 store 並停用玩家資料服務，
+     *       來源與已建立的備份均保留，修復後可重跑轉換</li>
+     *   <li>建立 {@link PlayerDataService}，啟用定期保存並以
+     *       {@link PlayerDataService#DEFAULT_SAVE_INTERVAL_MS} 為週期</li>
      *   <li>準備 {@link PlayerLifecycleListener}，供 enabled plugin 完成 Bukkit
-     *       {@code PlayerJoinEvent}/{@code PlayerQuitEvent} 註冊（MONITOR priority）</li>
+     *       {@code AsyncPlayerPreLoginEvent}/{@code PlayerJoinEvent}/{@code PlayerQuitEvent}
+     *       註冊（MONITOR priority）</li>
      * </ol>
      *
      * <p>listener <strong>不持有 Player reference</strong> — 僅以 UUID + name 快照
@@ -1727,44 +1770,126 @@ public class AceLibPlugin extends JavaPlugin {
      */
     private void bindPlayerDataService(Server server) {
         Objects.requireNonNull(server, "server");
-        // 使用 plugin.getDataFolder() 確保路徑正確（測試環境下可能為自訂路徑）
-        Path dataFile;
+        Path dataFolder;
         try {
-            dataFile = getDataFolder().toPath().resolve("player-data.json");
+            dataFolder = getDataFolder().toPath();
         } catch (Throwable t) {
             // 非標準環境下 getDataFolder 可能不可用；fallback 維持可預期的 plugin 路徑
             logFine("bindPlayerDataService: getDataFolder failed, using fallback path: "
                 + t.getMessage());
-            dataFile = Path.of("plugins", "AceLib", "player-data.json");
+            dataFolder = Path.of("plugins", "AceLib");
         }
 
-        // 建立 DataStore（init 時若檔案不存在則新建；存在則讀取既有資料）
-        DataStore playerStore;
+        Path databaseFile = dataFolder.resolve(PLAYER_DATA_DB_FILE);
+        Path legacyJsonFile = dataFolder.resolve(LEGACY_PLAYER_DATA_FILE);
+
+        // 建立 SQLite 逐玩家 store（init 時若檔案不存在則新建）。
+        PlayerDataStore store;
         try {
-            JsonCodec codec = new JsonCodecImpl();
-            playerStore = new JsonFileDataStore("acelib-player-data", dataFile,
-                SchemaVersion.V1_0, codec);
-            playerStore.init();
+            store = PlayerDataStores.sqlite(databaseFile, SchemaVersion.V1_0);
+            store.init();
         } catch (Throwable t) {
             logSevereWithCode("ACELIB-PLAYER-006",
-                "bindPlayerDataService: failed to initialize DataStore at "
-                    + dataFile + ": " + t.getMessage());
-            // DataStore 建立失敗時保留 plugin 其他功能，但不暴露半初始化的 service。
+                "bindPlayerDataService: failed to initialize SQLite player store at "
+                    + databaseFile + ": " + t.getMessage());
+            // store 建立失敗時保留 plugin 其他功能，但不暴露半初始化的 service。
             this.playerDataService = null;
             this.playerLifecycleListener = null;
+            this.playerDataStore = null;
             return;
         }
 
-        // 建立 service（內部 serial executor 為單一 daemon thread）。
+        if (!migrateLegacyPlayerDataIfPresent(store, legacyJsonFile, dataFolder)) {
+            this.playerDataService = null;
+            this.playerLifecycleListener = null;
+            this.playerLifecycleRegistered = false;
+            this.playerDataStore = null;
+            try {
+                store.close();
+            } catch (Throwable closeFailure) {
+                logSevereWithCode("ACELIB-PLAYER-006",
+                    "bindPlayerDataService: failed to close player store after migration "
+                        + "failure: " + closeFailure.getMessage());
+            }
+            return;
+        }
+
+        // 建立 service（內部 serial executor 為單一 daemon thread，並啟用定期保存）。
         // 自建 io executor 由 plugin 持有生命週期（reload / onDisable /
         // INCOMPATIBLE teardown 釋放舊服務時一併關閉舊 pool）；
         // service.shutdown() 不關閉外部注入的 executor，故不可在此丟失 reference。
         ExecutorService ioExecutor = createPlayerIoExecutor();
         this.playerIoExecutor = ioExecutor;
-        PlayerDataService service = new PlayerDataService(playerStore, ioExecutor);
+        PlayerDataService service = new PlayerDataService(store, ioExecutor,
+            PlayerDataService.DEFAULT_SAVE_INTERVAL_MS);
         PlayerLifecycleListener listener = new PlayerLifecycleListener(service, safeLogger());
+        this.playerDataStore = store;
         this.playerDataService = service;
         this.playerLifecycleListener = listener;
+    }
+
+    /**
+     * 舊版 {@code player-data.json} 存在且尚未轉換時，執行一次性同步轉換。
+     *
+     * <p><strong>不刪除來源資料</strong>：轉換只寫入新的 SQLite store，並在
+     * {@code backup/} 留下備份與校驗報告。任一步失敗都記錄並回報 false，呼叫端
+     * 必須關閉目標 store、不啟動玩家資料服務；來源與已建立的備份保持原樣，
+     * 修復後可重新執行轉換。</p>
+     *
+     * @param store         目標逐玩家 store；不可為 null
+     * @param legacyJsonFile 舊版 JSON 檔路徑；不可為 null
+     * @param dataFolder    plugin 資料夾；不可為 null
+     */
+    private boolean migrateLegacyPlayerDataIfPresent(PlayerDataStore store,
+            Path legacyJsonFile, Path dataFolder) {
+        if (!java.nio.file.Files.isRegularFile(legacyJsonFile)) {
+            return true;
+        }
+        Path backupDir = dataFolder.resolve(PLAYER_DATA_BACKUP_DIR);
+        try {
+            PlayerDataConverter.Result result = PlayerDataConverter
+                .fromLegacyJsonFile(legacyJsonFile, store, backupDir);
+            if (result.skipped()) {
+                logFine("bindPlayerDataService: legacy player data already converted; "
+                    + "skipping (marker present)");
+                return true;
+            }
+            logInfo("bindPlayerDataService: converted legacy player data — players="
+                + result.convertedPlayers() + ", failed=" + result.failedPlayers()
+                + ", backup=" + result.backupPath()
+                + ", report=" + result.reportPath());
+            return true;
+        } catch (Throwable t) {
+            String causeCode = t instanceof DataStoreException dse
+                ? dse.getCode() : "unknown conversion error";
+            logSevereWithCode("ACELIB-PLAYER-006",
+                "bindPlayerDataService: legacy player data conversion failed; "
+                    + "player data service will not start. Source retained at "
+                    + legacyJsonFile + "; existing backups retained under " + backupDir
+                    + "; fix the cause and rerun conversion. Cause [" + causeCode + "]: "
+                    + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 關閉當前逐玩家 store（冪等）。
+     *
+     * <p>必須在 {@link PlayerDataService#shutdown()} <strong>之後</strong>呼叫：
+     * 服務 shutdown 會 flush 最後一批變更，那時仍需要可用的連線。</p>
+     */
+    private void closePlayerDataStore() {
+        PlayerDataStore store = this.playerDataStore;
+        this.playerDataStore = null;
+        if (store == null || store.isClosed()) {
+            return;
+        }
+        try {
+            store.close();
+        } catch (Throwable t) {
+            logFine("closePlayerDataStore: closing player store failed (ignored): "
+                + t.getMessage());
+        }
     }
 
     /**
@@ -2280,15 +2405,18 @@ public class AceLibPlugin extends JavaPlugin {
     }
 
     // ---------------------------------------------------------------------
-    // Bukkit event listener — join/quit 委派給 PlayerDataService
+    // Bukkit event listener — login preload、join/quit 委派給 PlayerDataService
     // ---------------------------------------------------------------------
 
     /**
-     * {@link PlayerJoinEvent} / {@link PlayerQuitEvent} listener。
+     * {@link AsyncPlayerPreLoginEvent} / {@link PlayerJoinEvent} / {@link PlayerQuitEvent}
+     * listener。
      *
-     * <p>僅以 {@link UUID} + name 快照呼叫對應 service API；listener 本身
-     * <strong>不保留 Player reference</strong>。priority 為 {@link EventPriority#MONITOR} —
-     * 表示我們只在事件流程最後觀察，不取消亦不修改事件。</p>
+     * <p>Async pre-login 只讀 UUID/name 快照，透過既有 {@link PlayerDataService#onPlayerJoin}
+     * 建立唯一 session 並啟動 store 載入；join 事件接管該 session，不另開載入路徑。
+     * 預載失敗時 join 才重新呼叫同一 service API。listener 本身
+     * <strong>不保留 Player reference</strong>。所有 handler 都在 MONITOR priority，
+     * 不取消亦不修改 Bukkit 事件。</p>
      *
      * <p>失敗語意：join/quit 的同步拒絕（PLAYER-004/005/007）與非同步
      * 完成失敗（PLAYER-002/003）一律攔截並以 ACELIB-PLAYER 分類記入
@@ -2299,16 +2427,63 @@ public class AceLibPlugin extends JavaPlugin {
      */
     static final class PlayerLifecycleListener implements Listener {
 
+        private static final long DEFAULT_PRELOGIN_LEASE_MILLIS = TimeUnit.SECONDS.toMillis(30);
+
         private final PlayerDataService service;
         private final Logger logger;
+        private final long preloginLeaseMillis;
+        private final ConcurrentMap<UUID, PendingPrelogin> preloginLoads =
+            new ConcurrentHashMap<>();
+        private final AtomicBoolean closed = new AtomicBoolean();
+        private final ScheduledThreadPoolExecutor preloginCleanupExecutor;
 
         PlayerLifecycleListener(PlayerDataService service) {
             this(service, Logger.getLogger(LOG_NAME));
         }
 
         PlayerLifecycleListener(PlayerDataService service, Logger logger) {
+            this(service, logger, DEFAULT_PRELOGIN_LEASE_MILLIS);
+        }
+
+        PlayerLifecycleListener(PlayerDataService service, Logger logger,
+                long preloginLeaseMillis) {
             this.service = Objects.requireNonNull(service, "service");
             this.logger = Objects.requireNonNull(logger, "logger");
+            if (preloginLeaseMillis <= 0) {
+                throw new IllegalArgumentException("preloginLeaseMillis 必須為正數");
+            }
+            this.preloginLeaseMillis = preloginLeaseMillis;
+            this.preloginCleanupExecutor = new ScheduledThreadPoolExecutor(1, runnable -> {
+                Thread thread = new Thread(runnable, "acelib-player-prelogin-cleanup");
+                thread.setDaemon(true);
+                return thread;
+            });
+            this.preloginCleanupExecutor.setRemoveOnCancelPolicy(true);
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        synchronized void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
+            UUID uuid = event.getUniqueId();
+            String name = event.getName();
+            if (closed.get()) {
+                logRejected("onPlayerPreLogin", uuid, name,
+                    new PlayerStateException("ACELIB-PLAYER-007",
+                        "player lifecycle listener is closed"));
+                return;
+            }
+
+            PendingPrelogin pending = new PendingPrelogin();
+            if (preloginLoads.putIfAbsent(uuid, pending) != null) {
+                return;
+            }
+            try {
+                CompletableFuture<Void> load = service.onPlayerJoin(uuid, name);
+                load.whenComplete((ignored, failure) -> completePrelogin(uuid, pending, failure));
+            } catch (PlayerStateException rejected) {
+                completePrelogin(uuid, pending, rejected);
+            } catch (RuntimeException unexpected) {
+                completePrelogin(uuid, pending, unexpected);
+            }
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
@@ -2316,14 +2491,34 @@ public class AceLibPlugin extends JavaPlugin {
             Player player = event.getPlayer();
             UUID uuid = player.getUniqueId();
             String name = player.getName();
-            // 立即 snapshot UUID/name；listener 不保留 Player reference
+            // 立即 snapshot UUID/name；listener 不保留 Player reference。
+            PendingPrelogin pending = preloginLoads.get(uuid);
+            if (pending != null) {
+                if (pending.phase.compareAndSet(PreloginPhase.AVAILABLE,
+                        PreloginPhase.JOINED)) {
+                    preloginLoads.remove(uuid, pending);
+                    pending.cancelExpiry();
+                    pending.load.whenComplete((ignored, failure) -> {
+                        if (failure != null) {
+                            startJoinLoad(uuid, name);
+                        }
+                    });
+                    return;
+                }
+                if (pending.phase.get() == PreloginPhase.EXPIRING) {
+                    pending.expiration.whenComplete((ignored, failure) -> startJoinLoad(uuid, name));
+                    return;
+                }
+            }
+            startJoinLoad(uuid, name);
+        }
+
+        private void startJoinLoad(UUID uuid, String name) {
             final CompletableFuture<Void> future;
             try {
                 future = service.onPlayerJoin(uuid, name);
             } catch (PlayerStateException rejected) {
-                logger.log(Level.WARNING,
-                    "[" + rejected.getCode() + "] onPlayerJoin rejected for uuid=" + uuid
-                        + " name=" + name + ": " + rejected.getMessage());
+                logRejected("onPlayerJoin", uuid, name, rejected);
                 return;
             } catch (RuntimeException unexpected) {
                 logger.log(Level.WARNING,
@@ -2337,6 +2532,141 @@ public class AceLibPlugin extends JavaPlugin {
                             + "async load failed for uuid=" + uuid + ": " + failure.getMessage());
                 }
             });
+        }
+
+        private void completePrelogin(UUID uuid, PendingPrelogin pending, Throwable failure) {
+            if (failure != null) {
+                pending.load.completeExceptionally(failure);
+                if (pending.phase.compareAndSet(PreloginPhase.AVAILABLE, PreloginPhase.FAILED)) {
+                    preloginLoads.remove(uuid, pending);
+                }
+                Throwable cause = unwrapFailure(failure);
+                logger.log(Level.WARNING,
+                    "[" + codeOf(cause, "ACELIB-PLAYER-002")
+                        + "] onPlayerPreLogin async load failed for uuid=" + uuid
+                        + ": " + cause.getMessage());
+                return;
+            }
+
+            pending.load.complete(null);
+            if (pending.phase.get() != PreloginPhase.AVAILABLE || closed.get()) {
+                return;
+            }
+            try {
+                ScheduledFuture<?> expiry = preloginCleanupExecutor.schedule(
+                    () -> expirePrelogin(uuid, pending), preloginLeaseMillis,
+                    TimeUnit.MILLISECONDS);
+                pending.expiry = expiry;
+                if (pending.phase.get() != PreloginPhase.AVAILABLE
+                        || preloginLoads.get(uuid) != pending) {
+                    expiry.cancel(false);
+                }
+            } catch (java.util.concurrent.RejectedExecutionException rejected) {
+                if (!closed.get()) {
+                    logger.log(Level.WARNING,
+                        "pre-login cleanup scheduling failed for uuid=" + uuid + ": " + rejected);
+                    expirePrelogin(uuid, pending);
+                }
+            }
+        }
+
+        private void expirePrelogin(UUID uuid, PendingPrelogin pending) {
+            if (!pending.phase.compareAndSet(PreloginPhase.AVAILABLE, PreloginPhase.EXPIRING)) {
+                return;
+            }
+            if (service.isShutdown()) {
+                finishPreloginExpiry(uuid, pending);
+                return;
+            }
+            final CompletableFuture<Void> quit;
+            try {
+                quit = service.onPlayerQuit(uuid);
+            } catch (RuntimeException rejected) {
+                if (!"ACELIB-PLAYER-005".equals(codeOf(rejected, ""))) {
+                    logger.log(Level.FINE,
+                        "pre-login session cleanup rejected for uuid=" + uuid + ": " + rejected);
+                }
+                finishPreloginExpiry(uuid, pending);
+                return;
+            }
+            quit.whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    logger.log(Level.WARNING,
+                        "[" + codeOf(failure, "ACELIB-PLAYER-003")
+                            + "] pre-login session cleanup failed for uuid=" + uuid
+                            + ": " + failure.getMessage());
+                }
+                finishPreloginExpiry(uuid, pending);
+            });
+        }
+
+        private void finishPreloginExpiry(UUID uuid, PendingPrelogin pending) {
+            pending.phase.set(PreloginPhase.EXPIRED);
+            preloginLoads.remove(uuid, pending);
+            pending.expiration.complete(null);
+        }
+
+        private void logRejected(String operation, UUID uuid, String name,
+                PlayerStateException rejected) {
+            logger.log(Level.WARNING,
+                "[" + rejected.getCode() + "] " + operation + " rejected for uuid=" + uuid
+                    + " name=" + name + ": " + rejected.getMessage());
+        }
+
+        synchronized void close() {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            for (Map.Entry<UUID, PendingPrelogin> entry : preloginLoads.entrySet()) {
+                PendingPrelogin pending = entry.getValue();
+                pending.cancelExpiry();
+                if (service.isShutdown()) {
+                    if (pending.phase.compareAndSet(PreloginPhase.AVAILABLE,
+                            PreloginPhase.EXPIRED)) {
+                        preloginLoads.remove(entry.getKey(), pending);
+                        pending.expiration.complete(null);
+                    }
+                } else {
+                    expirePrelogin(entry.getKey(), pending);
+                }
+            }
+            preloginCleanupExecutor.shutdownNow();
+        }
+
+        int pendingPreloginCount() {
+            return preloginLoads.size();
+        }
+
+        private static Throwable unwrapFailure(Throwable failure) {
+            Throwable cause = failure;
+            while ((cause instanceof CompletionException
+                    || cause instanceof ExecutionException) && cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            return cause;
+        }
+
+        private static final class PendingPrelogin {
+            private final CompletableFuture<Void> load = new CompletableFuture<>();
+            private final CompletableFuture<Void> expiration = new CompletableFuture<>();
+            private final AtomicReference<PreloginPhase> phase =
+                new AtomicReference<>(PreloginPhase.AVAILABLE);
+            private volatile ScheduledFuture<?> expiry;
+
+            private void cancelExpiry() {
+                ScheduledFuture<?> scheduled = expiry;
+                if (scheduled != null) {
+                    scheduled.cancel(false);
+                }
+            }
+        }
+
+        private enum PreloginPhase {
+            AVAILABLE,
+            JOINED,
+            EXPIRING,
+            EXPIRED,
+            FAILED
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
@@ -2368,10 +2698,7 @@ public class AceLibPlugin extends JavaPlugin {
         }
 
         private static String codeOf(Throwable failure, String fallback) {
-            Throwable cause = failure;
-            while (cause instanceof CompletionException && cause.getCause() != null) {
-                cause = cause.getCause();
-            }
+            Throwable cause = unwrapFailure(failure);
             if (cause instanceof PlayerStateException playerFailure) {
                 return playerFailure.getCode();
             }

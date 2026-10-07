@@ -68,6 +68,22 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 實機驗證工具：新增 `examples/command-compatibility-probe`，涵蓋 42 個可重跑案例（解析／錯誤／補全／生命週期）與執行緒紀錄，供 Paper／Folia 實測。
 - **未實測項目**：各引數的基岩補全尚未由真人基岩客戶端逐項實測。模組頁的基岩版補全矩陣目前是依 Geyser 只解析固定選項結構的行為推導，實測結果待補；Java 機器人的 tab 請求走 Java 協議，不能替代基岩客戶端的觀察。
 
+### 本階段內容（逐玩家儲存與玩家資料模型）
+
+- 逐玩家儲存 SPI `PlayerDataStore`：一位玩家一組頂層欄位，由 store 自己負責增量落盤。`PlayerDataStores` 工廠提供三種後端——`sqlite(Path, SchemaVersion)`（預設，單一檔案承載全部玩家資料）、`jdbc(DataSource, SchemaVersion)`（MySQL／MariaDB，`DataSource` 生命週期由呼叫端管理）、`fromDataStore(DataStore)`（遷移期間沿用既有 key-value store）。`owner` 與玩家 UUID、欄位名一起構成主鍵，多個下游可在同一張表各自存放資料而不互相覆寫。
+- 預設 SQLite 後端以 WAL 模式開啟、`synchronous=FULL`（每次交易提交都 fsync）、`busy_timeout=5000`；需要 `org.xerial:sqlite-jdbc`，由 `plugin.yml` 的 `libraries:` 在啟動時下載，缺席時以 `ACELIB-DATA-012` 失敗且不影響 AceLib 其他模組。函式庫使用者須自行提供該 driver。
+- 逐玩家表 `acelib_player_data` 以 `(player_uuid, owner, field_hash)` 為主鍵，`field_hash` 為欄位名的 SHA-256 hex，主鍵最壞 1352 bytes（utf8mb4 下遠低於 InnoDB 3072 上限），完整欄位名另存於 `field`。MySQL／MariaDB 的 `payload` 使用上限 16,777,215 bytes 的 `MEDIUMTEXT`，SQLite 使用 `TEXT`。`applyChanges(...)` 只寫有變動的欄位：同值 upsert 不產生寫入也不推進 `revision`；欄位移除以 `FieldChange.deletion(...)` 明確刪除，不留孤兒列；整批在單一交易內套用，任一筆失敗即整批 rollback。實際變動的新列從 `revision=1` 開始，後續每次寫入加一；同一批次重複指定欄位時最後一筆為準且只推進一次。upsert 先 `INSERT`，主鍵衝突時再 `UPDATE`，避免 InnoDB `REPEATABLE READ` 下 DELETE-then-INSERT 的 gap-lock 死結，不依賴 vendor 專屬語法。
+- 資料模型編解碼 SPI `PlayerDataCodec<T>` 與內建 `RecordPlayerDataCodec`（以 record component 名對映頂層欄位）。資料與模型不符時 `decode` 以 `ACELIB-DATA-002` 失敗並帶出問題欄位，不猜、不填預設值；欄位單純不存在則依型別取預設值。
+- `PlayerDataService` 新增逐玩家 store 建構路徑：登入前預載資料、session 轉為 `READY` 後以 `PlayerDataReadyListener` 通知一次（SPI 而非 Bukkit Event，因 I/O executor 既非主執行緒也非 region 執行緒；單一 listener 失敗只記 `ACELIB-PLAYER-009`）。`getOfflineData(uuid)` 可讀離線玩家資料，不需要 active session。另有四參數建構子可自訂單批 flush 的等待上限，逾時語意與既有版本一致（`ACELIB-PLAYER-008`，不等於保存成功）。
+- 定期保存週期性失敗不再把 dirty 標記為已清除：落盤確認後才推進已保存序號，失敗批次完整保留供下個週期或 quit／shutdown 重試。異常終止的資料遺失上限為一個保存週期內的變更量，已以獨立 JVM + `SIGKILL` 的 `scripts/player-store-crash-test.sh` 實測（32 次變更中讀回 29 筆、遺失 3 筆，週期 500ms，落在單週期預算內）。
+- 既有資料一次性轉換：舊 `player-data.json` 與舊 `acelib_data_kv` 的 `players` 列可轉為逐玩家 store，只補目標缺少的玩家，來源檔與來源資料表零修改零刪除，因此中斷重跑安全、轉換後新發生的資料永遠勝出。三層校驗（筆數／內容雜湊／逐玩家完整性）以「從 store 讀回」重算，SQLite 與 MySQL 同一套成立；只比對本次匯入玩家的完整內容，已存在玩家只檢查仍有資料，避免現場更新後重跑誤報 `ACELIB-DATA-013`。轉換失敗以 `ACELIB-PLAYER-006` 記錄並停用玩家資料服務；來源與備份保留，修復後可重跑，plugin 其他功能仍可啟動。
+- 真 DB 驗證擴充：`PlayerStoreCompatSuite`（逐玩家隔離、增量 upsert 與 revision、70,000 字元 payload 往返、欄位／玩家刪除、六組並行變動、交易失敗 rollback、舊資料轉換保留其他 store）與既有 `JdbcCompatSuite` 共用 `scripts/jdbc-mysql-compat.sh`，在 mysql:8.4 與 mariadb:11.4 臨時容器上執行；Gradle test 端以 `PlayerStoreCompatGatedTest` 在環境變數齊備時才跑，CI 不依賴 Docker。
+- **修正**：`PlayerDataService` 曾在 `store.save()` 落盤前就推進已保存序號，保存失敗時 dirty 被清掉、變更永不重試。改為逐玩家寫入回傳序號、整批寫完且落盤確認後才推進。
+- **修正**：reload 成功路徑與 `reload(INCOMPATIBLE)` 降級路徑原本未關閉舊 store，SQLite 連線會洩漏。現兩處都在舊服務 shutdown（已完成 flush）之後、bind 新服務之前關閉舊 store。
+- **審查修正**：離線資料讀取不再修改活躍玩家差分快取；整批寫入全部成功後才推進保存序號，文件同步更正；轉換結果計數只包含實際有欄位寫入的玩家。
+- 玩家資料於 `AsyncPlayerPreLoginEvent` 透過既有 session 狀態機登入前預載；join 接手成功預載而不重複讀取，失敗則回退原 join 載入。登入未完成時的預載在 30 秒後清理，reload／disable 解除 listener 與清理排程。
+- **未實測項目**：Paper／Folia 實機的 join／reload／disable、SQLite 落盤與 MySQL 後端尚未在實際伺服器上驗收；真 MySQL／MariaDB 相容驗證目前在 macOS 臨時容器完成，需於目標部署環境重跑確認。
+
 ### 修補內容（實機驗證回合 2）
 
 - `WorldArgument` 解析加入維度鍵 fallback：依序嘗試 legacy Bukkit 世界名 → 大小寫不敏感掃描 → 維度鍵（`NamespacedKey.fromString(raw, null)` 後 `Bukkit.getWorld(key)`），裸名以 `minecraft` 命名空間解讀。
