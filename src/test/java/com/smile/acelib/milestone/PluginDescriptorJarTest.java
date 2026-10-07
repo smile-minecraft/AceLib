@@ -110,18 +110,16 @@ class PluginDescriptorJarTest {
     }
 
     @Test
-    @DisplayName("plugin.yml 必須宣告 acelib command 含 permission")
-    void commandsDeclaresAcelibWithPermission() {
+    @DisplayName("plugin.yml 不再宣告 commands 區塊（v1.4.0 Brigadier 遷移）")
+    void commandsBlockAbsentAfterBrigadierMigration() {
+        // v1.4.0 型別化指令框架：/acelib 改經 Paper Brigadier 生命週期
+        // （LifecycleEvents.COMMANDS）註冊，不再需要 plugin.yml 的
+        // commands 宣告。本測試由「必須宣告」改為「必須缺席」，
+        // 避免雙註冊（Bukkit PluginCommand 與 Brigadier literal 同名覆蓋
+        // 語意隨版本而定）；權限節點仍由 permissions 區塊宣告（見下一個測試）。
         Object commands = objectOf(parsedRoot, "commands");
-        assertNotNull(commands, "plugin.yml 缺少 commands 區塊；實際: " + pluginYmlContent);
-        assertTrue(commands instanceof java.util.Map,
-            "commands 區塊必須是 map；實際: " + commands.getClass());
-        Object acelib = ((java.util.Map<?, ?>) commands).get("acelib");
-        assertNotNull(acelib,
-            "commands 必須宣告 'acelib' 主指令；實際 commands keys: "
-                + ((java.util.Map<?, ?>) commands).keySet());
-        assertEquals("acelib.admin", stringOf(acelib, "permission"),
-            "commands.acelib.permission 必須為 'acelib.admin'；實際: "
+        assertTrue(commands == null,
+            "plugin.yml 不可再有 commands 區塊（Brigadier 註冊取代宣告需求）；實際: "
                 + pluginYmlContent);
     }
 

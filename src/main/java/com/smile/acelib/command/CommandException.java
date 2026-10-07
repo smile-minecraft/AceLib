@@ -66,7 +66,7 @@ public class CommandException extends RuntimeException {
      * 建立 caller 自訂錯誤（CUSTOM kind + 自訂 code）。
      *
      * <p>典型用例：handler 內部拋出業務特定錯誤（例如「找不到目標玩家」），
-     * 既不屬於 dispatcher 內建的 9 種標準 kind，也不適合丟 {@code IllegalStateException}。</p>
+     * 既不屬於 dispatcher 內建的標準 kind，也不適合丟 {@code IllegalStateException}。</p>
      *
      * @param code    自訂錯誤代碼（必須 {@code ACELIB-*} 開頭以便管理員識別）；
      *                不可為 null

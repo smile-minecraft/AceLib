@@ -69,7 +69,9 @@ class ApiBoundaryRegressionTest {
         // v1 canonical inventory：119 Supported + 12 SPI + 20 Internal = 151。
         // 基岩相容任務刻意擴充（132 → 137 → 141 → 143），表單圖示任務再 +1（→ 144），
         // 表單文字任務再 +2（→ 146），指令目錄任務再 +5（→ 151），
-        // 任務完成語意與作用域任務再 +4（→ 155），設定啟動／快照／型別綁定任務再 +5（→ 160），新增二十八個頂層型別：
+        // 任務完成語意與作用域任務再 +4（→ 155），設定啟動／快照／型別綁定任務再 +5（→ 160），
+        // 插件隔離的介面流程與元件任務再 +13（→ 179），型別化指令框架任務再 +12（→ 191），
+        // 前述各段合計新增四十個頂層型別：
         //   Supported +13：
         //     - com.smile.acelib.bedrock.BedrockService（interface）— 基岩玩家查詢 facade，
         //       缺席環境以 absent lookup 零影響
@@ -171,17 +173,43 @@ class ApiBoundaryRegressionTest {
         //   Internal +1（介面流程）：
         //     - com.smile.acelib.gui.GuiServiceControl — 內部生命週期入口
         //       （AceLibPlugin 跨 package 停用；公開 shutdown 已於 1.4.0 移除）
+        //   Supported +8、SPI +4（型別化指令框架）：
+        //     - com.smile.acelib.command.Arguments（class）— 八種型別化引數工廠
+        //       （玩家／離線玩家／整數／小數／時間長度／世界／列舉／材質）；
+        //       解析、驗證與補全的單一組裝入口
+        //     - com.smile.acelib.command.TypedCommand（class）— 型別化根指令 builder
+        //       （別名／權限／子指令；同時產出 CommandSpec 與 Brigadier 根節點）
+        //     - com.smile.acelib.command.TypedSubCommand（class）— 型別化子指令
+        //       builder；toSubCommandSpec 保留 SubCommandSpec 相容層
+        //     - com.smile.acelib.command.TypedContext（class）— 已解析引數值的
+        //       執行 context（以引數實例為 key，非字串名）
+        //     - com.smile.acelib.command.BrigadierRegistrar（class）— 註冊器；
+        //       內部 registry ＋ Brigadier 節點雙寫入，取代 plugin.yml 宣告需求
+        //     - com.smile.acelib.command.CommandMessages（interface, SPI）— 錯誤
+        //       在地化契約；下游可自備語系實作
+        //     - com.smile.acelib.command.DefaultCommandMessages（class）— 內建英文
+        //       預設訊息表（既有 dispatcher 文案的單一來源）
+        //     - com.smile.acelib.command.MessageServiceCommandMessages（class）— 經
+        //       message 模組查 key 的轉接（下游自備語言檔）
+        //     - com.smile.acelib.command.LocalizingReplySink（class）— presentation
+        //       層裝飾器；CommandException 轉在地化字串，缺 key 退回原文
+        //     - com.smile.acelib.command.CommandArgument（interface, SPI）— 型別化
+        //       引數契約（解析／補全／vanilla 型別／固定選項 literal）
+        //     - com.smile.acelib.command.TypedHandler（interface, SPI）— 收到已解析
+        //       TypedContext 的子指令處理器
+        //     - com.smile.acelib.command.BrigadierDispatch（interface, SPI）— 樹的
+        //       executes 委派回呼，維持 dispatch 單一真相來源
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 146,
-            "Supported 數量偏離 canonical 146，實際=" + supported);
-        assertTrue(spi == 12,
-            "SPI 數量偏離 canonical 12，實際=" + spi);
+        assertTrue(supported == 154,
+            "Supported 數量偏離 canonical 154，實際=" + supported);
+        assertTrue(spi == 16,
+            "SPI 數量偏離 canonical 16，實際=" + spi);
         assertTrue(internal == 21,
             "Internal 數量偏離 canonical 21，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 179,
-            "top-level inventory 偏離 canonical 179，實際=" + types.size());
+        assertTrue(types.size() == 191,
+            "top-level inventory 偏離 canonical 191，實際=" + types.size());
     }
 
     @Test

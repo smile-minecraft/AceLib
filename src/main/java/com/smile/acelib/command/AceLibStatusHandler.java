@@ -26,7 +26,7 @@ import java.util.function.Supplier;
  *
  * @since 1.0.0
  */
-public final class AceLibStatusHandler implements SubCommand {
+public final class AceLibStatusHandler implements SubCommand, TypedHandler {
 
     /**
      * 從 plugin 取得當下 diagnostics 的 supplier；reload 之後回傳的 instance
@@ -57,5 +57,19 @@ public final class AceLibStatusHandler implements SubCommand {
         // 不含 Java 物件 reference / hash，符合「不暴露 mutable 內部」契約。
         DiagnosticReport report = ds.buildReport();
         context.reply(report.format(false));
+    }
+
+    /**
+     * 型別化入口（Brigadier 路徑共用同一邏輯）。
+     *
+     * <p>{@code status} 無引數，型別 context 僅轉交底層 legacy context；
+     * permission、玩家／console 限定仍由 dispatcher 統一檢查。</p>
+     *
+     * @param context 型別化 context；不可為 null
+     * @since 1.4.0
+     */
+    @Override
+    public void execute(TypedContext context) {
+        execute(context.legacy());
     }
 }

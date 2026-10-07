@@ -156,6 +156,188 @@ class BukkitReplySinkSafetyTest {
     }
 
     // ---------------------------------------------------------------------
+    // owned 快路徑（實機驗證回合 1 修正）
+    // ---------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("同執行緒 owned 快路徑")
+    class OwnedFastPath {
+
+        @Test
+        @DisplayName("owned：非 AceLib owner 的 send() 直接送達玩家，不經 backend、不被 ACELIB-CMD-011 擋下")
+        void owned_send_deliversInline_withoutBackend() {
+            // 真實 detect 結果（fakeOwner → 會拋 ACELIB-CMD-011 的 backend）：
+            // 這正是實機上探針被擋下的情境，修正後應在 owned 時送達。
+            BukkitReplySink.SafeExecutorBackend refusing =
+                BukkitReplySink.SafeExecutorBackend.detect(fakeOwner);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, refusing,
+                entity -> true);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            when(mockedPlayer.getName()).thenReturn("OwnedMock");
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.send(bs, "owned reply");
+
+            verify(mockedPlayer, times(1)).sendMessage("owned reply");
+            assertTrue(logHandler.captured().isEmpty(),
+                "owned 快路徑不應記錄 ACELIB-CMD-011 warning，實際: "
+                    + logHandler.captured());
+        }
+
+        @Test
+        @DisplayName("owned：sendPlayerAsync 在同一 region 執行緒也直接送達")
+        void owned_sendPlayerAsync_deliversInline() {
+            BukkitReplySink.SafeExecutorBackend refusing =
+                BukkitReplySink.SafeExecutorBackend.detect(fakeOwner);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, refusing,
+                entity -> true);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            when(mockedPlayer.getName()).thenReturn("OwnedAsyncMock");
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+            BukkitSender.BukkitPlayerHandle handle =
+                (BukkitSender.BukkitPlayerHandle) bs.asPlayer();
+            assertNotNull(handle);
+
+            sink.sendPlayerAsync(handle, "owned async reply");
+
+            verify(mockedPlayer, times(1)).sendMessage("owned async reply");
+        }
+
+        @Test
+        @DisplayName("owned：sendError 的 CommandException 訊息也要送達玩家（錯誤提示驗收）")
+        void owned_sendError_deliversLocalizedErrorToPlayer() {
+            BukkitReplySink.SafeExecutorBackend refusing =
+                BukkitReplySink.SafeExecutorBackend.detect(fakeOwner);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, refusing,
+                entity -> true);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            when(mockedPlayer.getName()).thenReturn("OwnedErrorMock");
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.sendError(bs,
+                new CommandException(CommandErrorKind.INVALID_ARGUMENT,
+                    "invalid value for <amount>: 'abc'", java.util.Map.of()));
+
+            // 對玩家的錯誤前綴為空字串，只送 message。
+            verify(mockedPlayer, times(1))
+                .sendMessage("invalid value for <amount>: 'abc'");
+        }
+
+        @Test
+        @DisplayName("owned：不呼叫 backend（inline 派送已足夠，不做多餘 hop）")
+        void owned_doesNotInvokeBackend() {
+            BukkitReplySink.SafeExecutorBackend backend =
+                mock(BukkitReplySink.SafeExecutorBackend.class);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, backend,
+                entity -> true);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.send(bs, "no hop");
+
+            verify(backend, never()).runOnPlayerRegion(
+                any(JavaPlugin.class), any(Player.class), any(Runnable.class));
+            verify(mockedPlayer, times(1)).sendMessage("no hop");
+        }
+
+        @Test
+        @DisplayName("not-owned：仍走 backend，且不直接 sendMessage（安全下限不變）")
+        void notOwned_stillRoutesThroughBackend() {
+            BukkitReplySink.SafeExecutorBackend backend =
+                mock(BukkitReplySink.SafeExecutorBackend.class);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, backend,
+                entity -> false);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.send(bs, "must go through backend");
+
+            verify(backend, times(1)).runOnPlayerRegion(
+                eq(fakeOwner), eq(mockedPlayer), any(Runnable.class));
+            verify(mockedPlayer, never()).sendMessage(anyString());
+        }
+
+        @Test
+        @DisplayName("not-owned：非 AceLib owner 仍被 ACELIB-CMD-011 拒絕（跨執行緒下限不變）")
+        void notOwned_nonAceLibOwnerStillRefused() {
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner,
+                BukkitReplySink.SafeExecutorBackend.detect(fakeOwner),
+                entity -> false);
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            when(mockedPlayer.getName()).thenReturn("NotOwnedMock");
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.send(bs, "should be refused");
+
+            verify(mockedPlayer, never()).sendMessage(anyString());
+            assertTrue(logHandler.captured().contains("ACELIB-CMD-011"),
+                "not-owned 且非 AceLib owner 必須仍記錄 ACELIB-CMD-011，實際: "
+                    + logHandler.captured());
+        }
+
+        @Test
+        @DisplayName("ownership 查詢拋例外 → fail-closed 走 backend（不放行 inline）")
+        void ownershipThrows_fallsBackToBackend() {
+            BukkitReplySink.SafeExecutorBackend backend =
+                mock(BukkitReplySink.SafeExecutorBackend.class);
+            BukkitReplySink sink = new BukkitReplySink(fakeOwner, backend,
+                entity -> {
+                    throw new IllegalStateException("server not ready");
+                });
+
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            sink.send(bs, "fail closed");
+
+            verify(backend, times(1)).runOnPlayerRegion(
+                eq(fakeOwner), eq(mockedPlayer), any(Runnable.class));
+            verify(mockedPlayer, never()).sendMessage(anyString());
+        }
+
+        @Test
+        @DisplayName("AceLib owner：owned 與 not-owned 兩種情況都不退化（路徑不變）")
+        void acelibOwner_bothPathsWork() {
+            // AceLib owner 的 backend 會正常派送；這裡驗證 owned 快路徑不會
+            // 讓 AceLib owner 的回覆失效（兩條路徑都能送達）。
+            Player mockedPlayer = Mockito.mock(Player.class);
+            when(mockedPlayer.isOnline()).thenReturn(true);
+            BukkitSender bs = new BukkitSender(mockedPlayer);
+
+            BukkitReplySink.SafeExecutorBackend running =
+                mock(BukkitReplySink.SafeExecutorBackend.class);
+            Mockito.doAnswer(inv -> {
+                ((Runnable) inv.getArgument(2)).run();
+                return null;
+            }).when(running).runOnPlayerRegion(any(JavaPlugin.class),
+                any(Player.class), any(Runnable.class));
+
+            BukkitReplySink ownedSink = new BukkitReplySink(fakeOwner, running,
+                entity -> true);
+            ownedSink.send(bs, "acelib owned");
+            verify(mockedPlayer, times(1)).sendMessage("acelib owned");
+
+            BukkitReplySink notOwnedSink = new BukkitReplySink(fakeOwner, running,
+                entity -> false);
+            notOwnedSink.send(bs, "acelib not-owned");
+            verify(mockedPlayer, times(1)).sendMessage("acelib not-owned");
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // 非 AceLib owner 必須拒絕 inline
     // ---------------------------------------------------------------------
 

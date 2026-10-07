@@ -12,9 +12,9 @@
 
 ## 統計
 
-- 總數：179 個 public 頂層型別
-- Supported：146
-- SPI：12
+- 總數：191 個 public 頂層型別
+- Supported：154
+- SPI：16
 - Internal：21
 
 ## 分類明細
@@ -40,20 +40,28 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.command.AceLibStatusHandler` | class | Internal | 內部 /acelib status 指令處理器，封裝 console/玩家分流與 region-safe 派送；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 建構註冊 /acelib status；v1 前保留 public 供既有組裝鏈使用。 | BukkitCommandBridge。 |
-| `com.smile.acelib.command.BukkitCommandBridge` | class | Internal | Bukkit CommandExecutor 橋接內部實作；非穩定契約。 | AceLibPlugin（com.smile.acelib）跨 package 建構並 attach 到 Bukkit CommandExecutor；v1 前保留 public。 | AceLibPlugin 註冊指令。 |
+| `com.smile.acelib.command.Arguments` | class | Supported | 型別化引數工廠（玩家／離線玩家／整數／小數／時間長度／世界／列舉／材質，具解析驗證與自動補全）；v1.4.0 新增。 |  | TypedSubCommand；消費者組裝引數。 |
+| `com.smile.acelib.command.BrigadierDispatch` | interface | SPI | Brigadier 執行委派回呼（來源＋重建 args 交回 dispatch，維持單一真相來源）；v1.4.0 新增。 |  | TypedCommand.toBrigadierNode；BrigadierRegistrar 內部實作。 |
+| `com.smile.acelib.command.BrigadierRegistrar` | class | Supported | 型別化指令註冊器（內部 registry＋Brigadier 雙寫入；下游正式組裝入口，不再需要 plugin.yml 宣告）；v1.4.0 新增。 |  | 消費者 onEnable 註冊；AceLibPlugin 管理指令。 |
+| `com.smile.acelib.command.BukkitCommandBridge` | class | Internal | Bukkit CommandExecutor 橋接內部實作；非穩定契約。 | AceLibPlugin（com.smile.acelib）跨 package 建構並 attach 到 Bukkit CommandExecutor；v1 前保留 public。 | 下游傳統路徑（plugin.yml＋attach）相容層；AceLib 自身 v1.4.0 起改用 BrigadierRegistrar。 |
 | `com.smile.acelib.command.BukkitReplySink` | class | Internal | ReplySink 的 Bukkit 內部實作；消費者應使用 ReplySink 抽象而非此類。 | AceLibPlugin 跨 package 建構 ReplySink（含 nested SafeExecutorBackend）；v1 前保留 public 供既有組裝鏈使用。 | AceLibStatusHandler；指令 dispatch。 |
 | `com.smile.acelib.command.BukkitSender` | class | Internal | Sender 的 Bukkit 內部實作；消費者應使用 Sender 抽象。 | v1 canonical inventory 契約要求 132 top-level types；public→package-private 屬相容性 break，v1.0 保留 public 並記錄此理由，v1.x 收斂前須先經 review。 | 指令 dispatch。 |
 | `com.smile.acelib.command.CatalogMeta` | record | Supported | 指令目錄發布元資料值型別（分類、圖示、需確認子指令）；v1 穩定。 |  | CommandCatalog.publish；消費者發布指令描述。 |
 | `com.smile.acelib.command.CatalogResult` | enum | Supported | 指令目錄發布結果列舉；v1 凍結常數順序。 |  | CommandCatalog.publish。 |
+| `com.smile.acelib.command.CommandArgument` | interface | SPI | 型別化引數契約（解析／驗證／補全／vanilla 型別／固定選項 literal）；實作者須遵守單 token 不變條件；v1.4.0 新增。 |  | Arguments 工廠產生；TypedSubCommand 持有；消費者可自訂引數。 |
 | `com.smile.acelib.command.CommandCatalog` | interface | Supported | 指令目錄服務介面，只存指令描述、不註冊不執行。 |  | 消費者發布指令描述；說明頁產生器讀取快照。 |
 | `com.smile.acelib.command.CommandContext` | class | Supported | 傳遞給 SubCommand 的執行上下文（指令、參數、sender）；指令擴充契約的一部分，v1 穩定。 |  | SubCommand.execute。 |
 | `com.smile.acelib.command.CommandDoc` | record | Supported | 指令純描述投影值型別（不含 handler／completer／插件實例）；v1 穩定。 |  | CommandCatalog.publish／snapshot；說明頁產生器。 |
 | `com.smile.acelib.command.CommandErrorKind` | enum | Supported | 指令錯誤分類列舉，出現在 CommandException 與回覆語意中；v1 凍結常數順序。 |  | CommandException；BukkitReplySink。 |
 | `com.smile.acelib.command.CommandException` | class | Supported | 指令層級例外，消費者在 SubCommand 中可拋出；v1 契約。 |  | SubCommand；CommandRegistry。 |
+| `com.smile.acelib.command.CommandMessages` | interface | SPI | 指令錯誤訊息在地化契約（部分實作允許，缺 key 退回原文）；v1.4.0 新增。 |  | LocalizingReplySink；消費者可自訂訊息表。 |
 | `com.smile.acelib.command.CommandRegistry` | interface | Supported | 指令註冊服務介面，消費者用來註冊 SubCommand。 |  | AceLibPlugin；消費者。 |
 | `com.smile.acelib.command.CommandRegistryImpl` | class | Internal | CommandRegistry 的內部實作；非消費者 API。 | AceLibPlugin 跨 package 建構並於 onDisable 呼叫 onPluginDisable；v1 前保留 public。 | AceLibPlugin。 |
 | `com.smile.acelib.command.CommandSpec` | class | Supported | 指令規格值型別（名稱、權限、描述）；註冊時使用；v1 穩定。 |  | CommandRegistry.register。 |
 | `com.smile.acelib.command.CooldownTracker` | class | Supported | 指令冷卻追蹤工具類，供 SubCommandSpec 使用；public 穩定工具。 |  | SubCommandSpec；CommandRegistryImpl。 |
+| `com.smile.acelib.command.DefaultCommandMessages` | class | Supported | 內建英文指令錯誤訊息（預設實作，與既有 dispatcher 文字一致）；v1.4.0 新增。 |  | TypedSubCommand 預設；MessageServiceCommandMessages 缺 key 退回。 |
+| `com.smile.acelib.command.LocalizingReplySink` | class | Supported | 在地化回覆出口裝飾器（sendError 按 kind 在地化，缺 key 退回原文）；v1.4.0 新增。 |  | 消費者包裝 ReplySink。 |
+| `com.smile.acelib.command.MessageServiceCommandMessages` | class | Supported | 經 message 模組查 key 的在地化轉接（key 前綴＋固定後綴）；v1.4.0 新增。 |  | 消費者自備語言檔時使用。 |
 | `com.smile.acelib.command.PlayerHandle` | interface | Supported | 指令中代表玩家/來源的抽象；SubCommand 接收；v1 穩定。 |  | SubCommand；Sender。 |
 | `com.smile.acelib.command.ReplySink` | interface | Supported | 指令回覆抽象（region-safe 派送）；SubCommand 接收；v1 穩定。 |  | SubCommand；BukkitReplySink 實作。 |
 | `com.smile.acelib.command.Sender` | interface | Supported | 指令來源抽象（console/玩家）；SubCommand 接收；v1 穩定。 |  | SubCommand；BukkitSender 實作。 |
@@ -61,6 +69,10 @@
 | `com.smile.acelib.command.SubCommandCompleter` | interface | SPI | 消費者實作的 tab 補全介面；extension point。 |  | CommandRegistry 呼叫補全。 |
 | `com.smile.acelib.command.SubCommandSpec` | class | Supported | 子指令規格值型別（名稱、權限、冷卻）；註冊時使用；v1 穩定。 |  | CommandRegistry.register。 |
 | `com.smile.acelib.command.SubDoc` | record | Supported | 子指令純描述投影值型別（不含 handler／completer）；v1 穩定。 |  | CommandDoc.subcommands；說明頁產生器。 |
+| `com.smile.acelib.command.TypedCommand` | class | Supported | 型別化根指令規格（builder 組裝，轉 CommandSpec／Brigadier 節點）；v1.4.0 新增。 |  | BrigadierRegistrar.register；消費者組裝。 |
+| `com.smile.acelib.command.TypedContext` | class | Supported | 型別化執行 context（已解析引數值，key 為引數實例）；v1.4.0 新增。 |  | TypedHandler.execute。 |
+| `com.smile.acelib.command.TypedHandler` | interface | SPI | 型別化子指令處理器（extension point，只處理業務邏輯不碰字串）；v1.4.0 新增。 |  | TypedSubCommand；消費者實作。 |
+| `com.smile.acelib.command.TypedSubCommand` | class | Supported | 型別化子指令規格（builder 組裝，轉 SubCommandSpec 相容層／Brigadier 子樹）；v1.4.0 新增。 |  | TypedCommand；消費者組裝。 |
 
 ### com.smile.acelib.config
 

@@ -58,6 +58,29 @@
       "method isBedrockPlayer(java.util.UUID) : boolean",
       "method shutdown() : void"
     ],
+    "com.smile.acelib.command.Arguments": [
+      "method doubleArg(java.lang.String,double,double) : com.smile.acelib.command.CommandArgument<java.lang.Double>",
+      "method duration(java.lang.String) : com.smile.acelib.command.CommandArgument<java.lang.Long>",
+      "method enumArg(java.lang.String,java.lang.Class<E>) : com.smile.acelib.command.CommandArgument<E>",
+      "method fixed(java.lang.String,java.lang.String[]) : com.smile.acelib.command.CommandArgument<java.lang.String>",
+      "method intArg(java.lang.String,int,int) : com.smile.acelib.command.CommandArgument<java.lang.Integer>",
+      "method material(java.lang.String) : com.smile.acelib.command.CommandArgument<org.bukkit.Material>",
+      "method offlinePlayer(java.lang.String) : com.smile.acelib.command.CommandArgument<org.bukkit.OfflinePlayer>",
+      "method player(java.lang.String) : com.smile.acelib.command.CommandArgument<com.smile.acelib.command.PlayerHandle>",
+      "method world(java.lang.String) : com.smile.acelib.command.CommandArgument<org.bukkit.World>"
+    ],
+    "com.smile.acelib.command.BrigadierDispatch": [
+      "method dispatch(io.papermc.paper.command.brigadier.CommandSourceStack,java.lang.String,java.util.List<java.lang.String>) : void"
+    ],
+    "com.smile.acelib.command.BrigadierRegistrar": [
+      "ctor(org.bukkit.plugin.java.JavaPlugin)",
+      "ctor(org.bukkit.plugin.java.JavaPlugin,com.smile.acelib.command.ReplySink)",
+      "method getRegisteredCommands() : java.util.List<com.smile.acelib.command.TypedCommand>",
+      "method getRegistry() : com.smile.acelib.command.CommandRegistry",
+      "method register(com.smile.acelib.command.TypedCommand) : void",
+      "method shutdown() : void",
+      "method unregister(java.lang.String) : void"
+    ],
     "com.smile.acelib.command.CatalogMeta": [
       "ctor(java.lang.String,java.util.Optional<com.smile.acelib.form.FormImage>,java.util.Set<java.lang.String>)",
       "method category() : java.lang.String",
@@ -75,6 +98,18 @@
       "field UNCHANGED : com.smile.acelib.command.CatalogResult",
       "method valueOf(java.lang.String) : com.smile.acelib.command.CatalogResult",
       "method values() : com.smile.acelib.command.CatalogResult[]"
+    ],
+    "com.smile.acelib.command.CommandArgument": [
+      "method bedrockVisible() : boolean",
+      "method brigadierType(com.smile.acelib.command.ArgumentTypeFactory) : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method fixedOptions() : java.util.List<java.lang.String>",
+      "method isFixedOptions() : boolean",
+      "method name() : java.lang.String",
+      "method parse(java.lang.String) : T",
+      "method parse(java.lang.String,com.smile.acelib.command.CommandMessages) : T",
+      "method resolve(com.mojang.brigadier.context.CommandContext<io.papermc.paper.command.brigadier.CommandSourceStack>) : T",
+      "method suggest(java.lang.String) : java.util.List<java.lang.String>",
+      "method usageToken() : java.lang.String"
     ],
     "com.smile.acelib.command.CommandCatalog": [
       "method forProduction() : com.smile.acelib.command.CommandCatalog",
@@ -121,6 +156,7 @@
       "field CONSOLE_NOT_ALLOWED : com.smile.acelib.command.CommandErrorKind",
       "field COOLDOWN_ACTIVE : com.smile.acelib.command.CommandErrorKind",
       "field CUSTOM : com.smile.acelib.command.CommandErrorKind",
+      "field INVALID_ARGUMENT : com.smile.acelib.command.CommandErrorKind",
       "field MISSING_ARGUMENTS : com.smile.acelib.command.CommandErrorKind",
       "field NO_PERMISSION : com.smile.acelib.command.CommandErrorKind",
       "field PLAYER_NOT_ALLOWED : com.smile.acelib.command.CommandErrorKind",
@@ -139,6 +175,21 @@
       "method getCode() : java.lang.String",
       "method getKind() : com.smile.acelib.command.CommandErrorKind",
       "method getVars() : java.util.Map<java.lang.String, java.lang.Object>"
+    ],
+    "com.smile.acelib.command.CommandMessages": [
+      "method consoleNotAllowed(java.lang.String) : java.lang.String",
+      "method cooldownActive(java.lang.String,long) : java.lang.String",
+      "method executionFailed(java.lang.String) : java.lang.String",
+      "method invalidArgument(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method localize(com.smile.acelib.command.CommandException) : java.lang.String",
+      "method missingArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method noPermission(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method playerNotAllowed(java.lang.String) : java.lang.String",
+      "method playerOffline(java.lang.String) : java.lang.String",
+      "method registryDisabled() : java.lang.String",
+      "method tooManyArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method unknownCommand(java.lang.String) : java.lang.String",
+      "method unknownSubcommand(java.lang.String,java.lang.String) : java.lang.String"
     ],
     "com.smile.acelib.command.CommandRegistry": [
       "method dispatch(com.smile.acelib.command.Sender,java.lang.String,java.util.List<java.lang.String>) : void",
@@ -171,6 +222,54 @@
       "method snapshot() : java.util.Map<java.util.UUID, java.util.Map<java.lang.String, java.lang.Long>>",
       "method trackedPlayerCount() : int",
       "method tryAcquire(java.util.UUID,java.lang.String,long) : boolean"
+    ],
+    "com.smile.acelib.command.DefaultCommandMessages": [
+      "method consoleNotAllowed(java.lang.String) : java.lang.String",
+      "method cooldownActive(java.lang.String,long) : java.lang.String",
+      "method executionFailed(java.lang.String) : java.lang.String",
+      "method instance() : com.smile.acelib.command.DefaultCommandMessages",
+      "method invalidArgument(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method missingArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method noPermission(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method playerNotAllowed(java.lang.String) : java.lang.String",
+      "method playerOffline(java.lang.String) : java.lang.String",
+      "method registryDisabled() : java.lang.String",
+      "method tooManyArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method unknownCommand(java.lang.String) : java.lang.String",
+      "method unknownSubcommand(java.lang.String,java.lang.String) : java.lang.String"
+    ],
+    "com.smile.acelib.command.LocalizingReplySink": [
+      "ctor(com.smile.acelib.command.ReplySink,com.smile.acelib.command.CommandMessages)",
+      "method send(com.smile.acelib.command.Sender,java.lang.String) : void",
+      "method sendError(com.smile.acelib.command.Sender,java.lang.Throwable) : void",
+      "method sendPlayerAsync(com.smile.acelib.command.PlayerHandle,java.lang.String) : void"
+    ],
+    "com.smile.acelib.command.MessageServiceCommandMessages": [
+      "ctor(com.smile.acelib.message.MessageService,java.lang.String,com.smile.acelib.command.CommandMessages)",
+      "field KEY_CONSOLE_NOT_ALLOWED : java.lang.String",
+      "field KEY_COOLDOWN_ACTIVE : java.lang.String",
+      "field KEY_EXECUTION_FAILED : java.lang.String",
+      "field KEY_INVALID_ARGUMENT : java.lang.String",
+      "field KEY_MISSING_ARGUMENTS : java.lang.String",
+      "field KEY_NO_PERMISSION : java.lang.String",
+      "field KEY_PLAYER_NOT_ALLOWED : java.lang.String",
+      "field KEY_PLAYER_OFFLINE : java.lang.String",
+      "field KEY_REGISTRY_DISABLED : java.lang.String",
+      "field KEY_TOO_MANY_ARGUMENTS : java.lang.String",
+      "field KEY_UNKNOWN_COMMAND : java.lang.String",
+      "field KEY_UNKNOWN_SUBCOMMAND : java.lang.String",
+      "method consoleNotAllowed(java.lang.String) : java.lang.String",
+      "method cooldownActive(java.lang.String,long) : java.lang.String",
+      "method executionFailed(java.lang.String) : java.lang.String",
+      "method invalidArgument(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method missingArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method noPermission(java.lang.String,java.lang.String,java.lang.String) : java.lang.String",
+      "method playerNotAllowed(java.lang.String) : java.lang.String",
+      "method playerOffline(java.lang.String) : java.lang.String",
+      "method registryDisabled() : java.lang.String",
+      "method tooManyArguments(java.lang.String,java.lang.String,int,int) : java.lang.String",
+      "method unknownCommand(java.lang.String) : java.lang.String",
+      "method unknownSubcommand(java.lang.String,java.lang.String) : java.lang.String"
     ],
     "com.smile.acelib.command.PlayerHandle": [
       "method getLocale() : java.util.Locale",
@@ -238,6 +337,42 @@
       "method toString() : java.lang.String",
       "method usage() : java.lang.String",
       "method visibleTo(org.bukkit.permissions.Permissible) : boolean"
+    ],
+    "com.smile.acelib.command.TypedCommand": [
+      "method aliases() : java.util.List<java.lang.String>",
+      "method builder(java.lang.String) : com.smile.acelib.command.TypedCommand$Builder",
+      "method description() : java.lang.String",
+      "method name() : java.lang.String",
+      "method permission() : java.lang.String",
+      "method subcommands() : java.util.List<com.smile.acelib.command.TypedSubCommand>",
+      "method toBrigadierNode(com.smile.acelib.command.ArgumentTypeFactory,com.smile.acelib.command.BrigadierDispatch) : com.mojang.brigadier.tree.LiteralCommandNode<io.papermc.paper.command.brigadier.CommandSourceStack>",
+      "method toBrigadierNode(com.smile.acelib.command.BrigadierDispatch) : com.mojang.brigadier.tree.LiteralCommandNode<io.papermc.paper.command.brigadier.CommandSourceStack>",
+      "method toCommandSpec() : com.smile.acelib.command.CommandSpec",
+      "method usage() : java.lang.String"
+    ],
+    "com.smile.acelib.command.TypedContext": [
+      "method commandArgs() : java.util.List<java.lang.String>",
+      "method commandLabel() : java.lang.String",
+      "method get(com.smile.acelib.command.CommandArgument<T>) : T",
+      "method reply(java.lang.String) : void",
+      "method replyError(java.lang.Throwable) : void",
+      "method replyPlayerAsync(java.lang.String) : void",
+      "method requireOnlinePlayer() : com.smile.acelib.command.PlayerHandle",
+      "method requirePlayer() : com.smile.acelib.command.PlayerHandle",
+      "method sender() : com.smile.acelib.command.Sender"
+    ],
+    "com.smile.acelib.command.TypedHandler": [
+      "method execute(com.smile.acelib.command.TypedContext) : void"
+    ],
+    "com.smile.acelib.command.TypedSubCommand": [
+      "method arguments() : java.util.List<com.smile.acelib.command.CommandArgument<?>>",
+      "method buildBranch(com.smile.acelib.command.ArgumentTypeFactory,com.smile.acelib.command.BrigadierDispatch,java.lang.String) : com.mojang.brigadier.builder.LiteralArgumentBuilder<io.papermc.paper.command.brigadier.CommandSourceStack>",
+      "method builder(java.lang.String) : com.smile.acelib.command.TypedSubCommand$Builder",
+      "method description() : java.lang.String",
+      "method name() : java.lang.String",
+      "method permission() : java.lang.String",
+      "method toSubCommandSpec() : com.smile.acelib.command.SubCommandSpec",
+      "method usage() : java.lang.String"
     ],
     "com.smile.acelib.config.AceLibConfig": [
       "method bind(org.bukkit.plugin.java.JavaPlugin) : com.smile.acelib.config.AceLibConfig",

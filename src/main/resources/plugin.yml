@@ -17,14 +17,8 @@ depend: []
 # （現代 Paper 採 access-backed classloader group，僅對宣告的 depend/softdepend 開放），
 # 否則即使改用正確的 plugin classloader 也看不到 marker class。
 softdepend: [floodgate, Vault, LuckPerms, PlaceholderAPI]
-commands:
-  acelib:
-    description: AceLib 管理指令根節點
-    aliases:
-      - alib
-    usage: /acelib <status>
-    permission: acelib.admin
-    permission-message: 沒有權限執行此指令
+# v1.4.0 起指令改經 Paper Brigadier 生命週期註冊（LifecycleEvents.COMMANDS），
+# 不再需要 commands 宣告；acelib.admin 權限節點保留（requires＋dispatch 共用）。
 permissions:
   acelib.admin:
     description: 存取 AceLib 管理指令（/acelib status 等）

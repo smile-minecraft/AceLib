@@ -57,6 +57,38 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 寫回保留註解：行級合併，只改值變了的行、只補缺的 key（含欄位說明），其餘逐位元保留；原子替換後盡力還原 POSIX 權限（已實測）。
 - API 為加法性變更：新增 `StartupResult`、`ConfigSnapshot`、`ConfigBinder`（含 nested `ConfigKey`／`ConfigRange`）、`ConfigBindingException`、`ConfigChangeListener`，`ConfigManager`／`AceLibConfig` 新增方法；未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步。
 
+### 本階段內容（型別化的指令框架）
+
+- 以 Paper Brigadier 註冊取代 `plugin.yml` 的指令宣告需求：`BrigadierRegistrar` 在 `onEnable` 期間經 `LifecycleEvents.COMMANDS` 掛載註冊器，平台在命令同步時機執行實際註冊。`plugin.yml` 不再需要 `commands` 區塊（AceLib 自身的 `/acelib` 已遷移，`acelib.admin` 權限節點保留）。
+- 型別化組裝入口：`TypedCommand`／`TypedSubCommand` builder 與 `Arguments` 引數工廠。同一個 builder 產出兩種註冊形式——`SubCommandSpec` 相容層保留原樣，既有以 `plugin.yml` 宣告＋bridge attach 的插件不受影響。
+- 八種型別化引數各有解析、驗證與自動補全：玩家、離線玩家、有界整數、有界小數、時間長度、世界、列舉、固定字串選項、材質。解析失敗一律以 `ACELIB-CMD-015`（玩家離線沿用既有的 `ACELIB-CMD-007`）回覆，不 wrap、不截斷、不靜默降級。
+- 固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支，是基岩版（Geyser）唯一看得見補全的結構；開放式引數送 vanilla 引數型別給客戶端先行驗證。時間長度語法與 vanilla time 一致（`100`／`1t`／`1.5s`／`1d`，回傳 ticks），兩端一致拒絕 `h`／`m` 單位以免出現「客戶端擋、伺服器放」的分歧。
+- 錯誤在地化：`CommandMessages` 契約搭配 `DefaultCommandMessages`（內建英文）、`MessageServiceCommandMessages`（經 message 模組查 key）與 `LocalizingReplySink`（presentation 層裝飾器，缺 key 退回例外原文）。說明與補全依權限過濾，冷卻沿用既有 `CooldownTracker`，未重造冷卻。
+- 生命週期：註冊只在 `onEnable` 呼叫一次，reload 不重建、不重複註冊；同名重複註冊原子拒絕且不殘留半註冊；`shutdown()` 與 plugin disable 後殘留 dispatch 一律回 `ACELIB-CMD-009`。平台未提供取消單一指令註冊的 API，因此 `unregister` 只清本地簿記與內部 registry，平台側節點等 plugin disable 才移除（已於模組頁與 Javadoc 標明）。
+- 實機驗證工具：新增 `examples/command-compatibility-probe`，涵蓋 42 個可重跑案例（解析／錯誤／補全／生命週期）與執行緒紀錄，供 Paper／Folia 實測。
+- **未實測項目**：各引數的基岩補全尚未由真人基岩客戶端逐項實測。模組頁的基岩版補全矩陣目前是依 Geyser 只解析固定選項結構的行為推導，實測結果待補；Java 機器人的 tab 請求走 Java 協議，不能替代基岩客戶端的觀察。
+
+### 修補內容（實機驗證回合 2）
+
+- `WorldArgument` 解析加入維度鍵 fallback：依序嘗試 legacy Bukkit 世界名 → 大小寫不敏感掃描 → 維度鍵（`NamespacedKey.fromString(raw, null)` 後 `Bukkit.getWorld(key)`），裸名以 `minecraft` 命名空間解讀。
+  - 修正前：世界引數**任何輸入都無法解析**。Brigadier 樹送給客戶端的是 vanilla world 型別，只接受維度鍵（`overworld`／`minecraft:overworld`），而 `Bukkit.getWorld(String)` 認的是 legacy Bukkit 名（主世界為 `world`）。兩套命名對主世界不相交，造成 `world` 被 vanilla 拒（`Unknown dimension 'minecraft:world'`），`overworld`／`minecraft:overworld` 通過 vanilla 卻在解析階段被拒（`invalid value for <world>: 'overworld' (unknown world)`）。
+  - 修正後：兩種命名皆可解析出主世界，兩條執行路徑的輸入集合一致。維度鍵為小寫規範形式，`NamespacedKey.fromString` 對含大寫的輸入回 null，因此一併以小寫重試以維持大小寫不敏感語意。
+  - 補全行為不變（仍回傳 Bukkit 世界名）；既有的「精確名 → 大小寫不敏感掃描」順序保留。
+- 指令相容性探針的回報改為直接取自已解析值的實型別（不再從 usage token 推測），並補上 `PlayerHandle` 分支：在線玩家不再印出 `BukkitSender$BukkitPlayerHandle@<hash>` 與 `type=?`，改為玩家名與 `type=PlayerHandle`。
+
+### 修補內容（實機驗證回合 1）
+
+- `BukkitReplySink` 對玩家回覆加入「同執行緒 inline」快路徑：呼叫當下已擁有該玩家 region 時（`Bukkit.isOwnedByCurrentRegion`；Paper 主執行緒恆 owned、Folia 為對應 region 執行緒）直接送達，不再經 region 派送。
+  - 修正前：下游 plugin 的 handler 在 dispatch 執行緒呼叫 `ctx.reply(...)` 會被 backend 以 `ACELIB-CMD-011` 拒絕，訊息完全送不到玩家（實機於 Folia 觀察到 8 筆）。根因是 backend 只認 `AceLibPlugin` owner，與呼叫當下是否已在正確執行緒無關。
+  - 修正後：在 dispatch 執行緒的回覆（含 `CommandException` 錯誤提示）可直接送達，下游不需是 `AceLibPlugin` 也不需自行安排 region 派送。
+  - 安全下限不變：未擁有（或擁有權判斷失敗，fail-closed）時仍走 backend 派送；非 `AceLibPlugin` owner 的跨執行緒回覆仍以 `ACELIB-CMD-011` 拒絕，不退縮為 inline 送達。
+  - 判斷所用 API 已對照 Paper 與 MoonRise 原始碼：`CraftServer.isOwnedByCurrentRegion(Entity)` 委派 `TickThread.isTickThreadFor(entity)`，Paper 上為 `isTickThread()`（主執行緒為 `TickThread`），Folia 由 MoonRise 覆寫為真實 region 擁有權判斷。
+- API 為加法性變更：新增 `Arguments`、`TypedCommand`、`TypedSubCommand`、`TypedContext`、`BrigadierRegistrar`、`CommandArgument`、`TypedHandler`、`BrigadierDispatch`、`CommandMessages`、`DefaultCommandMessages`、`MessageServiceCommandMessages`、`LocalizingReplySink`，`CommandErrorKind` 新增 `INVALID_ARGUMENT`；`AceLibPlugin` 新增 `getCommandRegistry()`。未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步（純加法 +135／−0）。
+
+### 本階段新增錯誤碼
+
+- `ACELIB-CMD-015`：引數值非法（型別化引數解析失敗：非數字、整數／長度溢位、超出宣告範圍、時間長度溢位、未知世界／材質／選項，或從未上線的玩家名稱）。
+
 ## [1.3.1] - 2026-10-06
 
 v1.3.1 是修補版，修正排程、資料、事件、冷卻、設定、世界、生命週期與玩家資料的已知缺陷；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.3.1.jar`，管理員可直接下載，或從 `v1.3.1` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.3.1`）取得。

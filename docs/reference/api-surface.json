@@ -73,13 +73,40 @@
       "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構註冊 /acelib status；v1 前保留 public 供既有組裝鏈使用。"
     },
     {
+      "fqcn": "com.smile.acelib.command.Arguments",
+      "package": "com.smile.acelib.command",
+      "simpleName": "Arguments",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "型別化引數工廠（玩家／離線玩家／整數／小數／時間長度／世界／列舉／材質，具解析驗證與自動補全）；v1.4.0 新增。",
+      "mainCallers": "TypedSubCommand；消費者組裝引數。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.BrigadierDispatch",
+      "package": "com.smile.acelib.command",
+      "simpleName": "BrigadierDispatch",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "Brigadier 執行委派回呼（來源＋重建 args 交回 dispatch，維持單一真相來源）；v1.4.0 新增。",
+      "mainCallers": "TypedCommand.toBrigadierNode；BrigadierRegistrar 內部實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.BrigadierRegistrar",
+      "package": "com.smile.acelib.command",
+      "simpleName": "BrigadierRegistrar",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "型別化指令註冊器（內部 registry＋Brigadier 雙寫入；下游正式組裝入口，不再需要 plugin.yml 宣告）；v1.4.0 新增。",
+      "mainCallers": "消費者 onEnable 註冊；AceLibPlugin 管理指令。"
+    },
+    {
       "fqcn": "com.smile.acelib.command.BukkitCommandBridge",
       "package": "com.smile.acelib.command",
       "simpleName": "BukkitCommandBridge",
       "kind": "class",
       "classification": "Internal",
       "reason": "Bukkit CommandExecutor 橋接內部實作；非穩定契約。",
-      "mainCallers": "AceLibPlugin 註冊指令。",
+      "mainCallers": "下游傳統路徑（plugin.yml＋attach）相容層；AceLib 自身 v1.4.0 起改用 BrigadierRegistrar。",
       "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構並 attach 到 Bukkit CommandExecutor；v1 前保留 public。"
     },
     {
@@ -119,6 +146,15 @@
       "classification": "Supported",
       "reason": "指令目錄發布結果列舉；v1 凍結常數順序。",
       "mainCallers": "CommandCatalog.publish。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.CommandArgument",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandArgument",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "型別化引數契約（解析／驗證／補全／vanilla 型別／固定選項 literal）；實作者須遵守單 token 不變條件；v1.4.0 新增。",
+      "mainCallers": "Arguments 工廠產生；TypedSubCommand 持有；消費者可自訂引數。"
     },
     {
       "fqcn": "com.smile.acelib.command.CommandCatalog",
@@ -166,6 +202,15 @@
       "mainCallers": "SubCommand；CommandRegistry。"
     },
     {
+      "fqcn": "com.smile.acelib.command.CommandMessages",
+      "package": "com.smile.acelib.command",
+      "simpleName": "CommandMessages",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "指令錯誤訊息在地化契約（部分實作允許，缺 key 退回原文）；v1.4.0 新增。",
+      "mainCallers": "LocalizingReplySink；消費者可自訂訊息表。"
+    },
+    {
       "fqcn": "com.smile.acelib.command.CommandRegistry",
       "package": "com.smile.acelib.command",
       "simpleName": "CommandRegistry",
@@ -201,6 +246,33 @@
       "classification": "Supported",
       "reason": "指令冷卻追蹤工具類，供 SubCommandSpec 使用；public 穩定工具。",
       "mainCallers": "SubCommandSpec；CommandRegistryImpl。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.DefaultCommandMessages",
+      "package": "com.smile.acelib.command",
+      "simpleName": "DefaultCommandMessages",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "內建英文指令錯誤訊息（預設實作，與既有 dispatcher 文字一致）；v1.4.0 新增。",
+      "mainCallers": "TypedSubCommand 預設；MessageServiceCommandMessages 缺 key 退回。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.LocalizingReplySink",
+      "package": "com.smile.acelib.command",
+      "simpleName": "LocalizingReplySink",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "在地化回覆出口裝飾器（sendError 按 kind 在地化，缺 key 退回原文）；v1.4.0 新增。",
+      "mainCallers": "消費者包裝 ReplySink。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.MessageServiceCommandMessages",
+      "package": "com.smile.acelib.command",
+      "simpleName": "MessageServiceCommandMessages",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "經 message 模組查 key 的在地化轉接（key 前綴＋固定後綴）；v1.4.0 新增。",
+      "mainCallers": "消費者自備語言檔時使用。"
     },
     {
       "fqcn": "com.smile.acelib.command.PlayerHandle",
@@ -266,6 +338,42 @@
       "mainCallers": "CommandDoc.subcommands；說明頁產生器。"
     },
     {
+      "fqcn": "com.smile.acelib.command.TypedCommand",
+      "package": "com.smile.acelib.command",
+      "simpleName": "TypedCommand",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "型別化根指令規格（builder 組裝，轉 CommandSpec／Brigadier 節點）；v1.4.0 新增。",
+      "mainCallers": "BrigadierRegistrar.register；消費者組裝。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.TypedContext",
+      "package": "com.smile.acelib.command",
+      "simpleName": "TypedContext",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "型別化執行 context（已解析引數值，key 為引數實例）；v1.4.0 新增。",
+      "mainCallers": "TypedHandler.execute。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.TypedHandler",
+      "package": "com.smile.acelib.command",
+      "simpleName": "TypedHandler",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "型別化子指令處理器（extension point，只處理業務邏輯不碰字串）；v1.4.0 新增。",
+      "mainCallers": "TypedSubCommand；消費者實作。"
+    },
+    {
+      "fqcn": "com.smile.acelib.command.TypedSubCommand",
+      "package": "com.smile.acelib.command",
+      "simpleName": "TypedSubCommand",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "型別化子指令規格（builder 組裝，轉 SubCommandSpec 相容層／Brigadier 子樹）；v1.4.0 新增。",
+      "mainCallers": "TypedCommand；消費者組裝。"
+    },
+    {
       "fqcn": "com.smile.acelib.config.AceLibConfig",
       "package": "com.smile.acelib.config",
       "simpleName": "AceLibConfig",
@@ -275,15 +383,6 @@
       "mainCallers": "AceLibPlugin；消費者。"
     },
     {
-      "fqcn": "com.smile.acelib.config.ConfigBindingException",
-      "package": "com.smile.acelib.config",
-      "simpleName": "ConfigBindingException",
-      "kind": "class",
-      "classification": "Supported",
-      "reason": "設定綁定例外（ACELIB-CFG-007），攜帶完整欄位路徑；v1 契約。",
-      "mainCallers": "ConfigBinder；ConfigManager.bind。"
-    },
-    {
       "fqcn": "com.smile.acelib.config.ConfigBinder",
       "package": "com.smile.acelib.config",
       "simpleName": "ConfigBinder",
@@ -291,6 +390,15 @@
       "classification": "Supported",
       "reason": "快照到 record／一般類別的綁定器（型別／範圍／列舉驗證，註解以 nested 承載）；v1 穩定。",
       "mainCallers": "ConfigManager.bind；消費者。"
+    },
+    {
+      "fqcn": "com.smile.acelib.config.ConfigBindingException",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigBindingException",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "設定綁定例外（ACELIB-CFG-007），攜帶完整欄位路徑；v1 契約。",
+      "mainCallers": "ConfigBinder；ConfigManager.bind。"
     },
     {
       "fqcn": "com.smile.acelib.config.ConfigChangeListener",

@@ -2,6 +2,7 @@ package com.smile.acelib.command;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.AceLibPlugin;
@@ -14,7 +15,6 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -29,6 +29,12 @@ import org.mockbukkit.mockbukkit.ServerMock;
  * 驗證 {@code /acelib status} 經實際 plugin lifecycle 可被 dispatch，並覆蓋
  * 權限、tab completion、disable / reload cleanup、以及「不暴露 mutable
  * 內部」契約（Plan §二十五 #7 / #11）。
+ *
+ * <p>v1.4.0 起 {@code /acelib} 改經 Brigadier 註冊（不再需要
+ * {@code plugin.yml} 的 {@code commands} 宣告）；MockBukkit 不觸發平台
+ * 命令同步事件，故本測試經 plugin 內部 {@link CommandRegistry} 直接
+ * dispatch（與 Brigadier 執行委派同一入口），結構覆蓋另見
+ * {@code TypedCommandTreeTest}。</p>
  *
  * <p>測試沿用 {@code AceLibPluginTest} 的 {@code loadPlugin + 手動 onEnable}
  * 模式，避免 MockBukkit 自動 enable 走 plugin classloader 而撞到
@@ -53,8 +59,7 @@ class AceLibStatusCommandTest {
         // 手動 onEnable（使用測試 classloader 建構 detector，繞過 plugin
         // classloader 的 MockBukkit "No jar file selected" NPE）
         plugin.onEnable(server, new PlatformDetector(getClass().getClassLoader()));
-        // 標記 plugin 為 enabled — PluginCommand.execute 會檢查 isEnabled()，
-        // 手動 onEnable 不足以讓 Bukkit 接受 dispatch
+        // 標記 plugin 為 enabled
         server.getPluginManager().enablePlugin(plugin);
     }
 
@@ -64,20 +69,23 @@ class AceLibStatusCommandTest {
     }
 
     // ---------------------------------------------------------------------
-    // 1. plugin.yml 宣告 + bridge attach
+    // 1. Brigadier 註冊＋內部 registry
     // ---------------------------------------------------------------------
 
     @Test
-    @DisplayName("onEnable 後 plugin.getCommand('acelib') 必須非 null（BukkitCommandBridge 已 attach）")
+    @DisplayName("onEnable 後內部 registry 持有 acelib 根指令（含 alib 別名）")
     void onEnable_acelibCommandIsRegistered() {
-        PluginCommand cmd = plugin.getCommand(COMMAND_NAME);
-        assertNotNull(cmd,
-            "plugin.yml 必須宣告 '" + COMMAND_NAME + "' 指令；onEnable 須透過 "
-                + "BukkitCommandBridge.attach 設定 executor");
-        assertNotNull(cmd.getExecutor(),
-            "BukkitCommandBridge 必須在 onEnable 完成 attach（executor 不可為 null）");
-        assertNotNull(cmd.getTabCompleter(),
-            "BukkitCommandBridge 必須在 onEnable 完成 attach（tabCompleter 不可為 null）");
+        CommandRegistry registry = plugin.getCommandRegistry();
+        assertNotNull(registry,
+            "onEnable 須建立管理指令內部 registry（BrigadierRegistrar 已註冊）");
+        assertNotNull(registry.findCommand(COMMAND_NAME),
+            "內部 registry 須持有 '" + COMMAND_NAME + "' 根指令");
+        assertNotNull(registry.findCommand("alib"),
+            "根指令別名 'alib' 須可查（沿用 plugin.yml 時代的別名）");
+        // plugin.yml 不再宣告 commands：Bukkit 端無 PluginCommand，
+        // 派送唯一入口為 Brigadier／內部 registry。
+        assertNull(plugin.getCommand(COMMAND_NAME),
+            "plugin.yml 已移除 commands 宣告；Bukkit.getCommand 應回 null");
     }
 
     @Test
@@ -103,7 +111,7 @@ class AceLibStatusCommandTest {
         CapturingHandler handler = installLogCapture();
         try {
             ConsoleCommandSender console = server.getConsoleSender();
-            Bukkit.dispatchCommand(console, COMMAND_NAME + " status");
+            dispatch(console, COMMAND_NAME, List.of("status"));
             String out = captureConsoleOutput(handler);
             assertTrue(out.contains("Version:"),
                 "status 報告必須含 Version: 行；實際: " + out);
@@ -129,16 +137,14 @@ class AceLibStatusCommandTest {
     void playerNoPermission_rejected() {
         Player player = server.addPlayer();
         // MockBukkit 4.x 預設玩家無 acelib.admin；明確不授予
-        Bukkit.dispatchCommand(player, COMMAND_NAME + " status");
+        dispatch(player, COMMAND_NAME, List.of("status"));
         // 玩家訊息走 region backend，下一 tick 送出
         server.getScheduler().performTicks(1L);
         String sent = nextSentMessage(player);
         assertNotNull(sent, "玩家應收到 NO_PERMISSION 訊息");
-        // plugin.yml 的 permission-message 是「沒有權限執行此指令」；
-        // 此訊息由 Bukkit PluginCommand.testPermission 在 dispatch 進入 executor 之前發出，
-        // 證明權限檢查正確運作（Plan §二十五 #11「錯誤訊息」契約）。
-        assertTrue(sent.contains("沒有權限") || sent.contains("permission"),
-            "玩家訊息應為 NO_PERMISSION（中文/英文任一）；實際: " + sent);
+        // dispatcher 的 NO_PERMISSION（ACELIB-CMD-003）由 registry 統一發出。
+        assertTrue(sent.contains("permission"),
+            "玩家訊息應為 NO_PERMISSION；實際: " + sent);
     }
 
     @Test
@@ -148,7 +154,7 @@ class AceLibStatusCommandTest {
         player.addAttachment(plugin, PERMISSION_ADMIN, true);
         CapturingHandler handler = installLogCapture();
         try {
-            Bukkit.dispatchCommand(player, COMMAND_NAME + " status");
+            dispatch(player, COMMAND_NAME, List.of("status"));
             server.getScheduler().performTicks(1L);
             String sent = nextSentMessage(player);
             String logs = captureConsoleOutput(handler);
@@ -172,9 +178,10 @@ class AceLibStatusCommandTest {
     void tabComplete_includesStatus() {
         Player player = server.addPlayer();
         player.addAttachment(plugin, PERMISSION_ADMIN, true);
-        PluginCommand cmd = plugin.getCommand(COMMAND_NAME);
-        assertNotNull(cmd);
-        List<String> result = cmd.tabComplete(player, COMMAND_NAME, new String[]{});
+        CommandRegistry registry = plugin.getCommandRegistry();
+        assertNotNull(registry);
+        List<String> result = registry.tabComplete(
+            new BukkitSender(player), COMMAND_NAME, List.of(""));
         assertNotNull(result, "tab complete 不可回 null");
         assertTrue(result.contains("status"),
             "tab complete 結果必須包含 'status'；實際: " + result);
@@ -185,36 +192,35 @@ class AceLibStatusCommandTest {
     // ---------------------------------------------------------------------
 
     @Test
-    @DisplayName("onDisable 後 PluginCommand 的 executor 不再是 bridge（bridge 已卸載）")
-    void onDisable_clearsBridgeFromPluginCommand() {
-        // 先確認 onEnable 後 bridge 確實掛上
-        PluginCommand beforeDisable = plugin.getCommand(COMMAND_NAME);
-        assertNotNull(beforeDisable);
-        org.bukkit.command.CommandExecutor beforeExecutor = beforeDisable.getExecutor();
-        assertNotNull(beforeExecutor, "onEnable 後 executor 必須非 null");
-        // MockBukkit 4.x PluginCommand 建構子預設 executor = owner plugin，
-        // 我們的 attach 必須覆蓋；先確認 attach 確實生效（executor 不是 owner）
-        assertFalse(beforeExecutor.equals(plugin),
-            "onEnable 後 executor 必須已被 bridge 覆蓋（不可仍是 owner plugin）");
-        // 然後 onDisable
+    @DisplayName("onDisable 後內部 registry 已清空並標記 disabled（派送拒絕）")
+    void onDisable_registryDisabled() {
+        CommandRegistry before = plugin.getCommandRegistry();
+        assertNotNull(before, "onEnable 後 registry 必須非 null");
         plugin.onDisable();
-        // 卸載後 executor 必須改變（不再指向 bridge）— MockBukkit 4.x 的
-        // PluginCommand.getExecutor() 在 executor 為 null 時 fallback 回傳 owner，
-        // 因此這裡只斷言「不等於 bridge」；真實 Bukkit 環境下會是 null。
-        org.bukkit.command.CommandExecutor afterExecutor = beforeDisable.getExecutor();
-        assertNotNull(afterExecutor, "after onDisable executor 不可為 null（MockBukkit fallback）");
-        assertFalse(afterExecutor.equals(beforeExecutor),
-            "onDisable 後 executor 必須不再是 bridge（已被卸載）。"
-                + "afterExecutor=" + afterExecutor + ", beforeExecutor=" + beforeExecutor);
+        assertNull(plugin.getCommandRegistry(),
+            "onDisable 後 getCommandRegistry 應回 null（reference 已解除）");
+        CapturingHandler handler = installLogCapture();
+        try {
+            // 殘留 reference 的 dispatch 必須被 REGISTRY_DISABLED 擋下
+            before.dispatch(new BukkitSender(server.getConsoleSender()),
+                COMMAND_NAME, List.of("status"));
+            String out = captureConsoleOutput(handler);
+            assertTrue(out.contains("ACELIB-CMD-009"),
+                "disable 後殘留 dispatch 應回 ACELIB-CMD-009；實際: " + out);
+        } finally {
+            handler.close();
+        }
     }
 
     @Test
-    @DisplayName("reload 後 /acelib status 仍可 dispatch 且報告仍含 ready")
+    @DisplayName("reload 後 /acelib status 仍可 dispatch 且報告仍含 ready（不重複註冊）")
     void reload_commandStillWorks() {
         assertTrue(plugin.reload(), "reload 應成功");
+        CommandRegistry after = plugin.getCommandRegistry();
+        assertNotNull(after, "reload 後 registry 仍須存在（不重建、不重複註冊）");
         CapturingHandler handler = installLogCapture();
         try {
-            Bukkit.dispatchCommand(server.getConsoleSender(), COMMAND_NAME + " status");
+            dispatch(server.getConsoleSender(), COMMAND_NAME, List.of("status"));
             String out = captureConsoleOutput(handler);
             assertTrue(out.contains("Version:"),
                 "reload 後 status 仍須輸出報告；實際: " + out);
@@ -234,7 +240,7 @@ class AceLibStatusCommandTest {
     void statusOutput_doesNotLeakMutableInternals() {
         CapturingHandler handler = installLogCapture();
         try {
-            Bukkit.dispatchCommand(server.getConsoleSender(), COMMAND_NAME + " status");
+            dispatch(server.getConsoleSender(), COMMAND_NAME, List.of("status"));
             String out = captureConsoleOutput(handler);
             // DiagnosticReport 為 immutable snapshot，格式器不應輸出 Java 物件 reference
             assertFalse(out.contains("SafeSchedulerImpl@"),
@@ -257,7 +263,7 @@ class AceLibStatusCommandTest {
     void emptyArgs_showsMainHelp() {
         CapturingHandler handler = installLogCapture();
         try {
-            Bukkit.dispatchCommand(server.getConsoleSender(), COMMAND_NAME);
+            dispatch(server.getConsoleSender(), COMMAND_NAME, List.of());
             String out = captureConsoleOutput(handler);
             assertTrue(out.contains("acelib"),
                 "help 應包含主指令名；實際: " + out);
@@ -271,6 +277,13 @@ class AceLibStatusCommandTest {
     // ---------------------------------------------------------------------
     // 工具（與 CommandRegistryBukkitTest 同形，刻意複製避免跨 class 依賴）
     // ---------------------------------------------------------------------
+
+    private void dispatch(org.bukkit.command.CommandSender sender,
+                          String label, List<String> args) {
+        CommandRegistry registry = plugin.getCommandRegistry();
+        assertNotNull(registry, "dispatch 時 registry 不可為 null");
+        registry.dispatch(new BukkitSender(sender), label, args);
+    }
 
     private static String nextSentMessage(Player player) {
         org.mockbukkit.mockbukkit.command.MessageTarget target =

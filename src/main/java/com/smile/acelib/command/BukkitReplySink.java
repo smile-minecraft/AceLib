@@ -14,12 +14,24 @@ import org.bukkit.plugin.java.JavaPlugin;
  * {@code MessageService.format(...)} 完成後再呼叫 {@link CommandContext#reply}
  * — 此 sink 不持有 lang key 解析責任。</p>
  *
- * <h2>玩家回覆一律走 backend（Folia region 安全）</h2>
- * <p>不論 {@code ctx.reply()} 同步或 {@code ctx.replyPlayerAsync()} 跨執行緒，
- * 對玩家 sender 的回覆都必須透過 {@link SafeExecutorBackend} 派送，由
- * {@link com.smile.acelib.context.SafeExecutor#executeOnRegion} 確保 mutate 發生在玩家 region thread
- * （Folia 安全）。本 sink 內部 <strong>禁止</strong>直接呼叫
- * {@code Player.sendMessage} 來繞過 region-bound 派送。</p>
+ * <h2>玩家回覆的兩條路徑（Folia region 安全）</h2>
+ * <p>對玩家 sender 的回覆一律先判斷「目前執行緒是否已擁有該玩家 region」
+ * （{@link org.bukkit.Bukkit#isOwnedByCurrentRegion(org.bukkit.entity.Entity)}
+ * ，經 {@link RegionOwnership} seam）：</p>
+ * <ul>
+ *   <li><strong>已擁有（owned）</strong> → 直接 {@code safeSendMessage} 送達。
+ *       典型情境是指令 dispatch 執行緒：handler 執行當下已在玩家 region
+ *       （Paper 主執行緒恆 owned；Folia 為對應 region 執行緒），此時
+ *       跨執行緒派送並無必要，且非 {@code AceLibPlugin} owner 會被 backend
+ *       拒絕而完全送不到玩家。</li>
+ *   <li><strong>未擁有或判斷失敗（not-owned）</strong> → 一律走
+ *       {@link SafeExecutorBackend} 派送，由
+ *       {@link com.smile.acelib.context.SafeExecutor#executeOnRegion} 確保
+ *       mutate 發生在玩家 region thread。</li>
+ * </ul>
+ *
+ * <p>owned 判斷本身出錯時一律回 false（fail-closed）：判斷不出擁有權就退回
+ * backend，不因查詢失敗而放行 inline 送達。</p>
  *
  * <p>當 owner plugin 不是 {@code AceLibPlugin}（沒有 canonical platform /
  * capability 快取）時，{@link SafeExecutorBackend#detect} 會回傳明確拒絕
@@ -50,6 +62,7 @@ public final class BukkitReplySink implements ReplySink {
 
     private final JavaPlugin plugin;
     private final SafeExecutorBackend backend;
+    private final RegionOwnership ownership;
 
     /**
      * 主要建構子：自動偵測 backend（{@link com.smile.acelib.AceLibPlugin}
@@ -69,8 +82,23 @@ public final class BukkitReplySink implements ReplySink {
      * @param backend SafeExecutor backend；不可為 null
      */
     public BukkitReplySink(JavaPlugin plugin, SafeExecutorBackend backend) {
+        this(plugin, backend, RegionOwnership.platform());
+    }
+
+    /**
+     * 注入式建構子（測試 seam：可模擬 region 擁有權）。
+     *
+     * <p>package-private：region 擁有權判斷是內部安全細節，不屬公開契約。</p>
+     *
+     * @param plugin     plugin owner；不可為 null
+     * @param backend    SafeExecutor backend；不可為 null
+     * @param ownership  region 擁有權判斷；不可為 null
+     */
+    BukkitReplySink(JavaPlugin plugin, SafeExecutorBackend backend,
+                    RegionOwnership ownership) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.backend = Objects.requireNonNull(backend, "backend");
+        this.ownership = Objects.requireNonNull(ownership, "ownership");
     }
 
     @Override
@@ -144,6 +172,16 @@ public final class BukkitReplySink implements ReplySink {
     private void dispatchToPlayerRegion(BukkitSender.BukkitPlayerHandle handle,
                                         String message) {
         Player player = handle.bukkitPlayer();
+        // 快路徑：呼叫當下已在擁有該玩家 region 的執行緒（指令 dispatch 執行緒；
+        // Paper 主執行緒恆為 owned）。此時 sendMessage 不需要跨執行緒派送，直接
+        // 送達是安全的，且不會被非 AceLib owner 的 backend 拒絕。
+        //
+        // 判斷本身出錯時 isOwnedByCurrentRegion 回 false（fail-closed），退回
+        // backend 路徑，維持原有的安全下限。
+        if (isOwnedByCurrentRegion(player)) {
+            safeSendMessage(player, message);
+            return;
+        }
         try {
             backend.runOnPlayerRegion(plugin, player,
                 () -> safeSendMessage(player, message));
@@ -172,11 +210,59 @@ public final class BukkitReplySink implements ReplySink {
         }
     }
 
+    /**
+     * 判斷目前執行緒是否已擁有該玩家的 region。
+     *
+     * <p>查詢本身失敗（未初始化的 server、代理環境、實體已失效等）一律回
+     * false：判斷不出擁有權時必須走 backend 派送，不能因為查詢失敗就放行
+     * inline 送達。</p>
+     *
+     * @param player 目標玩家；不可為 null
+     * @return true 表示目前執行緒正在 tick 擁有該玩家的 region
+     */
+    private boolean isOwnedByCurrentRegion(Player player) {
+        try {
+            return ownership.isOwnedByCurrentRegion(player);
+        } catch (Throwable t) {
+            // fail-closed：查詢失敗視為未擁有，退回 backend 路徑。
+            return false;
+        }
+    }
+
     private static String safePlayerName(Player player) {
         try {
             return player.getName() != null ? player.getName() : "?";
         } catch (Throwable t) {
             return "?";
+        }
+    }
+
+    /**
+     * Region 擁有權判斷（package-private seam）。
+     *
+     * <p>包裝 {@link org.bukkit.Bukkit#isOwnedByCurrentRegion(org.bukkit.entity.Entity)}，
+     * 使「目前執行緒是否已擁有該玩家 region」可在單元測試中模擬 owned／not-owned
+     * 兩種情境，不需真實 Folia region。</p>
+     *
+     * <p>平台語意（已對照 Paper 與 MoonRise 原始碼）：Paper（非 Folia）上
+     * 委派給 {@code TickThread.isTickThread()}，主執行緒恆為 owned、背景執行緒
+     * 恆為 false；Folia 上由 MoonRise 覆寫為真實 region 擁有權判斷。兩者都是
+     * 官方文件所述「目前執行緒是否正在 tick 擁有該實體的 region」。</p>
+     */
+    @FunctionalInterface
+    interface RegionOwnership {
+
+        /**
+         * 判斷目前執行緒是否已擁有該實體的 region。
+         *
+         * @param entity 目標實體；不可為 null
+         * @return true 表示目前執行緒正在 tick 擁有該實體的 region
+         */
+        boolean isOwnedByCurrentRegion(org.bukkit.entity.Entity entity);
+
+        /** 平台實作：委派給 {@code Bukkit.isOwnedByCurrentRegion}。 */
+        static RegionOwnership platform() {
+            return org.bukkit.Bukkit::isOwnedByCurrentRegion;
         }
     }
 

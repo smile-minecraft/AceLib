@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibCommandCompatibilityProbe
+main: com.example.acelibcmdprobe.CommandCompatibilityProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 指令相容性探針：型別化引數解析／錯誤提示／補全與生命週期殘留探針
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+# 刻意不宣告 commands 區塊：本探針的 /cprobe 與 /cprobe-args 走 AceLib
+# BrigadierRegistrar 註冊，不依賴 plugin.yml 的 commands 宣告（這是要實測的
+# 驗收條件之一）。權限節點仍在 permissions 宣告。
+permissions:
+  acelibcmdprobe.use:
+    description: 使用指令相容性探針
+    default: op
+  acelibcmdprobe.admin:
+    description: 使用探針的生命週期子指令（reload／re-register／shutdown）
+    default: op

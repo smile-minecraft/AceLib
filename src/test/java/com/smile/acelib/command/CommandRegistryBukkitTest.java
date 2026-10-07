@@ -415,7 +415,7 @@ class CommandRegistryBukkitTest {
     class AsyncPlayerReply {
 
         @Test
-        @DisplayName("非 AceLibPlugin owner 時 backend 拒絕 inline（吞例外 + log warning + 不直接 sendMessage）")
+        @DisplayName("非 AceLibPlugin owner 且執行緒未擁有該玩家 region 時 backend 拒絕 inline（吞例外 + log warning + 不直接 sendMessage）")
         void nonAceLibPlugin_fallbackSync() {
             // 採用 Mockito mock JavaPlugin owner（避免 mock AceLibPlugin 整個生命週期）
             JavaPlugin fakeOwner = Mockito.mock(JavaPlugin.class);
@@ -437,7 +437,15 @@ class CommandRegistryBukkitTest {
                     return null;
                 }).when(mockedPlayer).sendMessage(anyString());
 
-                BukkitReplySink sink = new BukkitReplySink(fakeOwner);
+                // 明確指定「執行緒未擁有該玩家 region」：本案例驗的是跨執行緒回覆的
+                // 安全下限。owned 快路徑（dispatch 執行緒直接送達）由
+                // BukkitReplySinkSafetyTest 的 OwnedFastPath 涵蓋。
+                // MockBukkit 的 isOwnedByCurrentRegion 會回 isPrimaryThread()，
+                // 在主執行緒測試時恆為 true，會讓本案例誤測到 owned 路徑。
+                BukkitReplySink sink = new BukkitReplySink(
+                    fakeOwner,
+                    BukkitReplySink.SafeExecutorBackend.detect(fakeOwner),
+                    entity -> false);
                 BukkitSender.BukkitPlayerHandle handle =
                     new BukkitSender(mockedPlayer).asPlayer() instanceof BukkitSender.BukkitPlayerHandle bph
                         ? bph : null;

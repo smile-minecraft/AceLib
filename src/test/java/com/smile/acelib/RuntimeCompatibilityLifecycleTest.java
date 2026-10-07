@@ -214,12 +214,13 @@ class RuntimeCompatibilityLifecycleTest {
         // runtime 資源必須已停用：舊 scheduler 已 onPluginDisable()
         assertTrue(p.getSchedulerForDiagnostics().isDisabled(),
             "INCOMPATIBLE reload 後舊 scheduler 必須已停用（onPluginDisable）");
-        // 管理指令框架必須已解除：Bukkit 的 PluginCommand.setExecutor(null) 會把 executor
-        // 回退為 owning plugin（即 AceLib 本身），因此「已解除」的正確可觀察狀態是 executor
-        // 不再是 BukkitCommandBridge（dispatch 不再進入 AceLib dispatcher）。
-        org.bukkit.command.CommandExecutor exec = p.getCommand("acelib").getExecutor();
-        assertFalse(exec instanceof com.smile.acelib.command.BukkitCommandBridge,
-            "INCOMPATIBLE reload 後 /acelib 指令 executor 必須不再是 BukkitCommandBridge（已解除派送）");
+        // 管理指令框架必須已解除：v1.4.0 起 /acelib 經 Brigadier 註冊
+        // （無 plugin.yml 宣告，故 Bukkit getCommand 恆為 null），
+        // 內部 registry reference 解除且殘留 dispatch 被拒絕。
+        assertNull(p.getCommand("acelib"),
+            "Brigadier 遷移後 Bukkit getCommand('acelib') 必須為 null（無 plugin.yml 宣告）");
+        assertNull(p.getCommandRegistry(),
+            "INCOMPATIBLE reload 後管理指令內部 registry 必須已解除（reference 清空）");
         // 既有 listener 必須已解除（player lifecycle + gui listener 皆 unregister）。
         // 只檢查 reload 前快照中的本 plugin listener 實例是否仍存在；對跨測試的靜態
         // HandlerList 殘留（屬其他 plugin 實例）免疫，且仍能抓到本 plugin listener 未解除的回歸。

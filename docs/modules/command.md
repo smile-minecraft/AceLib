@@ -9,6 +9,11 @@ Command 模組公開 `CommandSpec`、`SubCommandSpec`、`CommandContext`、`Comm
 
 - [使用限制](#使用限制)
 - [已公開的指令描述能力](#已公開的指令描述能力)
+- [型別化指令框架](#型別化指令框架)
+- [註冊生命週期與相容對照](#註冊生命週期與相容對照)
+- [型別化引數](#型別化引數)
+- [補全支援矩陣](#補全支援矩陣)
+- [錯誤在地化](#錯誤在地化)
 - [指令冷卻的清理時機](#指令冷卻的清理時機)
 - [指令目錄](#指令目錄commandcatalog)
 - [消費範例](#消費範例)
@@ -16,9 +21,9 @@ Command 模組公開 `CommandSpec`、`SubCommandSpec`、`CommandContext`、`Comm
 
 ## 使用限制
 
-AceLib 目前沒有提供給下游 plugin 的 Supported factory，可直接建立並接上 Bukkit 的 `CommandRegistry`。目前的 `CommandRegistryImpl`、`BukkitReplySink` 與 `BukkitCommandBridge` 都屬於內部組裝類別。
+v1.4.0 起 `BrigadierRegistrar` 是給下游 plugin 的正式組裝入口（Supported），可在 `onEnable` 期間註冊型別化指令；不再需要 `plugin.yml` 的 `commands` 宣告。`CommandRegistryImpl`、`BukkitReplySink`、`BukkitCommandBridge` 與 `BukkitSender` 仍屬內部組裝類別（Internal），consumer 不應照著它們的建構子自行接線。
 
-因此一般 consumer 不應照著這些 public class 的建構子自行接線，也不應把它們當成穩定 API。若你的 plugin 需要註冊 Bukkit 指令，請先使用 Paper/Bukkit 自己的 command API；AceLib 的 command model 可在未來有正式 factory 或由其他 Supported 組裝入口提供時再採用。
+`CommandCatalog` 維持只描述、不註冊不執行；需要真正註冊與執行時用 `BrigadierRegistrar`。
 
 公開 API 的分類可查 [API surface](../reference/api-surface.md)。
 
@@ -33,6 +38,139 @@ AceLib 目前沒有提供給下游 plugin 的 Supported factory，可直接建�
 - `ReplySink`：由組裝端提供實際回覆方式。
 
 玩家回覆仍須遵守 Folia region 規則。不要從任意背景執行緒直接操作 Bukkit `Player`；請由提供 registry 的組裝端安排 region-safe 回覆。
+
+### 預設回覆出口的回覆路徑
+
+預設的 `BukkitReplySink` 對玩家回覆會先判斷「目前執行緒是否已擁有該玩家 region」，再決定路徑：
+
+| 情況 | 路徑 | 說明 |
+| --- | --- | --- |
+| **執行緒已擁有該玩家 region** | 直接送達 | 典型是指令 dispatch 執行緒——handler 執行當下已在玩家 region（Paper 主執行緒恆為 owned；Folia 為對應 region 執行緒）。此時跨執行緒派送並無必要。 |
+| **未擁有／判斷失敗** | 走 `SafeExecutorBackend` 派送 | 由 `SafeExecutor.executeOnRegion` 確保送達發生在玩家 region 執行緒。 |
+| **未擁有，且 owner 不是 `AceLibPlugin`** | 拒絕 | 記錄 `ACELIB-CMD-011` warning，不送達。跨執行緒回覆需要 region-safe backend；非 `AceLibPlugin` 的 owner 沒有 canonical platform／capability 快取，因此拒絕而非冒險 inline。 |
+
+擁有權判斷本身出錯時一律視為「未擁有」（fail-closed）：判斷不出擁有權就退回 backend 路徑，不會因為查詢失敗而放行 inline 送達。
+
+這代表下游 plugin 用 `BrigadierRegistrar` 註冊的指令，**在自己的 handler 裡直接 `ctx.reply(...)` 就能把訊息送達玩家**，不需要是 `AceLibPlugin`、也不需要自己安排 region 派送——只要回覆發生在指令 dispatch 執行緒（預設情況）。跨執行緒的回覆（例如排程器完成後才回覆）仍須遵守上表後兩列。
+
+完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。
+
+## 型別化指令框架
+
+`TypedCommand` 與 `TypedSubCommand` 是 v1.4.0 的型別化組裝入口。同一個 builder 會產出兩種註冊形式，語意一致：
+
+- `TypedSubCommand.toSubCommandSpec()` — `SubCommandSpec` 相容層，走既有的傳統 dispatch 流程。
+- `BrigadierRegistrar.register(...)` — 同時寫入內部 `CommandRegistry` 與 Brigadier 節點。
+
+固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支而非 argument 節點 — 這是基岩版看得見補全的結構。開放式引數（玩家、世界、材質、數值、時間）則是 argument 節點，送給客戶端的是 vanilla 引數型別，範圍由客戶端先行驗證。
+
+```java
+CommandArgument<Material> itemArg = Arguments.material("item");
+CommandArgument<Integer> amountArg = Arguments.intArg("amount", 1, 64);
+CommandArgument<String> modeArg = Arguments.fixed("mode", "buy", "sell");
+
+TypedCommand shop = TypedCommand.builder("shop")
+    .description("商店指令")
+    .permission("shop.use")
+    .aliases("s")
+    .subcommand(TypedSubCommand.builder("trade")
+        .description("交易")
+        .cooldownMillis(1_000L)
+        .argument(itemArg)
+        .argument(amountArg)
+        .argument(modeArg)
+        .executes(ctx -> {
+            Material item = ctx.get(itemArg);
+            int amount = ctx.get(amountArg);
+            String mode = ctx.get(modeArg);
+            // 業務邏輯：不再碰原始字串
+        })
+        .build())
+    .build();
+
+registrar.register(shop);   // 在 onEnable 期間呼叫一次
+```
+
+`ctx.get(arg)` 以**引數實例**為 key（不是字串名），因此同一個 builder 產生的實例可安全重複使用；傳入未參與本次解析的實例會拋 `IllegalArgumentException`。引數一律必填（`minArgs` 與 `maxArgs` 都等於引數數），零引數子指令則直接執行 handler。
+
+## 註冊生命週期與相容對照
+
+`BrigadierRegistrar` 透過 Paper 的 `LifecycleEvents.COMMANDS` 註冊節點。平台要求 lifecycle handler 必須在 `onEnable` 期間掛載，實際的 `registrar().register(...)` 則由平台在命令同步時機執行。因此：
+
+| 階段 | 行為 |
+| --- | --- |
+| `onEnable` | 建立 registrar 並 `register`；內部 registry 與節點雙寫入。任一步失敗都回滾，不殘留半註冊。 |
+| reload | 不重建、不重複註冊。節點由平台持有；handler 以 supplier 取得 reload 後的最新狀態（比照 `AceLibStatusHandler` 對 diagnostics 的做法）。 |
+| 重複註冊同名 | 內部 registry 原子拒絕（`IllegalArgumentException`），平台側不掛上第二個節點。 |
+| `shutdown()` / plugin disable | 內部 registry 標記 disabled 並清空本地簿記；殘留 dispatch 一律回 `ACELIB-CMD-009`。平台在 plugin disable 時自動移除其指令。 |
+
+平台未提供「取消單一 lifecycle 指令註冊」的 API，因此 `BrigadierRegistrar.unregister(name)` 只清理本地簿記與內部 registry，平台側節點要等 plugin disable 才移除。依賴「移除即時生效」的呼叫端應改看 `shutdown()` 的語意。
+
+**相容對照**：`SubCommandSpec` 與 `BukkitCommandBridge` 保留原樣。既有以 `plugin.yml` 宣告＋bridge attach 的 plugin 不受影響；v1.4.0 起新寫的 plugin 應改用 `BrigadierRegistrar`。AceLib 自身的 `/acelib` 已遷移，`plugin.yml` 不再有 `commands` 區塊（`acelib.admin` 權限節點仍在 `permissions` 宣告）。
+
+## 型別化引數
+
+`Arguments` 提供八種型別，每種都有解析、驗證與自動補全：
+
+| 引數 | 解析結果 | 驗證 |
+| --- | --- | --- |
+| `player(name)` | 在線玩家的 `PlayerHandle` | 不在線或不存在 → `ACELIB-CMD-007` |
+| `offlinePlayer(name)` | `OfflinePlayer` | 從未上線 → `ACELIB-CMD-015` |
+| `intArg(name, min, max)` | `Integer` | 非數字、`int` 溢位、超出 `[min, max]` → `ACELIB-CMD-015`（不 wrap、不截斷） |
+| `doubleArg(name, min, max)` | `Double` | 非數字、`NaN`、無限大、超出範圍 → `ACELIB-CMD-015` |
+| `duration(name)` | `Long`（ticks） | 語法不符或溢位 → `ACELIB-CMD-015` |
+| `world(name)` | `World` | 未載入的世界 → `ACELIB-CMD-015`（接受 Bukkit 世界名與維度鍵兩種形式，見下） |
+| `enumArg(name, E.class)` | 列舉常數 | 不在常數內 → `ACELIB-CMD-015` |
+| `fixed(name, options...)` | canonical 字串 | 不在選項內 → `ACELIB-CMD-015` |
+| `material(name)` | `Material` | 未知材質 → `ACELIB-CMD-015` |
+
+**單 token 不變條件**：所有開放式引數拒絕空白、空字串與含空白字元的輸入。這不是形式限制 — Brigadier 執行委派依原始輸入的空白切分重建 args，含空白的 token 會破壞切分與解析的一致性。固定選項的字面值本身也不含空白。
+
+**時間長度語法**：整數或小數＋可選單位，與 vanilla time 一致 — `100`（ticks）、`1t`、`1.5s`（30 ticks）、`1d`（24000 ticks）。回傳 ticks。`h`／`m` 單位兩端都不接受，因為客戶端的 vanilla time 語法同樣拒絕；只在伺服器端放行會造成「客戶端擋、伺服器放」的分歧。計算全程以 `long` 精確運算，不走 double（避免大數精度遺失），溢位拋 `ACELIB-CMD-015`。
+
+**世界引數的兩種名稱形式**：世界引數會依序嘗試「legacy Bukkit 世界名」→「大小寫不敏感掃描」→「維度鍵」。這是必要的，因為兩端對主世界的稱呼不同：
+
+| 形式 | 例子 | 來源 |
+| --- | --- | --- |
+| Bukkit 世界名 | `world` | `Bukkit.getWorld(String)`（legacy 名稱） |
+| 維度鍵（裸名） | `overworld` | `NamespacedKey.fromString(raw, null)` → `minecraft:overworld` |
+| 維度鍵（完整） | `minecraft:overworld` | 同上 |
+
+Brigadier 樹送給客戶端的是 vanilla world 型別，它只接受**維度鍵**；而 `Bukkit.getWorld(String)` 認的是 **Bukkit 世界名**。主世界在這兩套命名下分別是 `overworld` 與 `world`，若只認後者，客戶端已驗證通過的輸入會在解析階段被拒。維度鍵為小寫規範形式，解析時也會以小寫重試，讓大小寫不敏感語意一致。
+
+補全仍回傳 Bukkit 世界名（`world.suggest("")` 列出已載入世界的名稱），因為那是下游 handler 拿到 `World` 後可直接使用的名稱。
+
+## 補全支援矩陣
+
+伺服器即時算出的建議送不到基岩版（Geyser 限制）：基岩版只看得懂編譯進指令結構的固定選項。因此補全能力依引數種類而異：
+
+| 引數 | Java 版（伺服器建議） | 基岩版（Geyser） | 說明 |
+| --- | --- | --- | --- |
+| `enumArg` / `fixed` | 可用 | **可用** | 編譯為 literal 分支，是基岩唯一看得見的補全結構。 |
+| `player` | 可用（列出在線玩家） | 不可用 | 伺服器建議送不到基岩。 |
+| `world` | 可用（列出已載入世界） | 不可用 | 同上。 |
+| `material` | 可用（列出材質名） | 不可用 | 同上。 |
+| `intArg` / `doubleArg` | 無建議（範圍由客戶端驗證） | 不適用 | 刻意不列出候選；範圍錯誤訊息由客戶端給。 |
+| `duration` | 建議語法範例（`1s`、`1d`…） | 不可用 | 範例僅供 Java 版參考。 |
+| `offlinePlayer` | best-effort（只列在線玩家） | 不可用 | 離線名單無法低成本枚舉。 |
+
+**基岩補全實測狀態**：各引數的基岩補全尚未由真人基岩客戶端逐項實測。Java 機器人的 tab 請求走 Java 協議，無法替代基岩客戶端的觀察。上表「基岩版」欄位目前是依 Geyser 只解析固定選項結構的行為推導，實測結果待補。
+
+固定選項的大小寫：literal 分支以小寫常數名編譯，基岩版補全會顯示小寫形式；傳統路徑的 `parse` 大小寫不敏感，故兩種大小寫在兩條路徑都能執行。
+
+## 錯誤在地化
+
+`CommandMessages` 是錯誤訊息的在地化契約，`LocalizingReplySink` 是 presentation 層的裝飾器：`CommandException` 依 kind 轉為在地化字串後再送出，缺 key 時退回例外原文（不送空字串），非 `CommandException` 原樣轉交。
+
+三種實作：
+
+- `DefaultCommandMessages` — 內建英文預設，AceLib 自身管理指令使用。
+- `MessageServiceCommandMessages` — 經 message 模組查 key（key 為 `prefix + suffix`，例如 `command.error.invalid-argument`），語言檔模板以 `{var}` 引用。
+- 自訂實作 — 未覆寫的方法回傳空字串即視為缺 key。
+
+型別化引數的解析錯誤在建構子以 `.messages(...)` 指定訊息表（預設英文），錯誤訊息由該表產生。
+
+**權限過濾**：說明與補全都依權限過濾。傳統路徑由 `CommandRegistry` 的既有流程處理（無權限時不列出該子指令）；Brigadier 路徑以 `requires` 過濾客戶端可見結構，並在 `suggests` 回呼再次確認權限。兩條路徑都只做可見性過濾，執行時的授權仍由 dispatcher 統一檢查。
 
 完整錯誤代碼見[錯誤碼](../reference/error-codes.md)。
 

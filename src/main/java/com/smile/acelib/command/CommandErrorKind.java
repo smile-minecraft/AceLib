@@ -17,6 +17,7 @@ package com.smile.acelib.command;
  *   <tr><td>{@link #PLAYER_NOT_ALLOWED}</td><td>{@code ACELIB-CMD-005}</td><td>此指令僅限 console</td></tr>
  *   <tr><td>{@link #COOLDOWN_ACTIVE}</td><td>{@code ACELIB-CMD-006}</td><td>冷卻中（防止重複觸發）</td></tr>
  *   <tr><td>{@link #PLAYER_OFFLINE}</td><td>{@code ACELIB-CMD-007}</td><td>玩家已離線 / 失效</td></tr>
+ *   <tr><td>{@link #INVALID_ARGUMENT}</td><td>{@code ACELIB-CMD-015}</td><td>引數值非法（型別解析失敗）</td></tr>
  *   <tr><td>{@link #ASYNC_EXECUTION_FAILED}</td><td>{@code ACELIB-CMD-008}</td><td>非同步指令流程失敗</td></tr>
  *   <tr><td>{@link #REGISTRY_DISABLED}</td><td>{@code ACELIB-CMD-009}</td><td>registry 已停用（plugin disable）</td></tr>
  *   <tr><td>{@link #CUSTOM}</td><td>{@code ACELIB-CMD-010}</td><td>caller 自訂錯誤代碼（由 caller 給 code）</td></tr>
@@ -48,6 +49,16 @@ public enum CommandErrorKind {
 
     /** 玩家已離線 / 失效。 */
     PLAYER_OFFLINE,
+
+    /**
+     * 引數值非法（型別化引數解析失敗：未知玩家／世界／材質、範圍外數值、
+     * 時間溢位等）。
+     *
+     * <p>對應錯誤代碼 {@code ACELIB-CMD-015}。</p>
+     *
+     * @since 1.4.0
+     */
+    INVALID_ARGUMENT,
 
     /** 非同步指令流程失敗。 */
     ASYNC_EXECUTION_FAILED,
@@ -86,6 +97,7 @@ public enum CommandErrorKind {
             case PLAYER_NOT_ALLOWED -> "ACELIB-CMD-005";
             case COOLDOWN_ACTIVE -> "ACELIB-CMD-006";
             case PLAYER_OFFLINE -> "ACELIB-CMD-007";
+            case INVALID_ARGUMENT -> "ACELIB-CMD-015";
             case ASYNC_EXECUTION_FAILED -> "ACELIB-CMD-008";
             case REGISTRY_DISABLED -> "ACELIB-CMD-009";
             case CUSTOM -> "ACELIB-CMD-010";

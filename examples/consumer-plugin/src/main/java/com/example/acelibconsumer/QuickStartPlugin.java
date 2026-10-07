@@ -1,8 +1,13 @@
 package com.example.acelibconsumer;
 
 import com.smile.acelib.AceLibApi;
+import com.smile.acelib.command.Arguments;
+import com.smile.acelib.command.BrigadierRegistrar;
+import com.smile.acelib.command.CommandArgument;
 import com.smile.acelib.command.CommandCatalog;
 import com.smile.acelib.command.CommandDoc;
+import com.smile.acelib.command.TypedCommand;
+import com.smile.acelib.command.TypedSubCommand;
 import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.form.FormImage;
 import com.smile.acelib.form.FormSpec;
@@ -46,6 +51,7 @@ public class QuickStartPlugin extends JavaPlugin {
 
     private MessageScope messageScope;
     private GuiScope guiScope;
+    private BrigadierRegistrar commandRegistrar;
 
     @Override
     public void onEnable() {
@@ -81,6 +87,10 @@ public class QuickStartPlugin extends JavaPlugin {
 
         // 5. 只依賴公開 API 使用本版三個新功能（編譯期即證明 Supported 面足夠）。
         demonstrateNewApis(api);
+
+        // 5a. 型別化指令框架：Brigadier 註冊取代 plugin.yml 的 commands 宣告。
+        //     註冊必須在 onEnable 期間完成；reload 不重建、不重複註冊。
+        registerTypedCommands();
 
         // 5b. 插件作用域訊息服務：建 scope、升級補 key、共用渲染與顯示標籤。
         //     管理員覆寫檔缺的 key 退回本 JAR 內建 lang/en_US.yml。
@@ -184,8 +194,53 @@ public class QuickStartPlugin extends JavaPlugin {
         getLogger().info("button [" + confirm.id() + "] displays: " + confirm.text());
     }
 
+    /**
+     * 型別化指令註冊示範：不需要 {@code plugin.yml} 的 {@code commands} 宣告。
+     *
+     * <p>固定選項（{@code mode}）在 Brigadier 樹中編譯為 literal 分支，是基岩版
+     * 唯一看得見補全的結構；開放式引數則送 vanilla 型別給客戶端先行驗證。
+     * handler 以引數實例取值，不碰原始字串。</p>
+     *
+     * <p>註冊只在 {@code onEnable} 呼叫一次：平台在 plugin disable 時移除節點，
+     * reload 不重建（handler 讀的狀態應自行以 supplier 取得最新）。</p>
+     */
+    private void registerTypedCommands() {
+        BrigadierRegistrar registrar = new BrigadierRegistrar(this);
+
+        CommandArgument<org.bukkit.Material> itemArg = Arguments.material("item");
+        CommandArgument<Integer> amountArg = Arguments.intArg("amount", 1, 64);
+        CommandArgument<String> modeArg = Arguments.fixed("mode", "buy", "sell");
+
+        TypedCommand shop = TypedCommand.builder("shop")
+            .description("商店指令")
+            .usage("/shop trade <item> <amount:1-64> <mode:buy|sell>")
+            .permission("shop.use")
+            .aliases("s")
+            .subcommand(TypedSubCommand.builder("trade")
+                .description("買賣物品")
+                .cooldownMillis(1_000L)
+                .argument(itemArg)
+                .argument(amountArg)
+                .argument(modeArg)
+                .executes(ctx -> getLogger().info("trade "
+                    + ctx.get(modeArg) + " " + ctx.get(amountArg) + "x "
+                    + ctx.get(itemArg)))
+                .build())
+            .build();
+
+        registrar.register(shop);
+        this.commandRegistrar = registrar;
+        getLogger().info("registered typed commands: "
+            + registrar.getRegisteredCommands().size());
+    }
+
     @Override
     public void onDisable() {
+        // 停用：內部 registry 標記 disabled 並清空；平台側節點由平台移除。
+        if (commandRegistrar != null) {
+            commandRegistrar.shutdown();
+            commandRegistrar = null;
+        }
         if (messageScope != null) {
             messageScope.close();
             messageScope = null;
