@@ -35,6 +35,10 @@ repositories {
             artifact()
         }
     }
+    // PlaceholderAPI 官方 artifact 倉庫（舊 repo.extendedclip.com 已永久遷移至此，
+    // 經 2026-10-07 核對 https 回 301 指向本倉庫；2.12.3 jar/pom 皆為 200）。
+    // 僅供下方鎖定的 placeholderapi compileOnly / test 依賴使用。
+    maven("https://repo.helpch.at/releases/")
     mavenCentral()
 }
 
@@ -96,6 +100,28 @@ dependencies {
     // testImplementation 同版本雙掛（比照 geyser common 模式）。
     compileOnly("org.geysermc.cumulus:cumulus:1.1.2") { isTransitive = false }
 
+    // LuckPerms API（權限群組／情境查詢）。compileOnly：運行期由伺服器上的
+    // LuckPerms plugin 提供；缺席時 adapter 探測為 INIT_FAILED（既有 registry
+    // 契約：非 AVAILABLE probe 一律 INIT_FAILED；NOT_INSTALLED 只存在於
+    // probe 內部結果），typed
+    // provider 持有者（LuckPermsPermissionProvider）在 AVAILABLE 前不載入。
+    // 版本鎖定 5.5（Maven Central，MIT；2026-10-07 核對官方 sources jar 方法鏈：
+    // User#getPrimaryGroup、PermissionHolder#resolveDistinctInheritedNodes、
+    // InheritanceNode#getGroupName、ContextManager#getQueryOptions）。
+    // isTransitive=false：只取 api jar 本身（POM 傳遞依賴為 checker-qual 等
+    // 編譯期註解，不需進 classpath）。
+    compileOnly("net.luckperms:api:5.5") { isTransitive = false }
+
+    // PlaceholderAPI（下游自有佔位符註冊）。compileOnly：運行期由伺服器上的
+    // PlaceholderAPI plugin 提供；缺席時 adapter 探測為 INIT_FAILED（既有
+    // registry 契約；NOT_INSTALLED 只存在於 probe 內部結果），typed
+    // expansion 持有者在 AVAILABLE 前不載入（PlaceholderExpansion 為抽象類別，
+    // 必須子類別，無法純反射——見 AceLibPlaceholderExpansion）。
+    // 版本鎖定 2.12.3（repo.helpch.at，GPL v3；2026-10-07 核對官方 sources jar：
+    // PlaceholderExpansion#register/#unregister(final)/#persist、
+    // PlaceholderHook#onRequest(OfflinePlayer, String))。
+    compileOnly("me.clip:placeholderapi:2.12.3") { isTransitive = false }
+
     // JetBrains 註解 (org.jetbrains:annotations) — 標記 @NotNull 等
     compileOnly("org.jetbrains:annotations:24.1.0")
 
@@ -109,6 +135,11 @@ dependencies {
     // 因此這裡使用 testImplementation（讓 class 進入 runtime classpath）而非 testCompileOnly。
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 
+    // typed LuckPerms／PlaceholderAPI provider seam 測試需要真實型別（mock
+    // LuckPerms／User／QueryOptions、PlaceholderExpansion 子類別行為）；
+    // 與 compileOnly 同一鎖定版本，受 dependency verification checksum 管控。
+    testImplementation("net.luckperms:api:5.5") { isTransitive = false }
+    testImplementation("me.clip:placeholderapi:2.12.3") { isTransitive = false }
     // typed provider seam 測試需要真實 Floodgate 型別（mock FloodgateApi /
     // FloodgatePlayer、列舉映射）；與 compileOnly 同一鎖定版本，受 dependency
     // verification checksum 管控。

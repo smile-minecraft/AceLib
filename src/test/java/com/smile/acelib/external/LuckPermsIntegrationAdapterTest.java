@@ -22,8 +22,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>以可注入 ClassLoader + PluginManager 隔離真實 classpath 與 Bukkit 狀態，
  * 驗證 LuckPerms marker 缺失、plugin 未啟用、版本不符與可用四種探測路徑，以及
- * initialize / shutdown 生命週期。marker 缺失情境使用真實 LuckPerms marker
- * （測試 classpath 必然不存在）；其餘情境使用測試 classpath 上必然存在的
+ * initialize / shutdown 生命週期。marker 缺失情境使用虛構 FQCN（真實 LuckPerms
+ * marker 自 1.4.0 起因 typed provider seam 測試而存在於測試 classpath）；
+ * 其餘情境使用測試 classpath 上必然存在的
  * {@code org.bukkit.plugin.Plugin} 作為 marker 以驅動 plugin / 版本邏輯。</p>
  */
 @DisplayName("LuckPermsIntegrationAdapter")
@@ -32,7 +33,7 @@ class LuckPermsIntegrationAdapterTest {
     /** 測試 classpath 必然存在的 marker（paper-api 提供），用於模擬 LuckPerms marker 存在。 */
     private static final String MARKER_PRESENT = "org.bukkit.plugin.Plugin";
     /** 測試 classpath 不存在的 marker（即真實 LuckPerms marker）。 */
-    private static final String MARKER_ABSENT = "net.luckperms.api.LuckPerms";
+    private static final String MARKER_ABSENT = "net.luckperms.api.AbsentMarkerForTest";
     private static final String PLUGIN_NAME = "LuckPerms";
     private static final String MIN_VERSION = "5.4.0";
 
@@ -62,7 +63,7 @@ class LuckPermsIntegrationAdapterTest {
     void markerAbsent_notActive_andNeverQueriesPluginManager() {
         PluginManager pm = pluginManager();
         LuckPermsIntegrationAdapter adapter = new LuckPermsIntegrationAdapter(
-            getClass().getClassLoader(), pm);
+            getClass().getClassLoader(), pm, MARKER_ABSENT, PLUGIN_NAME, MIN_VERSION);
         assertThrows(IntegrationLifecycleException.class, adapter::initialize);
         assertFalse(adapter.isActive(), "marker 缺失時不得 active");
         IntegrationProbeResult result = adapter.getStatus();

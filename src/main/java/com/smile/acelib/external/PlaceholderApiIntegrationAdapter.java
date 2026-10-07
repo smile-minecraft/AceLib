@@ -83,4 +83,22 @@ public final class PlaceholderApiIntegrationAdapter extends AbstractIntegrationA
     protected void doShutdown() {
         // PlaceholderAPI 整合不持有需要顯式釋放的外部資源；reflection-only 探測無外部 API 呼叫。
     }
+
+    /**
+     * 取得成功啟用後建立的佔位符提供者。
+     *
+     * <p>本類別為 Internal 實作細節；此方法僅供 plugin 接線
+     * （{@code AceLibPlugin.bindExternalService}）使用，非消費者契約。
+     * 本方法只在探測 {@code AVAILABLE} 後被呼叫，因此方法體內的 PlaceholderAPI
+     * 型別引用不會在缺席環境被解析。佔位符註冊由提供者持有，服務停用時經
+     * {@link PlaceholderProvider#close()} 清理。</p>
+     *
+     * @return 佔位符提供者；未啟用或已停用時為 null
+     */
+    public PlaceholderProvider placeholderProvider() {
+        if (!isActive()) {
+            return null;
+        }
+        return new PlaceholderApiPlaceholderProvider();
+    }
 }

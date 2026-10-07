@@ -82,4 +82,21 @@ public final class LuckPermsIntegrationAdapter extends AbstractIntegrationAdapte
     protected void doShutdown() {
         // LuckPerms 整合不持有需要顯式釋放的外部資源；reflection-only 探測無外部 API 呼叫。
     }
+
+    /**
+     * 取得成功啟用後建立的權限提供者。
+     *
+     * <p>本類別為 Internal 實作細節；此方法僅供 plugin 接線
+     * （{@code AceLibPlugin.bindExternalService}）使用，非消費者契約。
+     * 本方法只在探測 {@code AVAILABLE} 後被呼叫，因此方法體內的 LuckPerms
+     * 型別引用不會在缺席環境被解析。</p>
+     *
+     * @return 權限提供者；未啟用或已停用時為 null
+     */
+    public PermissionProvider permissionProvider() {
+        if (!isActive()) {
+            return null;
+        }
+        return new LuckPermsPermissionProvider(net.luckperms.api.LuckPermsProvider::get);
+    }
 }

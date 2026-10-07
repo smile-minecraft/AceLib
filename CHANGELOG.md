@@ -101,8 +101,25 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
   - 判斷所用 API 已對照 Paper 與 MoonRise 原始碼：`CraftServer.isOwnedByCurrentRegion(Entity)` 委派 `TickThread.isTickThreadFor(entity)`，Paper 上為 `isTickThread()`（主執行緒為 `TickThread`），Folia 由 MoonRise 覆寫為真實 region 擁有權判斷。
 - API 為加法性變更：新增 `Arguments`、`TypedCommand`、`TypedSubCommand`、`TypedContext`、`BrigadierRegistrar`、`CommandArgument`、`TypedHandler`、`BrigadierDispatch`、`CommandMessages`、`DefaultCommandMessages`、`MessageServiceCommandMessages`、`LocalizingReplySink`，`CommandErrorKind` 新增 `INVALID_ARGUMENT`；`AceLibPlugin` 新增 `getCommandRegistry()`。未變更或移除既有公開簽章，`docs/reference/api-surface-signatures.json` 已同步（純加法 +135／−0）。
 
+### 本階段內容（外部整合門面）
+
+- 四類業務門面只包裝、不自製：經濟（Vault legacy 純反射，零外部 import）／權限（LuckPerms compileOnly typed 持有者）／佔位符（PlaceholderAPI compileOnly 子類別 expansion）／建造查詢（通用 SPI，本期無外部 adapter）。缺席、停用或不支援時回明確 `UNAVAILABLE` 結果（不得默認允許、不得視為成功）；提供者每次呼叫重新解析，不跨停用快取，停用後注入被拒絕且查詢不可用。
+- 新增公開型別（`docs/reference/api-surface.*` 已同步：211 個頂層型別＝Supported 162／SPI 24／Internal 21；簽章基線純加法）：結果值型別 `EconomyResult`／`PermissionResult`／`BuildCheckResult`／`ExternalOperationResult`／`ExternalResultState`（成功不帶 errorCode，非成功餘額為 NaN）；提供者契約 SPI `EconomyProvider`／`PermissionProvider`／`PlaceholderProvider`／`PlaceholderHandler`／`BuildCheckProvider`（下游可替換，內建 adapter 於 AVAILABLE 時為預設）；內建實作 Internal `VaultEconomyProvider`／`LuckPermsPermissionProvider`／`PlaceholderApiPlaceholderProvider`／`AceLibPlaceholderExpansion`（LP／PAPI 型別集中於僅 AVAILABLE 後載入的持有者，缺席時類別可安全載入）。
+- Vault `EconomyResponse` 以 `transactionSuccess()==false` 為明確失敗（錯誤訊息取自 `getErrorMessage()`），不視為成功；LuckPerms 以 `UserManager#getUser` 取快取使用者（null 即查無，不做阻塞載入），群組經 `resolveDistinctInheritedNodes` 過濾 `InheritanceNode#getGroupName`，情境經 `ContextManager#getQueryOptions` 快照；佔位符註冊／清理（unregister、reload、disable）不殘留。
+- 依賴變更：`net.luckperms:api:5.5`（compileOnly＋test，Maven Central，MIT）／`me.clip:placeholderapi:2.12.3`（compileOnly＋test，repo.helpch.at，GPL v3），`gradle/verification-metadata.xml` 已同步 checksum。
+- `examples/external-integration-probe` 最小探針：`/extprobe` 依序呼叫四類門面並輸出（經濟只讀餘額、佔位符註冊後立即清理、建造查詢預期 UNAVAILABLE），供實機驗收。
+- **未實測項目**：VaultUnlocked 2.20.2／LuckPerms 5.5.71／PAPI 2.12.3／AceEconomy 2.2.0 的 legacy 相容性與探針輸出尚未在實際伺服器上驗收，由主代理執行。
+
 ### 本階段新增錯誤碼
 
+- `ACELIB-EXT-007`：經濟提供者不可用（Vault 缺席／停用／服務未啟用）。
+- `ACELIB-EXT-008`：經濟操作失敗（提供者回失敗、回 null 或呼叫拋例外）。
+- `ACELIB-EXT-009`：權限提供者不可用（LuckPerms 缺席／停用／服務未啟用）。
+- `ACELIB-EXT-010`：權限查詢失敗（查無玩家、回 null 或呼叫拋例外）。
+- `ACELIB-EXT-011`：佔位符提供者不可用（PlaceholderAPI 缺席／停用／服務未啟用）。
+- `ACELIB-EXT-012`：佔位符操作失敗（識別重複、底層拒絕、回 null 或呼叫拋例外）。
+- `ACELIB-EXT-013`：建造查詢不可用（無區域保護提供者／服務未啟用）。
+- `ACELIB-EXT-014`：建造查詢失敗（提供者回 null 或呼叫拋例外）。
 - `ACELIB-CMD-015`：引數值非法（型別化引數解析失敗：非數字、整數／長度溢位、超出宣告範圍、時間長度溢位、未知世界／材質／選項，或從未上線的玩家名稱）。
 
 ## [1.3.1] - 2026-10-06

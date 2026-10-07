@@ -78,4 +78,17 @@ public final class VaultIntegrationAdapter extends AbstractIntegrationAdapter {
     protected void doShutdown() {
         // Vault 整合不持有需要顯式釋放的外部資源；reflection-only 探測無外部 API 呼叫。
     }
+
+    /**
+     * 取得成功啟用後建立的經濟提供者。
+     *
+     * <p>本類別為 Internal 實作細節；此方法僅供 plugin 接線
+     * （{@code AceLibPlugin.bindExternalService}）使用，非消費者契約。
+     * 反射包裝每次呼叫重新解析 {@code Economy} 註冊，不持有外部實例。</p>
+     *
+     * @return 經濟提供者；未啟用或已停用時為 null
+     */
+    public EconomyProvider economyProvider() {
+        return isActive() ? new VaultEconomyProvider() : null;
+    }
 }

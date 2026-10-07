@@ -35,4 +35,28 @@ public final class ExternalIntegrationErrorCodes {
 
     /** 整合服務已停用（facade {@code SHUTDOWN}）。 */
     public static final String ACELIB_EXT_SERVICE_SHUTDOWN = "ACELIB-EXT-006";
+
+    /** 經濟提供者不可用（缺席／停用／服務未啟用）。 */
+    public static final String ACELIB_EXT_ECONOMY_UNAVAILABLE = "ACELIB-EXT-007";
+
+    /** 經濟操作失敗（提供者回失敗或呼叫拋例外）。 */
+    public static final String ACELIB_EXT_ECONOMY_FAILED = "ACELIB-EXT-008";
+
+    /** 權限提供者不可用（缺席／停用／服務未啟用）。 */
+    public static final String ACELIB_EXT_PERMISSION_UNAVAILABLE = "ACELIB-EXT-009";
+
+    /** 權限查詢失敗（查無玩家或呼叫拋例外）。 */
+    public static final String ACELIB_EXT_PERMISSION_FAILED = "ACELIB-EXT-010";
+
+    /** 佔位符提供者不可用（缺席／停用／服務未啟用）。 */
+    public static final String ACELIB_EXT_PLACEHOLDER_UNAVAILABLE = "ACELIB-EXT-011";
+
+    /** 佔位符操作失敗（註冊被拒、重複識別或呼叫拋例外）。 */
+    public static final String ACELIB_EXT_PLACEHOLDER_FAILED = "ACELIB-EXT-012";
+
+    /** 建造查詢不可用（無區域保護提供者／服務未啟用）。 */
+    public static final String ACELIB_EXT_BUILD_UNAVAILABLE = "ACELIB-EXT-013";
+
+    /** 建造查詢失敗（提供者呼叫拋例外）。 */
+    public static final String ACELIB_EXT_BUILD_FAILED = "ACELIB-EXT-014";
 }

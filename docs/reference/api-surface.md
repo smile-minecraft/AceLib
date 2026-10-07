@@ -12,10 +12,10 @@
 
 ## 統計
 
-- 總數：197 個 public 頂層型別
-- Supported：157
-- SPI：19
-- Internal：21
+- 總數：211 個 public 頂層型別
+- Supported：162
+- SPI：24
+- Internal：25
 
 ## 分類明細
 
@@ -164,17 +164,31 @@
 
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.external.AceLibPlaceholderExpansion` | class | Internal | PlaceholderAPI 子類別 expansion（自有佔位符橋接）；消費者改走 PlaceholderProvider 註冊。 | PlaceholderAPI 運行期以註冊表持有 expansion；AceLibPlugin 跨 package 建構註冊；v1 前保留 public。 | PlaceholderApiPlaceholderProvider 持有並註冊。 |
+| `com.smile.acelib.external.BuildCheckProvider` | interface | SPI | 建造查詢提供者契約（位置可建造判斷）；實作者只做查詢，不得觸碰世界狀態。 |  | ExternalIntegrationService.setBuildCheckProvider；消費者實作。 |
+| `com.smile.acelib.external.BuildCheckResult` | class | Supported | 建造查詢結果值型別（ALLOW／DENY／UNAVAILABLE；成功不帶 errorCode）。 |  | ExternalIntegrationService.canBuild。 |
+| `com.smile.acelib.external.EconomyProvider` | interface | SPI | 經濟提供者契約（餘額／扣款／入帳）；實作者為外部包裝，不得自製帳本或去重。 |  | ExternalIntegrationService.setEconomyProvider；消費者實作。 |
+| `com.smile.acelib.external.EconomyResult` | class | Supported | 經濟操作結果值型別（餘額查詢／扣款／入帳；非成功時餘額為 NaN）。 |  | ExternalIntegrationService 經濟門面。 |
 | `com.smile.acelib.external.ExternalIntegrationErrorCodes` | class | Supported | 外部整合錯誤碼常數表；v1 穩定。 |  | ExternalIntegrationService；IntegrationRegistry。 |
 | `com.smile.acelib.external.ExternalIntegrationService` | interface | Supported | 外部整合查詢服務介面。 |  | AceLibApi；消費者。 |
 | `com.smile.acelib.external.ExternalIntegrationServiceImpl` | class | Internal | ExternalIntegrationService 的內部實作；非消費者 API。 | AceLibPlugin 跨 package 建構並取 toModuleState() 註冊 diagnostics；v1 前保留 public。 | AceLibPlugin。 |
+| `com.smile.acelib.external.ExternalOperationResult` | class | Supported | 通用外部操作結果值型別（佔位符註冊／清理；成功不帶 errorCode）。 |  | ExternalIntegrationService 佔位符門面。 |
 | `com.smile.acelib.external.ExternalPluginProbe` | class | Supported | 外部插件探測工具（classpath/版本）；v1 穩定。 |  | IntegrationRegistry；IntegrationAdapter。 |
+| `com.smile.acelib.external.ExternalResultState` | enum | Supported | 外部操作結果狀態列舉（SUCCESS／FAILED／UNAVAILABLE；v1 凍結常數順序）。 |  | EconomyResult；PermissionResult；BuildCheckResult。 |
 | `com.smile.acelib.external.FloodgateIntegrationAdapter` | class | Internal | Floodgate reflection-only 探測 adapter 與 typed provider seam 持有者；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 建構並讀取 typed lookup（playerLookup）；v1 前保留 public，下游不得依賴。 | AceLibPlugin.bindExternalService 註冊；bindBedrockService 讀取 lookup。 |
 | `com.smile.acelib.external.IntegrationAdapter` | interface | SPI | 消費者實作的外部整合介面（extension point）；寫明冪等生命週期與相容性責任。 |  | IntegrationRegistry.register；消費者實作。 |
 | `com.smile.acelib.external.IntegrationProbeResult` | record | Supported | 整合探測結果值型別；v1 穩定。 |  | ExternalPluginProbe；IntegrationAdapter；ExternalIntegrationService。 |
 | `com.smile.acelib.external.IntegrationRegistry` | class | Supported | 整合介面卡註冊/查詢服務；v1 穩定。 |  | AceLibPlugin；消費者註冊 adapter。 |
 | `com.smile.acelib.external.IntegrationStatus` | enum | Supported | 整合狀態列舉；v1 凍結常數順序。 |  | IntegrationProbeResult；ExternalIntegrationService。 |
 | `com.smile.acelib.external.LuckPermsIntegrationAdapter` | class | Internal | LuckPerms 內建介面卡實作；消費者不應繼承，請實作 IntegrationAdapter。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
+| `com.smile.acelib.external.LuckPermsPermissionProvider` | class | Internal | LuckPerms typed 持有者（只在 AVAILABLE 後載入；缺席時不觸發外部類別載入）；消費者改走 PermissionProvider。 | 引用 LuckPerms compileOnly 型別，僅 AVAILABLE 後載入；AceLibPlugin 跨 package 建構；v1 前保留 public。 | AceLibPlugin 建構內建權限提供者。 |
+| `com.smile.acelib.external.PermissionProvider` | interface | SPI | 權限提供者契約（群組／情境查詢）；實作者為外部包裝，不代做領域授權。 |  | ExternalIntegrationService.setPermissionProvider；消費者實作。 |
+| `com.smile.acelib.external.PermissionResult` | class | Supported | 權限查詢結果值型別（群組／主群組／情境快照；不可用時不默認允許）。 |  | ExternalIntegrationService.getPermissionGroups。 |
 | `com.smile.acelib.external.PlaceholderApiIntegrationAdapter` | class | Internal | PlaceholderAPI 內建介面卡實作；消費者不應繼承。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
+| `com.smile.acelib.external.PlaceholderApiPlaceholderProvider` | class | Internal | PlaceholderAPI typed 持有者（expansion 註冊／清理；只在 AVAILABLE 後載入）；消費者改走 PlaceholderProvider。 | 引用 PlaceholderAPI compileOnly 型別，僅 AVAILABLE 後載入；AceLibPlugin 跨 package 建構；v1 前保留 public。 | AceLibPlugin 建構內建佔位符提供者。 |
+| `com.smile.acelib.external.PlaceholderHandler` | interface | SPI | 自有佔位符處理器（下游註冊鍵對應的解析回呼；player 可為 null 表非玩家請求）。 |  | ExternalIntegrationService.registerPlaceholder；消費者實作。 |
+| `com.smile.acelib.external.PlaceholderProvider` | interface | SPI | 佔位符提供者契約（註冊／清理；實作者負責無殘留）。 |  | ExternalIntegrationService.setPlaceholderProvider；消費者實作。 |
+| `com.smile.acelib.external.VaultEconomyProvider` | class | Internal | Vault legacy 經濟的純反射包裝（零外部 import，每次呼叫重新解析）；消費者改走 EconomyProvider。 | AceLibPlugin 跨 package 建構內建經濟提供者；v1 前保留 public。 | AceLibPlugin 建構內建經濟提供者。 |
 | `com.smile.acelib.external.VaultIntegrationAdapter` | class | Internal | Vault 內建介面卡實作；消費者不應繼承。 | AceLibPlugin 跨 package 註冊內建 adapter；v1 前保留 public。 | AceLibPlugin 註冊內建。 |
 
 ### com.smile.acelib.form

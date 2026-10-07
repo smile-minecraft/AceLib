@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibExternalIntegrationProbe
+main: com.example.acelibextprobe.ExternalIntegrationProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib 外部整合門面探針：經濟／權限／佔位符／建造查詢四類門面實機探測
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+commands:
+  extprobe:
+    description: 呼叫外部整合門面四類業務並輸出結果
+    usage: /extprobe
+    permission: acelibextprobe.use
+permissions:
+  acelibextprobe.use:
+    description: 使用外部整合門面探針
+    default: op

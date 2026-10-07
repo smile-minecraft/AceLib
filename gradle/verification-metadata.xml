@@ -523,6 +523,14 @@
          <sha256 value="943e12b100627804638fa285805a0ab788a680266531e650921ebfe4621a8bfa"/>
       </artifact>
    </component>
+   <component group="me.clip" name="placeholderapi" version="2.12.3">
+      <artifact name="placeholderapi-2.12.3.jar">
+         <sha256 value="8abc7422e2db496a35b7df0e8a9a1facf2938d1169c7ff43bde8635bc9902406"/>
+      </artifact>
+      <artifact name="placeholderapi-2.12.3.pom">
+         <sha256 value="5d3f9dcb207c6325f2627959ccbad7afaa8d611dd42256a4871b2aa1c71dd9fd"/>
+      </artifact>
+   </component>
    <component group="net.bytebuddy" name="byte-buddy" version="1.14.12">
       <artifact name="byte-buddy-1.14.12-sources.jar">
          <sha256 value="44eb695beef187be9a3b42f0a930d50dd1e91bcc1363e3565ccc17b15a20440c"/>
@@ -1019,6 +1027,17 @@
       </artifact>
       <artifact name="option-1.1.0.pom">
          <sha256 value="1f3318a1cee63e8085096242cf0619a44b8576f6b56c2391a00cc5e1275847b6"/>
+      </artifact>
+   </component>
+   <component group="net.luckperms" name="api" version="5.5">
+      <artifact name="api-5.5.jar">
+         <sha256 value="cd910f936adc4dee7705fb51cc29401fde4f29aba6ee73a6475a3a0515f6294f"/>
+      </artifact>
+      <artifact name="api-5.5.module">
+         <sha256 value="624cddd6524af797813d126626ec008833bab01d59423340c9d28dec9eceaba9"/>
+      </artifact>
+      <artifact name="api-5.5.pom">
+         <sha256 value="6b094ca90324e33fcd15b8f24eb46bf8cc12c2cc8ac7cfc4fd0aa0e36bd8e195"/>
       </artifact>
    </component>
    <component group="net.md-5" name="bungeecord-chat" version="1.20-R0.2-deprecated+build.19">

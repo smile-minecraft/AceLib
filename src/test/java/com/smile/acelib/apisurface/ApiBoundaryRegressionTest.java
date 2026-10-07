@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-    void canonicalTopLevelInventoryIs197() throws IOException {
+    void canonicalTopLevelInventoryIs211() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -212,17 +212,47 @@ class ApiBoundaryRegressionTest {
         //       TypedContext 的子指令處理器
         //     - com.smile.acelib.command.BrigadierDispatch（interface, SPI）— 樹的
         //       executes 委派回呼，維持 dispatch 單一真相來源
+        //   Supported +5、SPI +5、Internal +4（外部整合門面）：
+        //     - com.smile.acelib.external.BuildCheckResult（class）— 建造查詢
+        //       結果值型別（ALLOW／DENY／UNAVAILABLE；成功不帶 errorCode）
+        //     - com.smile.acelib.external.EconomyResult（class）— 經濟操作
+        //       結果值型別（非成功時餘額為 NaN，不可以 0 解讀為沒錢）
+        //     - com.smile.acelib.external.ExternalOperationResult（class）—
+        //       通用外部操作結果值型別（佔位符註冊／清理）
+        //     - com.smile.acelib.external.ExternalResultState（enum）— 結果
+        //       狀態（SUCCESS／FAILED／UNAVAILABLE；v1 凍結常數順序）
+        //     - com.smile.acelib.external.PermissionResult（class）— 權限查詢
+        //       結果值型別（不可用時不默認允許）
+        //     - com.smile.acelib.external.BuildCheckProvider（interface, SPI）—
+        //       建造查詢提供者契約（只做查詢，不觸碰世界狀態）
+        //     - com.smile.acelib.external.EconomyProvider（interface, SPI）—
+        //       經濟提供者契約（外部包裝，不自製帳本或去重）
+        //     - com.smile.acelib.external.PermissionProvider（interface, SPI）—
+        //       權限提供者契約（外部包裝，不代做領域授權）
+        //     - com.smile.acelib.external.PlaceholderHandler（interface, SPI）—
+        //       自有佔位符處理器（下游註冊鍵對應的解析回呼）
+        //     - com.smile.acelib.external.PlaceholderProvider（interface, SPI）—
+        //       佔位符提供者契約（註冊／清理無殘留）
+        //   Internal +4（外部整合門面內建實作）：
+        //     - com.smile.acelib.external.AceLibPlaceholderExpansion —
+        //       PlaceholderAPI 子類別 expansion（自有佔位符橋接）
+        //     - com.smile.acelib.external.LuckPermsPermissionProvider —
+        //       LuckPerms typed 持有者（只在 AVAILABLE 後載入）
+        //     - com.smile.acelib.external.PlaceholderApiPlaceholderProvider —
+        //       PlaceholderAPI typed 持有者（只在 AVAILABLE 後載入）
+        //     - com.smile.acelib.external.VaultEconomyProvider — Vault legacy
+        //       純反射包裝（零外部 import，每次呼叫重新解析）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 157,
-            "Supported 數量偏離 canonical 157，實際=" + supported);
-        assertTrue(spi == 19,
-            "SPI 數量偏離 canonical 19，實際=" + spi);
-        assertTrue(internal == 21,
-            "Internal 數量偏離 canonical 21，實際=" + internal
+        assertTrue(supported == 162,
+            "Supported 數量偏離 canonical 162，實際=" + supported);
+        assertTrue(spi == 24,
+            "SPI 數量偏離 canonical 24，實際=" + spi);
+        assertTrue(internal == 25,
+            "Internal 數量偏離 canonical 25，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 197,
-            "top-level inventory 偏離 canonical 197，實際=" + types.size());
+        assertTrue(types.size() == 211,
+            "top-level inventory 偏離 canonical 211，實際=" + types.size());
     }
 
     @Test

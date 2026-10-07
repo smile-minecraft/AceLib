@@ -927,10 +927,44 @@
       "method unregister(com.smile.acelib.event.EventRegistration<? extends org.bukkit.event.Event>) : void",
       "method unregisterAll() : void"
     ],
+    "com.smile.acelib.external.BuildCheckProvider": [
+      "method canBuild(java.util.UUID,java.lang.String,int,int,int) : com.smile.acelib.external.BuildCheckResult"
+    ],
+    "com.smile.acelib.external.BuildCheckResult": [
+      "method allowed() : boolean",
+      "method detail() : java.lang.String",
+      "method errorCode() : java.lang.String",
+      "method failure(com.smile.acelib.external.ExternalResultState,java.lang.String,java.lang.String) : com.smile.acelib.external.BuildCheckResult",
+      "method isSuccess() : boolean",
+      "method state() : com.smile.acelib.external.ExternalResultState",
+      "method success(boolean,java.lang.String) : com.smile.acelib.external.BuildCheckResult"
+    ],
+    "com.smile.acelib.external.EconomyProvider": [
+      "method deposit(org.bukkit.OfflinePlayer,double) : com.smile.acelib.external.EconomyResult",
+      "method getBalance(org.bukkit.OfflinePlayer) : com.smile.acelib.external.EconomyResult",
+      "method withdraw(org.bukkit.OfflinePlayer,double) : com.smile.acelib.external.EconomyResult"
+    ],
+    "com.smile.acelib.external.EconomyResult": [
+      "method balance() : double",
+      "method detail() : java.lang.String",
+      "method errorCode() : java.lang.String",
+      "method failure(com.smile.acelib.external.ExternalResultState,java.lang.String,java.lang.String) : com.smile.acelib.external.EconomyResult",
+      "method isSuccess() : boolean",
+      "method state() : com.smile.acelib.external.ExternalResultState",
+      "method success(double,java.lang.String) : com.smile.acelib.external.EconomyResult"
+    ],
     "com.smile.acelib.external.ExternalIntegrationErrorCodes": [
+      "field ACELIB_EXT_BUILD_FAILED : java.lang.String",
+      "field ACELIB_EXT_BUILD_UNAVAILABLE : java.lang.String",
       "field ACELIB_EXT_CLEANUP_FAILED : java.lang.String",
+      "field ACELIB_EXT_ECONOMY_FAILED : java.lang.String",
+      "field ACELIB_EXT_ECONOMY_UNAVAILABLE : java.lang.String",
       "field ACELIB_EXT_INIT_FAILED : java.lang.String",
       "field ACELIB_EXT_NOT_INSTALLED_OR_ENABLED : java.lang.String",
+      "field ACELIB_EXT_PERMISSION_FAILED : java.lang.String",
+      "field ACELIB_EXT_PERMISSION_UNAVAILABLE : java.lang.String",
+      "field ACELIB_EXT_PLACEHOLDER_FAILED : java.lang.String",
+      "field ACELIB_EXT_PLACEHOLDER_UNAVAILABLE : java.lang.String",
       "field ACELIB_EXT_SERVICE_NOT_READY : java.lang.String",
       "field ACELIB_EXT_SERVICE_SHUTDOWN : java.lang.String",
       "field ACELIB_EXT_VERSION_UNSUPPORTED : java.lang.String"
@@ -938,14 +972,44 @@
     "com.smile.acelib.external.ExternalIntegrationService": [
       "field NOT_READY : java.lang.String",
       "field SHUTDOWN : java.lang.String",
+      "method canBuild(java.util.UUID,java.lang.String,int,int,int) : com.smile.acelib.external.BuildCheckResult",
+      "method clearBuildCheckProvider() : void",
+      "method clearEconomyProvider() : void",
+      "method clearPermissionProvider() : void",
+      "method clearPlaceholderProvider() : void",
+      "method deposit(org.bukkit.OfflinePlayer,double) : com.smile.acelib.external.EconomyResult",
       "method forUnavailable(java.lang.String) : com.smile.acelib.external.ExternalIntegrationService",
+      "method getBalance(org.bukkit.OfflinePlayer) : com.smile.acelib.external.EconomyResult",
       "method getModuleStatus() : java.lang.String",
+      "method getPermissionGroups(java.util.UUID) : com.smile.acelib.external.PermissionResult",
       "method getStatus(java.lang.String) : com.smile.acelib.external.IntegrationProbeResult",
-      "method shutdown() : void"
+      "method registerPlaceholder(java.lang.String,com.smile.acelib.external.PlaceholderHandler) : com.smile.acelib.external.ExternalOperationResult",
+      "method setBuildCheckProvider(com.smile.acelib.external.BuildCheckProvider) : void",
+      "method setEconomyProvider(com.smile.acelib.external.EconomyProvider) : void",
+      "method setPermissionProvider(com.smile.acelib.external.PermissionProvider) : void",
+      "method setPlaceholderProvider(com.smile.acelib.external.PlaceholderProvider) : void",
+      "method shutdown() : void",
+      "method unregisterPlaceholder(java.lang.String) : com.smile.acelib.external.ExternalOperationResult",
+      "method withdraw(org.bukkit.OfflinePlayer,double) : com.smile.acelib.external.EconomyResult"
+    ],
+    "com.smile.acelib.external.ExternalOperationResult": [
+      "method detail() : java.lang.String",
+      "method errorCode() : java.lang.String",
+      "method failure(com.smile.acelib.external.ExternalResultState,java.lang.String,java.lang.String) : com.smile.acelib.external.ExternalOperationResult",
+      "method isSuccess() : boolean",
+      "method state() : com.smile.acelib.external.ExternalResultState",
+      "method success(java.lang.String) : com.smile.acelib.external.ExternalOperationResult"
     ],
     "com.smile.acelib.external.ExternalPluginProbe": [
       "ctor(java.lang.ClassLoader,org.bukkit.plugin.PluginManager)",
       "method probe(java.lang.String,java.lang.String,java.lang.String) : com.smile.acelib.external.IntegrationProbeResult"
+    ],
+    "com.smile.acelib.external.ExternalResultState": [
+      "field FAILED : com.smile.acelib.external.ExternalResultState",
+      "field SUCCESS : com.smile.acelib.external.ExternalResultState",
+      "field UNAVAILABLE : com.smile.acelib.external.ExternalResultState",
+      "method valueOf(java.lang.String) : com.smile.acelib.external.ExternalResultState",
+      "method values() : com.smile.acelib.external.ExternalResultState[]"
     ],
     "com.smile.acelib.external.IntegrationAdapter": [
       "method getId() : java.lang.String",
@@ -990,6 +1054,28 @@
       "method valueOf(java.lang.String) : com.smile.acelib.external.IntegrationStatus",
       "method values() : com.smile.acelib.external.IntegrationStatus[]",
       "method versionUnsupported() : com.smile.acelib.external.IntegrationStatus"
+    ],
+    "com.smile.acelib.external.PermissionProvider": [
+      "method getPermissionGroups(java.util.UUID) : com.smile.acelib.external.PermissionResult"
+    ],
+    "com.smile.acelib.external.PermissionResult": [
+      "method contexts() : java.util.Map<java.lang.String, java.util.Set<java.lang.String>>",
+      "method detail() : java.lang.String",
+      "method errorCode() : java.lang.String",
+      "method failure(com.smile.acelib.external.ExternalResultState,java.lang.String,java.lang.String) : com.smile.acelib.external.PermissionResult",
+      "method groups() : java.util.Set<java.lang.String>",
+      "method isSuccess() : boolean",
+      "method primaryGroup() : java.lang.String",
+      "method state() : com.smile.acelib.external.ExternalResultState",
+      "method success(java.lang.String,java.util.Set<java.lang.String>,java.util.Map<java.lang.String, java.util.Set<java.lang.String>>,java.lang.String) : com.smile.acelib.external.PermissionResult"
+    ],
+    "com.smile.acelib.external.PlaceholderHandler": [
+      "method onRequest(java.util.UUID,java.lang.String) : java.lang.String"
+    ],
+    "com.smile.acelib.external.PlaceholderProvider": [
+      "method close() : void",
+      "method registerPlaceholder(java.lang.String,com.smile.acelib.external.PlaceholderHandler) : com.smile.acelib.external.ExternalOperationResult",
+      "method unregisterPlaceholder(java.lang.String) : com.smile.acelib.external.ExternalOperationResult"
     ],
     "com.smile.acelib.form.FormErrorCodes": [
       "field ACELIB_FORM_IMAGE_FALLBACK : java.lang.String",

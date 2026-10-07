@@ -1,12 +1,24 @@
 package com.smile.acelib.testing;
 
+import com.smile.acelib.external.BuildCheckProvider;
+import com.smile.acelib.external.BuildCheckResult;
+import com.smile.acelib.external.EconomyProvider;
+import com.smile.acelib.external.EconomyResult;
 import com.smile.acelib.external.ExternalIntegrationService;
+import com.smile.acelib.external.ExternalOperationResult;
+import com.smile.acelib.external.ExternalResultState;
 import com.smile.acelib.external.IntegrationProbeResult;
 import com.smile.acelib.external.IntegrationStatus;
+import com.smile.acelib.external.PermissionProvider;
+import com.smile.acelib.external.PermissionResult;
+import com.smile.acelib.external.PlaceholderHandler;
+import com.smile.acelib.external.PlaceholderProvider;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import org.bukkit.OfflinePlayer;
 
 /**
  * 外部整合假服務（下游單元測試用）。
@@ -137,5 +149,272 @@ public final class FakeExternalIntegrationService implements ExternalIntegration
     @Override
     public void shutdown() {
         shutDown = true;
+        economyProvider = null;
+        permissionProvider = null;
+        placeholderProvider = null;
+        buildCheckProvider = null;
+    }
+
+    // ----- 業務門面（委派給可注入的假提供者；缺席時回 UNAVAILABLE） -----
+
+    private volatile EconomyProvider economyProvider;
+    private volatile PermissionProvider permissionProvider;
+    private volatile PlaceholderProvider placeholderProvider;
+    private volatile BuildCheckProvider buildCheckProvider;
+
+    @Override
+    public EconomyResult getBalance(OfflinePlayer player) {
+        if (player == null) {
+            throw new IllegalArgumentException("player must not be null");
+        }
+        EconomyProvider provider = currentEconomy();
+        if (provider == null) {
+            return EconomyResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-007", "economy provider is not available");
+        }
+        try {
+            EconomyResult result = provider.getBalance(player);
+            return Objects.requireNonNullElseGet(result, () -> EconomyResult.failure(
+                ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy provider returned null result"));
+        } catch (Exception e) {
+            return EconomyResult.failure(ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy balance lookup failed: " + e);
+        }
+    }
+
+    @Override
+    public EconomyResult withdraw(OfflinePlayer player, double amount) {
+        if (player == null) {
+            throw new IllegalArgumentException("player must not be null");
+        }
+        requireValidAmount(amount);
+        EconomyProvider provider = currentEconomy();
+        if (provider == null) {
+            return EconomyResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-007", "economy provider is not available");
+        }
+        try {
+            EconomyResult result = provider.withdraw(player, amount);
+            return Objects.requireNonNullElseGet(result, () -> EconomyResult.failure(
+                ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy provider returned null result"));
+        } catch (Exception e) {
+            return EconomyResult.failure(ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy withdraw failed: " + e);
+        }
+    }
+
+    @Override
+    public EconomyResult deposit(OfflinePlayer player, double amount) {
+        if (player == null) {
+            throw new IllegalArgumentException("player must not be null");
+        }
+        requireValidAmount(amount);
+        EconomyProvider provider = currentEconomy();
+        if (provider == null) {
+            return EconomyResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-007", "economy provider is not available");
+        }
+        try {
+            EconomyResult result = provider.deposit(player, amount);
+            return Objects.requireNonNullElseGet(result, () -> EconomyResult.failure(
+                ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy provider returned null result"));
+        } catch (Exception e) {
+            return EconomyResult.failure(ExternalResultState.FAILED, "ACELIB-EXT-008",
+                "economy deposit failed: " + e);
+        }
+    }
+
+    @Override
+    public void setEconomyProvider(EconomyProvider provider) {
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        if (shutDown) {
+            throw new IllegalStateException(
+                "external integration service has been shut down");
+        }
+        economyProvider = provider;
+    }
+
+    @Override
+    public void clearEconomyProvider() {
+        economyProvider = null;
+    }
+
+    @Override
+    public PermissionResult getPermissionGroups(UUID playerId) {
+        if (playerId == null) {
+            throw new IllegalArgumentException("playerId must not be null");
+        }
+        PermissionProvider provider = currentPermission();
+        if (provider == null) {
+            return PermissionResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-009", "permission provider is not available");
+        }
+        try {
+            PermissionResult result = provider.getPermissionGroups(playerId);
+            return Objects.requireNonNullElseGet(result, () -> PermissionResult.failure(
+                ExternalResultState.FAILED, "ACELIB-EXT-010",
+                "permission provider returned null result"));
+        } catch (Exception e) {
+            return PermissionResult.failure(ExternalResultState.FAILED, "ACELIB-EXT-010",
+                "permission lookup failed: " + e);
+        }
+    }
+
+    @Override
+    public void setPermissionProvider(PermissionProvider provider) {
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        if (shutDown) {
+            throw new IllegalStateException(
+                "external integration service has been shut down");
+        }
+        permissionProvider = provider;
+    }
+
+    @Override
+    public void clearPermissionProvider() {
+        permissionProvider = null;
+    }
+
+    @Override
+    public ExternalOperationResult registerPlaceholder(String identifier,
+            PlaceholderHandler handler) {
+        IdentifierCheck.requireValid(identifier);
+        if (handler == null) {
+            throw new IllegalArgumentException("handler must not be null");
+        }
+        PlaceholderProvider provider = currentPlaceholder();
+        if (provider == null) {
+            return ExternalOperationResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-011", "placeholder provider is not available");
+        }
+        try {
+            ExternalOperationResult result =
+                provider.registerPlaceholder(identifier, handler);
+            return Objects.requireNonNullElseGet(result, () -> ExternalOperationResult
+                .failure(ExternalResultState.FAILED, "ACELIB-EXT-012",
+                    "placeholder provider returned null result"));
+        } catch (Exception e) {
+            return ExternalOperationResult.failure(ExternalResultState.FAILED,
+                "ACELIB-EXT-012", "placeholder registration failed: " + e);
+        }
+    }
+
+    @Override
+    public ExternalOperationResult unregisterPlaceholder(String identifier) {
+        IdentifierCheck.requireValid(identifier);
+        PlaceholderProvider provider = currentPlaceholder();
+        if (provider == null) {
+            return ExternalOperationResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-011", "placeholder provider is not available");
+        }
+        try {
+            ExternalOperationResult result = provider.unregisterPlaceholder(identifier);
+            return Objects.requireNonNullElseGet(result, () -> ExternalOperationResult
+                .failure(ExternalResultState.FAILED, "ACELIB-EXT-012",
+                    "placeholder provider returned null result"));
+        } catch (Exception e) {
+            return ExternalOperationResult.failure(ExternalResultState.FAILED,
+                "ACELIB-EXT-012", "placeholder unregistration failed: " + e);
+        }
+    }
+
+    @Override
+    public void setPlaceholderProvider(PlaceholderProvider provider) {
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        if (shutDown) {
+            throw new IllegalStateException(
+                "external integration service has been shut down");
+        }
+        placeholderProvider = provider;
+    }
+
+    @Override
+    public void clearPlaceholderProvider() {
+        placeholderProvider = null;
+    }
+
+    @Override
+    public BuildCheckResult canBuild(UUID playerId, String worldName, int x, int y, int z) {
+        if (playerId == null) {
+            throw new IllegalArgumentException("playerId must not be null");
+        }
+        if (worldName == null || worldName.isBlank()) {
+            throw new IllegalArgumentException("worldName must not be null or blank");
+        }
+        BuildCheckProvider provider = currentBuildCheck();
+        if (provider == null) {
+            return BuildCheckResult.failure(ExternalResultState.UNAVAILABLE,
+                "ACELIB-EXT-013", "no build-check provider is registered");
+        }
+        try {
+            BuildCheckResult result = provider.canBuild(playerId, worldName, x, y, z);
+            return Objects.requireNonNullElseGet(result, () -> BuildCheckResult.failure(
+                ExternalResultState.FAILED, "ACELIB-EXT-014",
+                "build-check provider returned null result"));
+        } catch (Exception e) {
+            return BuildCheckResult.failure(ExternalResultState.FAILED, "ACELIB-EXT-014",
+                "build check failed: " + e);
+        }
+    }
+
+    @Override
+    public void setBuildCheckProvider(BuildCheckProvider provider) {
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        if (shutDown) {
+            throw new IllegalStateException(
+                "external integration service has been shut down");
+        }
+        buildCheckProvider = provider;
+    }
+
+    @Override
+    public void clearBuildCheckProvider() {
+        buildCheckProvider = null;
+    }
+
+    private EconomyProvider currentEconomy() {
+        return shutDown ? null : economyProvider;
+    }
+
+    private PermissionProvider currentPermission() {
+        return shutDown ? null : permissionProvider;
+    }
+
+    private PlaceholderProvider currentPlaceholder() {
+        return shutDown ? null : placeholderProvider;
+    }
+
+    private BuildCheckProvider currentBuildCheck() {
+        return shutDown ? null : buildCheckProvider;
+    }
+
+    private static void requireValidAmount(double amount) {
+        if (!Double.isFinite(amount) || amount < 0) {
+            throw new IllegalArgumentException(
+                "amount must be a finite non-negative number, got: " + amount);
+        }
+    }
+
+    /** 佔位符識別檢查（與 production 門面同規則的輕量版）。 */
+    private static final class IdentifierCheck {
+        private IdentifierCheck() {
+        }
+
+        static void requireValid(String identifier) {
+            if (identifier == null || identifier.isBlank()) {
+                throw new IllegalArgumentException("identifier must not be null or blank");
+            }
+        }
     }
 }

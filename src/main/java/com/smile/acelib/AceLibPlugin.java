@@ -17,12 +17,15 @@ import com.smile.acelib.diagnostics.Clock;
 import com.smile.acelib.diagnostics.DiagnosticReport;
 import com.smile.acelib.diagnostics.DiagnosticsService;
 import com.smile.acelib.diagnostics.ModuleState;
+import com.smile.acelib.external.EconomyProvider;
 import com.smile.acelib.external.ExternalIntegrationService;
 import com.smile.acelib.external.ExternalIntegrationServiceImpl;
 import com.smile.acelib.external.FloodgateIntegrationAdapter;
 import com.smile.acelib.external.IntegrationRegistry;
 import com.smile.acelib.external.LuckPermsIntegrationAdapter;
+import com.smile.acelib.external.PermissionProvider;
 import com.smile.acelib.external.PlaceholderApiIntegrationAdapter;
+import com.smile.acelib.external.PlaceholderProvider;
 import com.smile.acelib.external.VaultIntegrationAdapter;
 import com.smile.acelib.gui.GuiErrorCode;
 import com.smile.acelib.gui.GuiScopes;
@@ -2208,14 +2211,28 @@ public class AceLibPlugin extends JavaPlugin {
         ClassLoader classLoader = externalProbeClassLoader();
         PluginManager pluginManager = server.getPluginManager();
         IntegrationRegistry registry = new IntegrationRegistry();
-        registry.register(new VaultIntegrationAdapter(classLoader, pluginManager));
-        registry.register(new LuckPermsIntegrationAdapter(classLoader, pluginManager));
-        registry.register(new PlaceholderApiIntegrationAdapter(classLoader, pluginManager));
+        VaultIntegrationAdapter vaultAdapter =
+            new VaultIntegrationAdapter(classLoader, pluginManager);
+        registry.register(vaultAdapter);
+        LuckPermsIntegrationAdapter luckPermsAdapter =
+            new LuckPermsIntegrationAdapter(classLoader, pluginManager);
+        registry.register(luckPermsAdapter);
+        PlaceholderApiIntegrationAdapter placeholderAdapter =
+            new PlaceholderApiIntegrationAdapter(classLoader, pluginManager);
+        registry.register(placeholderAdapter);
         FloodgateIntegrationAdapter floodgateAdapter =
             new FloodgateIntegrationAdapter(classLoader, pluginManager);
         registry.register(floodgateAdapter);
         registry.initializeAll();
-        ExternalIntegrationServiceImpl impl = new ExternalIntegrationServiceImpl(registry);
+        // 內建業務提供者：只有對應 adapter 探測 AVAILABLE（active）時才建立；
+        // 缺席時傳 null，門面業務呼叫回明確不可用。LuckPerms／PlaceholderAPI 的
+        // 外部型別只出現在 adapter／provider 持有者內，本方法不直接引用。
+        EconomyProvider economyProvider = vaultAdapter.economyProvider();
+        PermissionProvider permissionProvider = luckPermsAdapter.permissionProvider();
+        PlaceholderProvider placeholderProvider =
+            placeholderAdapter.placeholderProvider();
+        ExternalIntegrationServiceImpl impl = new ExternalIntegrationServiceImpl(
+            registry, economyProvider, permissionProvider, placeholderProvider, null);
         this.diagnostics.registerModuleState(MODULE_INTEGRATION, impl.toModuleState());
         this.externalService = impl;
         // 基岩服務綁定：floodgate 啟用 → typed lookup；缺席 → absent lookup（零影響）。

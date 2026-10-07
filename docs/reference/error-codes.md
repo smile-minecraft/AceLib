@@ -205,6 +205,14 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-EXT-004` | 整合資源清理失敗 | shutdown 時釋放失敗 |
 | `ACELIB-EXT-005` | 整合服務尚未啟用 | facade NOT_READY |
 | `ACELIB-EXT-006` | 整合服務已停用 | facade SHUTDOWN |
+| `ACELIB-EXT-007` | 經濟提供者不可用 | Vault 缺席／停用／服務未啟用 |
+| `ACELIB-EXT-008` | 經濟操作失敗 | 提供者回失敗、回 null 或呼叫拋例外 |
+| `ACELIB-EXT-009` | 權限提供者不可用 | LuckPerms 缺席／停用／服務未啟用 |
+| `ACELIB-EXT-010` | 權限查詢失敗 | 查無玩家、回 null 或呼叫拋例外 |
+| `ACELIB-EXT-011` | 佔位符提供者不可用 | PlaceholderAPI 缺席／停用／服務未啟用 |
+| `ACELIB-EXT-012` | 佔位符操作失敗 | 識別重複、底層拒絕、回 null 或呼叫拋例外 |
+| `ACELIB-EXT-013` | 建造查詢不可用 | 無區域保護提供者／服務未啟用 |
+| `ACELIB-EXT-014` | 建造查詢失敗 | 提供者回 null 或呼叫拋例外 |
 
 ### 基岩版玩家服務（BED）
 
