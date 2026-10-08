@@ -62,7 +62,7 @@ v1.4.0 起 `BrigadierRegistrar` 是給下游 plugin 的正式組裝入口（Supp
 - `TypedSubCommand.toSubCommandSpec()` — `SubCommandSpec` 相容層，走既有的傳統 dispatch 流程。
 - `BrigadierRegistrar.register(...)` — 同時寫入內部 `CommandRegistry` 與 Brigadier 節點。
 
-固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支而非 argument 節點 — 這是基岩版看得見補全的結構。開放式引數（玩家、世界、材質、數值、時間）則是 argument 節點，送給客戶端的是 vanilla 引數型別，範圍由客戶端先行驗證。
+固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支而非 argument 節點 — 原本預期這是基岩版看得見的補全結構，但真人基岩客戶端實測顯示建議列並未出現（見[補全支援矩陣](#補全支援矩陣)）。開放式引數（玩家、世界、材質、數值、時間）則是 argument 節點，送給客戶端的是 vanilla 引數型別，範圍由客戶端先行驗證。
 
 ```java
 CommandArgument<Material> itemArg = Arguments.material("item");
@@ -142,21 +142,23 @@ Brigadier 樹送給客戶端的是 vanilla world 型別，它只接受**維度�
 
 ## 補全支援矩陣
 
-伺服器即時算出的建議送不到基岩版（Geyser 限制）：基岩版只看得懂編譯進指令結構的固定選項。因此補全能力依引數種類而異：
+伺服器即時算出的建議送不到基岩版（Geyser 限制）；真人基岩客戶端實測顯示，連編譯進指令結構的固定選項也未出現建議列。下表「基岩版」欄中，`enumArg`／`fixed` 與 `player` 為實測結果，其餘型別列為推論自同一平台限制（未逐項實測）：
 
 | 引數 | Java 版（伺服器建議） | 基岩版（Geyser） | 說明 |
 | --- | --- | --- | --- |
-| `enumArg` / `fixed` | 可用 | **可用** | 編譯為 literal 分支，是基岩唯一看得見的補全結構。 |
-| `player` | 可用（列出在線玩家） | 不可用 | 伺服器建議送不到基岩。 |
-| `world` | 可用（列出已載入世界） | 不可用 | 同上。 |
-| `material` | 可用（列出材質名） | 不可用 | 同上。 |
-| `intArg` / `doubleArg` | 無建議（範圍由客戶端驗證） | 不適用 | 刻意不列出候選；範圍錯誤訊息由客戶端給。 |
-| `duration` | 建議語法範例（`1s`、`1d`…） | 不可用 | 範例僅供 Java 版參考。 |
-| `offlinePlayer` | best-effort（只列在線玩家） | 不可用 | 離線名單無法低成本枚舉。 |
+| `enumArg` / `fixed` | 可用 | **實測未出現建議列** | literal 分支已編譯進指令結構，但基岩建議列仍未出現（見下段歸因）。 |
+| `player` | 可用（列出在線玩家） | **實測未出現建議列** | 樣本含玩家引數（`parse`）；伺服器建議送不到基岩。 |
+| `world` | 可用（列出已載入世界） | 推論：無建議列（未逐項實測） | 推論自同一平台限制（基岩 UI 無法按型別區分），見下段樣本說明。 |
+| `material` | 可用（列出材質名） | 推論：無建議列（未逐項實測） | 同上。 |
+| `intArg` / `doubleArg` | 無建議（範圍由客戶端驗證） | 推論：無建議列（未逐項實測） | 該型別本就不列候選；同一平台限制下基岩同樣無建議列。 |
+| `duration` | 建議語法範例（`1s`、`1d`…） | 推論：無建議列（未逐項實測） | 範例僅供 Java 版參考；同一平台限制一體適用。 |
+| `offlinePlayer` | best-effort（只列在線玩家） | 推論：無建議列（未逐項實測） | 離線名單無法低成本枚舉；同一平台限制下基岩同樣無建議列。 |
 
-**基岩補全實測狀態**：各引數的基岩補全尚未由真人基岩客戶端逐項實測。Java 機器人的 tab 請求走 Java 協議，無法替代基岩客戶端的觀察。上表「基岩版」欄位目前是依 Geyser 只解析固定選項結構的行為推導，實測結果待補。
+**基岩補全實測結果**（2026-10-08，真人基岩客戶端 `.linoQsmile`，Folia 26.2-7＋Geyser 2.11.3-b1247；完整觀測見 `.ultrawork/evidence/acelib-v140/t07/BEDROCK-RESULT.md`）：literal 分支（`parse-mode`、`parse-fixed`、`trade`）與玩家引數（`parse`）送出後皆回 `missing arguments`（參數數 1／1／2／1，與預期結構相符），**建議列皆未出現**。歸因是 Geyser 官方 Current Limitations 的 Unfixable 條目：「Anything that relies on tab complete or typing in the chat UI … Bedrock sends no packet that indicates they are in this menu」（https://geysermc.org/wiki/geyser/current-limitations/）；基岩端僅內建指令有自動完成。非本框架缺陷。樣本涵蓋 literal 分支與玩家引數；該平台限制對所有引數型別一體適用（基岩 UI 無法按型別區分）。
 
-固定選項的大小寫：literal 分支以小寫常數名編譯，基岩版補全會顯示小寫形式；傳統路徑的 `parse` 大小寫不敏感，故兩種大小寫在兩條路徑都能執行。
+**執行與回應不受影響**：`/cprobe parse-mode buy` 實測回 `[parse-mode] ok value=BUY type=Mode thread=Folia Region Scheduler Thread #0` — 分支解析正常，handler 在 Folia Region Scheduler 執行緒執行。
+
+固定選項的大小寫：literal 分支以小寫常數名編譯，若基岩版顯示補全會是小寫形式（本次實測建議列未出現）；傳統路徑的 `parse` 大小寫不敏感，故兩種大小寫在兩條路徑都能執行。
 
 ## 錯誤在地化
 

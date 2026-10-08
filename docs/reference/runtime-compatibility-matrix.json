@@ -26,13 +26,13 @@
       "platform": "Paper",
       "version": "26.2-120",
       "status": "SUPPORTED",
-      "evidence": "2026-10-07；AceLib 1.4.0-SNAPSHOT 實機回合 t06（GUI）、t07（Brigadier 指令）、t08（逐玩家儲存）、t09（外部整合）、t10（顯示）、t11（生命週期），Paper 26.2-120。t11 部署 JAR 的證據只記錄 SHA-256 前綴 7f3e612b70b7ba60；本次 clean build 資格候選 runtime JAR 完整 SHA-256：d46b6574b1c2ffc37ec603a0afa55d3ef9620975e879234727c4891724010416，test-fixtures JAR SHA-256：6c12c677c6beed17b4893050c42f547bfcf588496631673b52b557de3748a85f（候選產物未冒稱已部署實測）"
+      "evidence": "2026-10-07；AceLib 1.4.0-SNAPSHOT 實機回合 t06（GUI）、t07（Brigadier 指令）、t08（逐玩家儲存）、t09（外部整合）、t10（顯示）、t11（生命週期），Paper 26.2-120。t11 部署 JAR 的證據只記錄 SHA-256 前綴 7f3e612b70b7ba60；本次 clean build 資格候選 runtime JAR 完整 SHA-256：604d1cc881355af7f926faee50cc587b4d3069d286fb0c3c04a080be3609e134，test-fixtures JAR SHA-256：6c12c677c6beed17b4893050c42f547bfcf588496631673b52b557de3748a85f。實機（Paper 26.2-120／Folia 26.2-7）冒煙所用 d46b6574b1c2ffc37ec603a0afa55d3ef9620975e879234727c4891724010416 與其位元碼相同（javap -c -p 核對：9 class 差異僅行號表，位元碼差異 0），故實機證據對現行候選同樣有效（候選產物未冒稱已部署實測）"
     },
     {
       "platform": "Folia",
       "version": "26.2-7",
       "status": "SUPPORTED",
-      "evidence": "2026-10-07；AceLib 1.4.0-SNAPSHOT 實機回合 t06（GUI）、t07（Brigadier 指令）、t08（逐玩家儲存）、t09（外部整合）、t10（顯示）、t11（生命週期），Folia 26.2-7。t11 部署 JAR 的證據只記錄 SHA-256 前綴 7f3e612b70b7ba60；本次 clean build 資格候選 runtime JAR 完整 SHA-256：d46b6574b1c2ffc37ec603a0afa55d3ef9620975e879234727c4891724010416，test-fixtures JAR SHA-256：6c12c677c6beed17b4893050c42f547bfcf588496631673b52b557de3748a85f（候選產物未冒稱已部署實測）。t07 真人基岩逐項指令補全仍待觀察，見 docs/modules/command.md；bedrock 區塊保留既有 Folia 26.2-4 驗證記錄，不代表本版補全已完成。"
+      "evidence": "2026-10-07；AceLib 1.4.0-SNAPSHOT 實機回合 t06（GUI）、t07（Brigadier 指令）、t08（逐玩家儲存）、t09（外部整合）、t10（顯示）、t11（生命週期），Folia 26.2-7。t11 部署 JAR 的證據只記錄 SHA-256 前綴 7f3e612b70b7ba60；本次 clean build 資格候選 runtime JAR 完整 SHA-256：604d1cc881355af7f926faee50cc587b4d3069d286fb0c3c04a080be3609e134，test-fixtures JAR SHA-256：6c12c677c6beed17b4893050c42f547bfcf588496631673b52b557de3748a85f。實機（Paper 26.2-120／Folia 26.2-7）冒煙所用 d46b6574b1c2ffc37ec603a0afa55d3ef9620975e879234727c4891724010416 與其位元碼相同（javap -c -p 核對：9 class 差異僅行號表，位元碼差異 0），故實機證據對現行候選同樣有效（候選產物未冒稱已部署實測）。t07 真人基岩補全實測（2026-10-08，Folia 26.2-7＋Geyser 2.11.3-b1247）：literal 分支與玩家引數的基岩端建議列皆未顯示，執行與回應正常（parse-mode buy 成功）；歸因 Geyser Current Limitations（Unfixable，Bedrock 不送聊天／指令 UI 輸入封包）；樣本範圍見 docs/modules/command.md；bedrock 區塊保留既有 Folia 26.2-4 驗證記錄。"
     },
     {
       "platform": "Folia",
@@ -46,7 +46,7 @@
     "foliaVersion": "26.2-4",
     "geyser": "2.11.2-SNAPSHOT",
     "floodgate": "2.2.5-SNAPSHOT",
-    "note": "以上 verified 記錄保留既有 Folia 26.2-4 組合；1.4.0-SNAPSHOT 的指令補全逐項真人基岩觀察待補，見 docs/modules/command.md。"
+    "note": "以上 verified 記錄保留既有 Folia 26.2-4 組合（只記實測）；1.4.0-SNAPSHOT 指令補全真人基岩實測結果見 docs/modules/command.md（2026-10-08，Folia 26.2-7＋Geyser 2.11.3-b1247：基岩端建議列未顯示，執行與回應正常）。"
   },
   "unknownFuture": "UNVERIFIED"
 }

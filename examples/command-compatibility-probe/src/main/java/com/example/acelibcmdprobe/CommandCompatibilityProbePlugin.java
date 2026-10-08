@@ -128,7 +128,9 @@ public class CommandCompatibilityProbePlugin extends JavaPlugin {
     /**
      * {@code /cprobe-args <...>}：無權限限制的錯誤路徑與補全觀察面。
      *
-     * <p>固定選項（mode）以 literal 分支呈現，是基岩版唯一看得見的補全；
+     * <p>固定選項（mode）以 literal 分支呈現；原本預期基岩可見，但 2026-10-08
+     * 真人基岩客戶端實測顯示基岩端建議列並未出現（Geyser Current Limitations，
+     * Unfixable），見 {@code docs/modules/command.md} 補全支援矩陣；
      * 開放式引數的伺服器建議送不到基岩版，供對照觀察。</p>
      */
     private TypedCommand argsCommand() {

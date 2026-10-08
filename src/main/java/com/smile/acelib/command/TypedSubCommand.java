@@ -27,7 +27,9 @@ import org.bukkit.entity.Player;
  *       參數數量／冷卻／help／補全流程，handler 內部先解析再呼叫
  *       {@link TypedHandler}</li>
  *   <li>{@link #buildBranch} — Brigadier 子樹：固定選項編譯為 literal
- *       分支（基岩可見），開放式引數為 argument 節點；執行時把原始輸入
+ *       分支（原本預期基岩可見，但 2026-10-08 真人基岩客戶端實測顯示
+ *       基岩端建議列並未出現，Geyser Current Limitations，Unfixable，見模組頁
+ *       補全支援矩陣），開放式引數為 argument 節點；執行時把原始輸入
  *       切分後委派給同一套相容層（單一真相來源：權限、冷卻、錯誤全走
  *       {@link CommandRegistry#dispatch}）</li>
  * </ul>

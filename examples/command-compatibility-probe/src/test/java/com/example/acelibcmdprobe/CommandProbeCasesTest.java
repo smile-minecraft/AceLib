@@ -88,17 +88,31 @@ class CommandProbeCasesTest {
     }
 
     @Test
-    @DisplayName("補全案例涵蓋基岩可見與不可見兩類")
-    void completeCasesCoverBothBedrockVisibilityClasses() {
+    @DisplayName("補全案例基岩期望與實測一致（建議列不顯示）")
+    void completeCasesMatchBedrockReality() {
         List<ProbeCase> completeCases = CommandProbeCases.all().stream()
             .filter(c -> CommandProbeCases.GROUP_COMPLETE.equals(c.group()))
             .toList();
+        // literal 分支（complete-enum／complete-fixed）與玩家引數：
+        // 2026-10-08 真人基岩實測建議列未顯示，不得再寫「應可見」。
         assertTrue(completeCases.stream()
-                .anyMatch(c -> c.expectation().contains("基岩版應可見")),
-            "缺少基岩可見（固定選項 literal）的補全案例");
+                .filter(c -> c.id().equals("complete-enum")
+                    || c.id().equals("complete-fixed")
+                    || c.id().equals("complete-player"))
+                .allMatch(c -> c.expectation().contains("實測建議列不顯示")),
+            "literal 分支與玩家引數的基岩期望必須記實測建議列不顯示");
+        // 其餘型別未逐項實測：記推論，不可寫成已實測。
         assertTrue(completeCases.stream()
-                .anyMatch(c -> c.expectation().contains("基岩版不可見")),
-            "缺少基岩不可見（伺服器建議）的補全案例");
+                .filter(c -> c.id().equals("complete-world")
+                    || c.id().equals("complete-material")
+                    || c.id().equals("complete-duration")
+                    || c.id().equals("complete-offline"))
+                .allMatch(c -> c.expectation().contains("推論無建議列")),
+            "未逐項實測的型別必須記推論無建議列");
+        // 全體不得再出現舊的錯誤期望。
+        assertTrue(completeCases.stream()
+                .noneMatch(c -> c.expectation().contains("應可見")),
+            "補全案例不得再出現「基岩版應可見」");
     }
 
     @Test

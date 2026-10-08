@@ -13,9 +13,10 @@ import java.util.Objects;
  * 列舉引數（package 內實作；經 {@link Arguments#enumArg} 建立）。
  *
  * <p>固定選項引數：在 Brigadier 樹中編譯為 <strong>literal 分支</strong>
- * （小寫常數名），是基岩版（Geyser）看得見補全的結構。傳統路徑解析
- * 大小寫不敏感；Brigadier 路徑由字面分支精確匹配（客戶端補全即小寫，
- * 見模組頁限制說明）。</p>
+ * （小寫常數名）；原本預期是基岩版（Geyser）看得見補全的結構，但
+ * 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現（見模組頁
+ * 補全支援矩陣）。傳統路徑解析大小寫不敏感；Brigadier 路徑由字面分支
+ * 精確匹配（見模組頁限制說明）。</p>
  *
  * @param <E> 列舉型別
  */

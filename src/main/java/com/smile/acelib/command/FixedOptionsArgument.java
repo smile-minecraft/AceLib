@@ -13,7 +13,9 @@ import java.util.Objects;
  * 固定字串選項引數（package 內實作；經 {@link Arguments#fixed} 建立）。
  *
  * <p>列舉之外的固定選項（例如開關、模式字串）：語意與 {@link EnumArgument}
- * 相同（literal 分支、基岩可見），回傳宣告形式的 canonical 字串。
+ * 相同（literal 分支；原本預期基岩可見，但 2026-10-08 真人基岩客戶端
+ * 實測顯示基岩端建議列並未出現，Geyser Current Limitations，Unfixable，
+ * 見模組頁補全支援矩陣），回傳宣告形式的 canonical 字串。
  * 解析大小寫不敏感。</p>
  */
 final class FixedOptionsArgument extends BaseArgument<String> {

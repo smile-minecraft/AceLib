@@ -121,21 +121,23 @@ public final class CommandProbeCases {
         add(cases, "err-whitespace", GROUP_ERROR, "parse-int 1 2",
             "額外 token → ACELIB-CMD-015（參數數量不符）");
 
-        // 補全觀察：Java 版由伺服器建議；基岩版僅固定選項可見。
+        // 補全觀察：Java 版由伺服器建議；基岩端建議列實測未顯示（literal 分支
+        // 與玩家引數皆然，Geyser Current Limitations，Unfixable），見
+        // docs/modules/command.md 補全支援矩陣。
         add(cases, "complete-enum", GROUP_COMPLETE, "parse-mode ",
-            "列舉選項（buy/sell）以 literal 分支結構呈現 — 基岩版應可見");
+            "列舉選項（buy/sell）以 literal 分支結構呈現 — 基岩版：實測建議列不顯示（Geyser 平台限制）");
         add(cases, "complete-fixed", GROUP_COMPLETE, "parse-fixed ",
-            "固定選項以 literal 分支呈現 — 基岩版應可見");
+            "固定選項以 literal 分支呈現 — 基岩版：實測建議列不顯示（Geyser 平台限制）");
         add(cases, "complete-player", GROUP_COMPLETE, "parse ",
-            "在線玩家名（伺服器建議；基岩版不可見）");
+            "在線玩家名（伺服器建議；基岩版：實測建議列不顯示，Geyser 平台限制）");
         add(cases, "complete-world", GROUP_COMPLETE, "parse-world ",
-            "已載入世界名（伺服器建議；基岩版不可見）");
+            "已載入世界名（伺服器建議；基岩版：推論無建議列，同 Geyser 平台限制，未逐項實測）");
         add(cases, "complete-material", GROUP_COMPLETE, "parse-material ",
-            "材質名（伺服器建議；基岩版不可見）");
+            "材質名（伺服器建議；基岩版：推論無建議列，同 Geyser 平台限制，未逐項實測）");
         add(cases, "complete-duration", GROUP_COMPLETE, "parse-duration ",
-            "時間語法範例（伺服器建議；基岩版不可見）");
+            "時間語法範例（伺服器建議；基岩版：推論無建議列，同 Geyser 平台限制，未逐項實測）");
         add(cases, "complete-offline", GROUP_COMPLETE, "parse-offline ",
-            "best-effort 只列在線玩家（離線名單無法低成本枚舉）");
+            "best-effort 只列在線玩家（離線名單無法低成本枚舉；基岩版：推論無建議列，同 Geyser 平台限制，未逐項實測）");
         add(cases, "complete-int-none", GROUP_COMPLETE, "parse-int ",
             "整數刻意不給建議；範圍由客戶端驗證");
 

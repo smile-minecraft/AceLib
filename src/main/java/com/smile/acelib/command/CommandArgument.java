@@ -23,8 +23,10 @@ import java.util.Objects;
  *
  * <h2>固定選項</h2>
  * <p>{@link #isFixedOptions()} 為 true 的引數（列舉、固定字串）在 Brigadier
- * 樹中編譯為 <strong>literal 分支</strong>而非 argument 節點 — 這是基岩版
- * （Geyser）看得見補全的唯一結構；伺服器即時算出的建議送不到基岩版。
+ * 樹中編譯為 <strong>literal 分支</strong>而非 argument 節點 — 原本預期這是
+ * 基岩版（Geyser）看得見補全的結構，但 2026-10-08 真人基岩客戶端實測顯示
+ * 基岩端建議列並未出現（Geyser Current Limitations，Unfixable；見模組頁
+ * 補全支援矩陣）；伺服器即時算出的建議同樣送不到基岩版。
  * 此類引數的 {@link #resolve(CommandContext)} 不會在正常流程被呼叫。</p>
  *
  * <h2>單 token 不變條件</h2>
@@ -67,7 +69,8 @@ public interface CommandArgument<T> {
     }
 
     /**
-     * 伺服器端補全（Java 版客戶端；基岩版僅固定選項可見）。
+     * 伺服器端補全（Java 版客戶端；基岩版實測建議列未顯示，
+     * 見模組頁補全支援矩陣）。
      *
      * @param prefix 已輸入前綴（大小寫不敏感比對）；不可為 null
      * @return 符合前綴的候選（不可變，可能為空）；永不為 null
@@ -107,6 +110,9 @@ public interface CommandArgument<T> {
     /**
      * 該引數在基岩版是否有可用補全：預設等於 {@link #isFixedOptions()}。
      * 開放式引數的伺服器端建議送不到基岩版（Geyser 限制，見模組頁矩陣）。
+     * 實測備註（不改變預設值與行為）：2026-10-08 真人基岩客戶端實測顯示
+     * 基岩端建議列未顯示（literal 分支與玩家引數皆然）；此預設為結構性
+     * 預設，語意變更留待維護者裁定。
      */
     default boolean bedrockVisible() {
         return isFixedOptions();

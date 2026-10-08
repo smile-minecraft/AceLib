@@ -17,7 +17,9 @@ import org.bukkit.World;
  *       （含溢位檢查 → {@code ACELIB-CMD-015}）</li>
  *   <li>{@link #duration} — 時間長度（vanilla time 語法，ticks；溢位檢查）</li>
  *   <li>{@link #world} — 已載入世界（不存在 → {@code ACELIB-CMD-015}）</li>
- *   <li>{@link #enumArg}／{@link #fixed} — 固定選項（literal 分支，基岩可見）</li>
+ *   <li>{@link #enumArg}／{@link #fixed} — 固定選項（literal 分支；原本預期基岩可見，
+ *       但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現，
+ *       Geyser Current Limitations，Unfixable，見模組頁補全支援矩陣）</li>
  *   <li>{@link #material} — 材質（不存在 → {@code ACELIB-CMD-015}）</li>
  * </ul>
  *
@@ -89,7 +91,9 @@ public final class Arguments {
     }
 
     /**
-     * 列舉引數（固定選項，基岩可見 literal 分支）。
+     * 列舉引數（固定選項 literal 分支；原本預期基岩可見，但 2026-10-08
+     * 真人基岩客戶端實測顯示基岩端建議列並未出現，Geyser Current Limitations，
+     * Unfixable，見模組頁補全支援矩陣）。
      *
      * @param name      引數名；不可為 null 或空字串
      * @param enumClass 列舉類別；不可為 null（須有常數）
@@ -102,7 +106,9 @@ public final class Arguments {
     }
 
     /**
-     * 固定字串選項引數（基岩可見 literal 分支，回傳宣告形式）。
+     * 固定字串選項引數（literal 分支，回傳宣告形式；原本預期基岩可見，
+     * 但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現，
+     * Geyser Current Limitations，Unfixable，見模組頁補全支援矩陣）。
      *
      * @param name    引數名；不可為 null 或空字串
      * @param options 選項（至少一個，不可含 null／空字串）；不可為 null

@@ -76,11 +76,11 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 以 Paper Brigadier 註冊取代 `plugin.yml` 的指令宣告需求：`BrigadierRegistrar` 在 `onEnable` 期間經 `LifecycleEvents.COMMANDS` 掛載註冊器，平台在命令同步時機執行實際註冊。`plugin.yml` 不再需要 `commands` 區塊（AceLib 自身的 `/acelib` 已遷移，`acelib.admin` 權限節點保留）。
 - 型別化組裝入口：`TypedCommand`／`TypedSubCommand` builder 與 `Arguments` 引數工廠。同一個 builder 產出兩種註冊形式——`SubCommandSpec` 相容層保留原樣，既有以 `plugin.yml` 宣告＋bridge attach 的插件不受影響。
 - 八種型別化引數各有解析、驗證與自動補全：玩家、離線玩家、有界整數、有界小數、時間長度、世界、列舉、固定字串選項、材質。解析失敗一律以 `ACELIB-CMD-015`（玩家離線沿用既有的 `ACELIB-CMD-007`）回覆，不 wrap、不截斷、不靜默降級。
-- 固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支，是基岩版（Geyser）唯一看得見補全的結構；開放式引數送 vanilla 引數型別給客戶端先行驗證。時間長度語法與 vanilla time 一致（`100`／`1t`／`1.5s`／`1d`，回傳 ticks），兩端一致拒絕 `h`／`m` 單位以免出現「客戶端擋、伺服器放」的分歧。
+- 固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支；開放式引數送 vanilla 引數型別給客戶端先行驗證。原本預期 literal 分支是基岩版（Geyser）看得見補全的結構，但 2026-10-08 真人基岩客戶端實測（Folia 26.2-7＋Geyser 2.11.3-b1247）顯示基岩端建議列不顯示——literal 分支（`parse-mode`、`parse-fixed`、`trade`）與玩家引數（`parse`）皆然。歸因是 Geyser 官方 Current Limitations 的 Unfixable 條目（Bedrock 不送聊天／指令 UI 輸入封包）；執行與回應不受影響（`/cprobe parse-mode buy` 成功並回 `thread=Folia Region Scheduler Thread #0`）。樣本範圍：四個子指令解析正確（參數數 1／1／2／1），見模組頁補全支援矩陣。時間長度語法與 vanilla time 一致（`100`／`1t`／`1.5s`／`1d`，回傳 ticks），兩端一致拒絕 `h`／`m` 單位以免出現「客戶端擋、伺服器放」的分歧。
 - 錯誤在地化：`CommandMessages` 契約搭配 `DefaultCommandMessages`（內建英文）、`MessageServiceCommandMessages`（經 message 模組查 key）與 `LocalizingReplySink`（presentation 層裝飾器，缺 key 退回例外原文）。說明與補全依權限過濾，冷卻沿用既有 `CooldownTracker`，未重造冷卻。
 - 生命週期：註冊只在 `onEnable` 呼叫一次，reload 不重建、不重複註冊；同名重複註冊原子拒絕且不殘留半註冊；`shutdown()` 與 plugin disable 後殘留 dispatch 一律回 `ACELIB-CMD-009`。平台未提供取消單一指令註冊的 API，因此 `unregister` 只清本地簿記與內部 registry，平台側節點等 plugin disable 才移除（已於模組頁與 Javadoc 標明）。
 - 實機驗證工具：新增 `examples/command-compatibility-probe`，涵蓋 42 個可重跑案例（解析／錯誤／補全／生命週期）與執行緒紀錄，供 Paper／Folia 實測。
-- **未實測項目**：各引數的基岩補全尚未由真人基岩客戶端逐項實測。模組頁的基岩版補全矩陣目前是依 Geyser 只解析固定選項結構的行為推導，實測結果待補；Java 機器人的 tab 請求走 Java 協議，不能替代基岩客戶端的觀察。
+- **基岩補全實測結論**：2026-10-08 真人基岩客戶端實測完成（Folia 26.2-7＋Geyser 2.11.3-b1247，玩家 `.linoQsmile`）：基岩端建議列不顯示（literal 分支與玩家引數皆然），執行與回應不受影響。模組頁的基岩版補全矩陣已改記實測結果；未逐項實測之型別（world／material／duration／offlinePlayer／intArg／doubleArg）標為推論自同一平台限制。Java 機器人的 tab 請求走 Java 協議，不能替代基岩客戶端的觀察。
 
 ### 本階段內容（逐玩家儲存與玩家資料模型）
 

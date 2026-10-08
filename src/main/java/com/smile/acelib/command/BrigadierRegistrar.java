@@ -18,7 +18,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  *       tab complete、冷卻沿用 {@link CooldownTracker}）</li>
  *   <li>Brigadier 根節點經平台生命週期註冊（不再需要 {@code plugin.yml}
  *       的 {@code commands} 宣告；固定選項以 literal 結構送給客戶端，
- *       基岩版（Geyser）看得見補全）</li>
+ *       但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現，
+ *       見模組頁補全支援矩陣）</li>
  * </ol>
  *
  * <h2>生命週期</h2>

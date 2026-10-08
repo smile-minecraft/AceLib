@@ -89,9 +89,9 @@ probe cases: 42
 
 | 輸入位置 | Java 版（伺服器建議） | 基岩版（Geyser） |
 | --- | --- | --- |
-| `/cprobe parse-mode ` | 列出 `buy`／`sell` | **應可見**（literal 分支） |
-| `/cprobe parse-fixed ` | 列出 `buy`／`sell` | **應可見**（literal 分支） |
-| `/cprobe-args trade ` | 列出 `buy`／`sell` | **應可見**（literal 分支） |
+| `/cprobe parse-mode ` | 列出 `buy`／`sell` | **實測未出現**（literal 分支，但基岩建議列未顯示） |
+| `/cprobe parse-fixed ` | 列出 `buy`／`sell` | **實測未出現**（literal 分支，但基岩建議列未顯示） |
+| `/cprobe-args trade ` | 列出 `buy`／`sell` | **實測未出現**（literal 分支，但基岩建議列未顯示） |
 | `/cprobe parse ` | 在線玩家名 | 不可見 |
 | `/cprobe parse-world ` | 已載入世界名 | 不可見 |
 | `/cprobe parse-material ` | 材質名 | 不可見 |
@@ -99,9 +99,9 @@ probe cases: 42
 | `/cprobe parse-offline ` | 只列在線玩家 | 不可見 |
 | `/cprobe parse-int ` | 無建議（範圍由客戶端驗證） | 不適用 |
 
-**限制**：Geyser 只解析編譯進指令結構的固定選項，伺服器即時算出的建議送不到基岩版。基岩補全必須由真人基岩客戶端觀察；Java 機器人的 tab 請求走 Java 協議，**不能**替代基岩客戶端的結果。
+**限制（2026-10-08 真人基岩客戶端實測，Folia 26.2-7＋Geyser 2.11.3-b1247）**：基岩端建議列不顯示——literal 分支（`parse-mode`、`parse-fixed`、`trade`）與玩家引數（`parse`）皆然；執行與回應不受影響（`/cprobe parse-mode buy` 成功）。歸因是 Geyser 官方 Current Limitations 的 Unfixable 條目（Bedrock 不送聊天／指令 UI 輸入封包），非本框架缺陷。伺服器即時算出的建議同樣送不到基岩版。基岩補全必須由真人基岩客戶端觀察；Java 機器人的 tab 請求走 Java 協議，**不能**替代基岩客戶端的結果。
 
-固定選項的大小寫：literal 分支以小寫常數名編譯，基岩補全顯示小寫；兩條執行路徑的 `parse` 都大小寫不敏感，因此兩種大小寫都可執行。
+固定選項的大小寫：literal 分支以小寫常數名編譯；本次真人基岩實測建議列未出現。兩條執行路徑的 `parse` 都大小寫不敏感，因此兩種大小寫都可執行。
 
 ### 四、生命週期殘留（需 `acelibcmdprobe.admin`，以 RCON／console 執行）
 

@@ -150,7 +150,9 @@ public final class TypedCommand {
      *
      * <p>根字面本身掛 {@code requires}（根權限）與 {@code executes}
      * （無子指令輸入時委派，傳統路徑回主 help）。固定選項子樹為
-     * literal 分支（基岩可見）；開放式引數為 argument 節點。</p>
+     * literal 分支（原本預期基岩可見，但 2026-10-08 真人基岩客戶端實測顯示
+     * 基岩端建議列並未出現，Geyser Current Limitations，Unfixable，
+     * 見模組頁補全支援矩陣）；開放式引數為 argument 節點。</p>
      *
      * @param factory  引數型別工廠；不可為 null
      * @param dispatch 執行委派；不可為 null

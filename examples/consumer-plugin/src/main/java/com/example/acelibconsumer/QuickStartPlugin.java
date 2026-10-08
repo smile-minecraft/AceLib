@@ -293,9 +293,11 @@ public class QuickStartPlugin extends JavaPlugin {
     /**
      * 型別化指令註冊示範：不需要 {@code plugin.yml} 的 {@code commands} 宣告。
      *
-     * <p>固定選項（{@code mode}）在 Brigadier 樹中編譯為 literal 分支，是基岩版
-     * 唯一看得見補全的結構；開放式引數則送 vanilla 型別給客戶端先行驗證。
-     * handler 以引數實例取值，不碰原始字串。</p>
+     * <p>固定選項（{@code mode}）在 Brigadier 樹中編譯為 literal 分支；
+     * 原本預期基岩可見，但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列
+     * 並未出現（Geyser Current Limitations，Unfixable），見
+     * {@code docs/modules/command.md} 補全支援矩陣；開放式引數則送 vanilla
+     * 型別給客戶端先行驗證。handler 以引數實例取值，不碰原始字串。</p>
      *
      * <p>註冊只在 {@code onEnable} 呼叫一次：平台在 plugin disable 時移除節點，
      * reload 不重建（handler 讀的狀態應自行以 supplier 取得最新）。</p>
