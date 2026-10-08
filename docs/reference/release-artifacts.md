@@ -74,13 +74,13 @@ https://github.com/smile-minecraft/AceLib/releases/download/v1.4.0/AceLib-1.4.0.
 shasum -a 256 AceLib-1.4.0.jar
 ```
 
-預期值為本地發布候選建置雜湊（`AceLib-1.4.0.jar` 的 SHA-256；GitHub Release workflow 會由 tag 重建，發布後下載兩個附件核對並在此補上公告值，若與本地不同以後者為準）：
+以下雜湊與 v1.4.0 GitHub Release 附件一致（2026-10-08 發布後下載比對），`AceLib-1.4.0.jar` 的 SHA-256：
 
 ```text
 80c5274b1d2ab1ed528f49b7878f58ad8dfb110492da59277b6aacc7b4e3185b
 ```
 
-同一 Release 另有 `AceLib-1.4.0-test-fixtures.jar` 附件（下游單元測試用，不放進 server），以下為本地發布候選建置雜湊，發布後同樣下載核對並補上公告值：
+同一 Release 另有 `AceLib-1.4.0-test-fixtures.jar` 附件（下游單元測試用，不放進 server），以下雜湊與 v1.4.0 GitHub Release 附件一致（2026-10-08 發布後下載比對）：
 
 ```text
 6c12c677c6beed17b4893050c42f547bfcf588496631673b52b557de3748a85f

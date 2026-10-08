@@ -75,7 +75,7 @@ ChunkLand 和 Ace-Economy 各寫了一份 GUI 假實作，另外還有排程、�
 測試套件提供這些假實作，給下游寫單元測試用。真實伺服器上的驗收由 Docker 管理的測試環境負責，不在測試套件的範圍。
 
 - [x] 確認 Gradle 的 test fixtures 產出的 jar 可以透過 JitPack 發布，下游能在測試時引用。行不通就回到[待決事項](#待決事項)重新決定發布方式。
-- [ ] 測試 jar 也附在 GitHub Release 上，發布 workflow 跟著調整。ChunkLand 是從 Release 下載 AceLib 的。
+- [x] 測試 jar 也附在 GitHub Release 上，發布 workflow 跟著調整。ChunkLand 是從 Release 下載 AceLib 的。
 - [x] 文件寫明下游的引用方式：在 AceLib 的座標後面加上 `test-fixtures` 後綴。Gradle 的 `testFixtures(...)` 寫法在 JitPack 上解析不到。
 - [x] 可控制的時鐘、排程器、實體退休事件。
 - [x] GUI 與表單的標準假實作，能模擬過時回應、重複回應、關閉失敗。
