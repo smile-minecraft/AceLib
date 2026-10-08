@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
+name: AceLibLifecycleProbe
+main: com.example.aceliblifecycleprobe.LifecycleProbePlugin
+version: 1.0.0-SNAPSHOT
+api-version: '26.1.2'
+folia-supported: true
+description: AceLib reload 與 lifecycle 重建的 Paper／Folia 實機探針
+authors:
+  - Smile
+load: POSTWORLD
+depend:
+  - AceLib
+commands:
+  lprobe:
+    description: 執行 AceLib reload 與 lifecycle 實機探針
+    usage: /lprobe <reload|status>
+    permission: aceliblifecycleprobe.use
+permissions:
+  aceliblifecycleprobe.use:
+    description: 使用 lifecycle 實機探針
+    default: op
