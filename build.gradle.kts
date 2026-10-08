@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "com.smile"
-version = "1.4.0-SNAPSHOT"
+version = "1.4.0"
 
 // Java 25 是 Paper 26.1+ 的最低需求；保留 toolchain 確保跨開發者一致。
 java {

@@ -13,7 +13,7 @@
 
 ```text
 === AceLib Diagnostics Report ===
-Version: 1.3.1
+Version: 1.4.0
 Platform: Paper
 Ready: true
 

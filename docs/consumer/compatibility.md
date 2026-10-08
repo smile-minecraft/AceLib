@@ -3,7 +3,7 @@
 > 適合在建置或升級前確認 Java、Paper／Folia 與 Gradle 基線的開發者與管理員。
 
 
-AceLib 1.4.0-SNAPSHOT（開發中、尚未發布）沿用 Java 25，Paper 與 Folia 26.1.2、26.2 皆為正式支援（SUPPORTED）；未列出的版本皆為 UNVERIFIED（尚未驗證）。詳細的版本相容矩陣（JSON 格式）見 [runtime-compatibility-matrix.json](../reference/runtime-compatibility-matrix.json)。其中 **SUPPORTED** 為正式支援、**UNVERIFIED** 為尚未驗證。
+AceLib 1.4.0 沿用 Java 25，Paper 與 Folia 26.1.2、26.2 皆為正式支援（SUPPORTED）；未列出的版本皆為 UNVERIFIED（尚未驗證）。詳細的版本相容矩陣（JSON 格式）見 [runtime-compatibility-matrix.json](../reference/runtime-compatibility-matrix.json)。其中 **SUPPORTED** 為正式支援、**UNVERIFIED** 為尚未驗證。
 
 | 項目 | 版本或設定 | 用途 |
 | --- | --- | --- |

@@ -35,14 +35,14 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.3.1")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.4.0")
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }
 ```
 
-AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.3.1.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.3.1` 對應 `v1.3.1` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.4.0-SNAPSHOT，開發中、尚未發布；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0-SNAPSHOT`）。
+AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1.4.0.jar` 提供。JitPack 座標 `com.github.smile-minecraft:AceLib:v1.4.0` 對應 `v1.4.0` tag，提供編譯用 API（此 checkout 的原始碼版本為 1.4.0；在本機驗證請用 `./gradlew publishToMavenLocal` 搭配 `com.smile:acelib:1.4.0`）。
 
-若 Gradle 找不到 AceLib，先確認 repository URL 是 `https://jitpack.io`，座標的 group 是 `com.github.smile-minecraft`，版本包含 `v`：`v1.3.1`。
+若 Gradle 找不到 AceLib，先確認 repository URL 是 `https://jitpack.io`，座標的 group 是 `com.github.smile-minecraft`，版本包含 `v`：`v1.4.0`。
 
 ## 1b. 在測試中使用測試輔助
 
@@ -50,15 +50,15 @@ AceLib 使用 `compileOnly`，因為執行時會由 server 的 `plugins/AceLib-1
 
 ```kotlin
 dependencies {
-    compileOnly("com.github.smile-minecraft:AceLib:v1.3.1")
-    testImplementation("com.github.smile-minecraft:AceLib:v1.3.1")
-    testImplementation("com.github.smile-minecraft:AceLib:9ac06a16d0:test-fixtures")
+    compileOnly("com.github.smile-minecraft:AceLib:v1.4.0")
+    testImplementation("com.github.smile-minecraft:AceLib:v1.4.0")
+    testImplementation("com.github.smile-minecraft:AceLib:v1.4.0:test-fixtures")
 }
 ```
 
 後綴座標只提供 test-fixtures 單一檔案，main API 仍由 `compileOnly` 提供（測試以 `testImplementation` 同時取得 main 與 fixtures）。
 
-注意版本一致：`9ac06a16d0` 只是用來證明後綴寫法解析得到的已驗證座標，它的 jar 是可行性實驗產物（僅一個 throwaway 類別）；完整測試輔助要等 1.4.0 正式發布，屆時 main 與 fixtures 取同一版本（`v1.4.0`），不要長期混用不同版本。完整座標形式、失敗模擬對照與本機驗證方式請看[如何取得 AceLib](../reference/release-artifacts.md)。
+注意版本一致：main 與 fixtures 取同一版本（`v1.4.0`），不要長期混用不同版本。完整座標形式、失敗模擬對照與本機驗證方式請看[如何取得 AceLib](../reference/release-artifacts.md)。
 
 ## 2. 宣告 server dependency
 
@@ -119,13 +119,13 @@ public final class MyPlugin extends JavaPlugin {
 
 ## 常見失敗
 
-### `Could not find com.github.smile-minecraft:AceLib:v1.3.1`
+### `Could not find com.github.smile-minecraft:AceLib:v1.4.0`
 
-檢查是否加入 JitPack、大小寫是否為 `AceLib`，以及版本前面的 `v` 是否保留。不要改用 `com.smile:acelib:1.3.1`；那是 repository 貢獻者在本機執行 `publishToMavenLocal` 後才有的座標。
+檢查是否加入 JitPack、大小寫是否為 `AceLib`，以及版本前面的 `v` 是否保留。不要改用 `com.smile:acelib:1.4.0`；那是 repository 貢獻者在本機執行 `publishToMavenLocal` 後才有的座標。
 
 ### Server 顯示 missing dependency
 
-你的 plugin JAR 已放進 `plugins/`，但 AceLib runtime JAR 不在。管理員可依[部署指南](../operator/README.md)從原始碼建立 `build/libs/AceLib-1.3.1.jar`。
+你的 plugin JAR 已放進 `plugins/`，但 AceLib runtime JAR 不在。管理員可依[部署指南](../operator/README.md)從原始碼建立 `build/libs/AceLib-1.4.0.jar`。
 
 ### Provider 是 `null`
 
@@ -148,7 +148,7 @@ API 物件存在，但服務目前不可用。停止使用 AceLib 服務，改�
 ./gradlew -p examples/consumer-plugin build --no-daemon --console=plain
 ```
 
-該範例使用 `mavenLocal()` 與 `com.smile:acelib:1.4.0-SNAPSHOT`（含 `com.smile:acelib:1.4.0-SNAPSHOT:test-fixtures` 測試輔助），只用於驗證目前 checkout 的程式碼。一般 plugin 專案請使用本頁前面的 JitPack 座標。
+該範例使用 `mavenLocal()` 與 `com.smile:acelib:1.4.0`（含 `com.smile:acelib:1.4.0:test-fixtures` 測試輔助），只用於驗證目前 checkout 的程式碼。一般 plugin 專案請使用本頁前面的 JitPack 座標。
 
 ## 相關頁面
 

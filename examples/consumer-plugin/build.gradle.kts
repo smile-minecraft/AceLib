@@ -3,10 +3,10 @@
 //
 // 注意：本 fixture 是「編譯驗證」用途，不發布、不宣稱外部可用。
 // AceLib 的 GitHub repository 已公開。本 fixture 使用「本地 mavenLocal artifact」解析
-// （com.smile:acelib:1.4.0-SNAPSHOT），因為它是貢獻者本地開發用途；公開安裝座標為
-// JitPack com.github.smile-minecraft:AceLib:v1.3.1（對應 v1.3.1 tag）。
+// （com.smile:acelib:1.4.0），因為它是貢獻者本地開發用途；公開安裝座標為
+// JitPack com.github.smile-minecraft:AceLib:v1.4.0（對應 v1.4.0 tag）。
 // 說明：本 fixture 是編譯驗證用途，不發布、不宣稱外部可用；JitPack 是否提供編譯用 API
-// v1.3.1 tag 於 GitHub Release 建立時同步建立，由 JitPack 建置提供。
+// v1.4.0 tag 於 GitHub Release 建立時同步建立，由 JitPack 建置提供。
 //   1. 先在 AceLib 根目錄執行 `./gradlew publishToMavenLocal`
 //   2. 再執行 `./gradlew -p examples/consumer-plugin build`
 plugins {
@@ -29,14 +29,14 @@ repositories {
 }
 
 dependencies {
-    // AceLib 1.4.0-SNAPSHOT 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0-SNAPSHOT，僅供貢獻者本地開發，
-    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.3.1（對應 v1.3.1 tag）。
-    compileOnly("com.smile:acelib:1.4.0-SNAPSHOT")
+    // AceLib 1.4.0 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0，僅供貢獻者本地開發，
+    // 不代表 Maven Central）；公開安裝座標為 JitPack com.github.smile-minecraft:AceLib:v1.4.0（對應 v1.4.0 tag）。
+    compileOnly("com.smile:acelib:1.4.0")
     // AceLib 測試輔助（test-fixtures jar）：classifier 座標只提供該單一檔案，
     // main API 仍由上面的 compileOnly 提供；兩者缺一不可。compileOnly 不進測試
     // 路徑，測試以 testImplementation 同時取得 main（編譯＋運行）與 fixtures。
-    testImplementation("com.smile:acelib:1.4.0-SNAPSHOT")
-    testImplementation("com.smile:acelib:1.4.0-SNAPSHOT:test-fixtures")
+    testImplementation("com.smile:acelib:1.4.0")
+    testImplementation("com.smile:acelib:1.4.0:test-fixtures")
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
