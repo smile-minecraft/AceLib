@@ -63,7 +63,7 @@ v1.4.0 起 `BrigadierRegistrar` 是給下游 plugin 的正式組裝入口（Supp
 - `TypedSubCommand.toSubCommandSpec()` — `SubCommandSpec` 相容層，走既有的傳統 dispatch 流程。
 - `BrigadierRegistrar.register(...)` — 同時寫入內部 `CommandRegistry` 與 Brigadier 節點。
 
-固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支而非 argument 節點 — 原本預期這是基岩版看得見的補全結構，但真人基岩客戶端實測顯示建議列並未出現（見[補全支援矩陣](#補全支援矩陣)）。開放式引數（玩家、世界、材質、數值、時間）則是 argument 節點，送給客戶端的是 vanilla 引數型別，範圍由客戶端先行驗證。
+固定選項（列舉、固定字串）在 Brigadier 樹中編譯為 literal 分支而非 argument 節點 — 原本預期這是基岩版看得見的補全結構，但真人基岩客戶端實測顯示建議列並未出現（見[補全支援矩陣](#補全支援矩陣)）。開放式引數（玩家、世界、材質、數值、時間）則是 argument 節點，送給客戶端的是 vanilla 引數型別，範圍由客戶端先行驗證 — 唯一的例外是 `bigDecimal`，它送的是字串單詞節點（合法性完全由伺服器端判定，見下）。
 
 ```java
 CommandArgument<Material> itemArg = Arguments.material("item");
@@ -130,7 +130,7 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 
 **單 token 不變條件**：所有開放式引數拒絕空白、空字串與含空白字元的輸入。這不是形式限制 — Brigadier 執行委派依原始輸入的空白切分重建 args，含空白的 token 會破壞切分與解析的一致性。固定選項的字面值本身也不含空白。
 
-**精確數值語法**：`bigDecimal(name, min, max, maxScale)` 全程以 `BigDecimal` 解析，不經 double 中轉 — `0.10` 與 `0.1` 的 scale 差保留，`0.1 + 0.2` 不受 double 誤差影響。範圍端點包含；小數位上限依**輸入的 scale** 檢查，不自動四捨五入（`maxScale=2` 時 `1.234` 被拒；`maxScale=0` 時連 `10.0` 都被拒，因為輸入 scale 為 1；尾隨零計入 scale）。科學記號（`1E3` 這類寫法）一律拒絕，請改寫為一般十進位。注意客戶端看到的是 vanilla double 型別（僅為範圍提示，會放行科學記號），伺服器端解析一律以 `BigDecimal` 重驗並擋下。本引數不承擔幣別與金額政策：格式化、負號政策、千分位都是下游的責任。
+**精確數值語法**：`bigDecimal(name, min, max, maxScale)` 全程以 `BigDecimal` 解析，不經 double 中轉 — `0.10` 與 `0.1` 的 scale 差保留，`0.1 + 0.2` 不受 double 誤差影響。範圍端點包含；小數位上限依**輸入的 scale** 檢查，不自動四捨五入（`maxScale=2` 時 `1.234` 被拒；`maxScale=0` 時連 `10.0` 都被拒，因為輸入 scale 為 1；尾隨零計入 scale）。科學記號（`1E3` 這類寫法）一律拒絕，請改寫為一般十進位；`+.5`、`0001.20` 這類解析器接受的寫法兩條路徑都成功。Brigadier 樹送給客戶端的是字串單詞（`stringWord`）節點，只承接單 token、不做數值驗證：語法錯、超範圍、超小數位、科學記號四類非法值在兩條路徑都回 `ACELIB-CMD-015`，訊息來自指定的訊息表。取捨是客戶端沒有 vanilla double 的數值提示（範圍提示與即時語法檢查皆無），換來兩條路徑完全一致的伺服器端錯誤；需要客戶端數值提示時請改用 `doubleArg`。上述兩路徑一致以 Brigadier `word()` 字元集（`[0-9A-Za-z_-.+]`）內的輸入為前提：字元集外的輸入（例如含逗號的 `1,000`）在 Brigadier 路徑仍會被平台提前拒絕、拿不到 `ACELIB-CMD-015`，此時請改用不帶分隔的寫法或走傳統路徑。本引數不承擔幣別與金額政策：格式化、負號政策、千分位都是下游的責任。
 
 **時間長度語法**：整數或小數＋可選單位，與 vanilla time 一致 — `100`（ticks）、`1t`、`1.5s`（30 ticks）、`1d`（24000 ticks）。回傳 ticks。`h`／`m` 單位兩端都不接受，因為客戶端的 vanilla time 語法同樣拒絕；只在伺服器端放行會造成「客戶端擋、伺服器放」的分歧。計算全程以 `long` 精確運算，不走 double（避免大數精度遺失），溢位拋 `ACELIB-CMD-015`。
 
@@ -185,7 +185,7 @@ CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>
 | `world` | 可用（列出已載入世界） | 推論：無建議列（未逐項實測） | 推論自同一平台限制（基岩 UI 無法按型別區分），見下段樣本說明。 |
 | `material` | 可用（列出材質名） | 推論：無建議列（未逐項實測） | 同上。 |
 | `intArg` / `doubleArg` | 無建議（範圍由客戶端驗證） | 推論：無建議列（未逐項實測） | 該型別本就不列候選；同一平台限制下基岩同樣無建議列。 |
-| `bigDecimal` | 無建議（範圍由客戶端 double 提示先驗，伺服器端以 `BigDecimal` 重驗） | 推論：無建議列（未逐項實測） | 同上；科學記號在客戶端放行、伺服器端拒絕。 |
+| `bigDecimal` | 無建議（Brigadier 節點為字串單詞，無客戶端數值提示；合法性完全由伺服器端 `BigDecimal` 解析器決定，兩條路徑錯誤一致） | 推論：無建議列（未逐項實測） | 同上。 |
 | `duration` | 建議語法範例（`1s`、`1d`…） | 推論：無建議列（未逐項實測） | 範例僅供 Java 版參考；同一平台限制一體適用。 |
 | `offlinePlayer` | best-effort（只列在線玩家） | 推論：無建議列（未逐項實測） | 離線名單無法低成本枚舉；同一平台限制下基岩同樣無建議列。 |
 

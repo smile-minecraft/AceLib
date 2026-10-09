@@ -2,11 +2,7 @@ package com.smile.acelib.command;
 
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.context.ParsedCommandNode;
-import com.mojang.brigadier.context.StringRange;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
-import com.mojang.brigadier.tree.ArgumentCommandNode;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,14 +27,23 @@ import java.util.regex.Pattern;
  *
  * <h2>科學記號一律拒絕</h2>
  * <p>{@code 1E3} 這類寫法兩條路徑皆拒絕（{@code ACELIB-CMD-015}），
- * 請改寫為一般十進位（{@code 1000}）；錯誤訊息明確說明此規則。
- * 注意客戶端 vanilla double 型別會放行科學記號（客戶端僅為提示），
- * 伺服器端解析一律擋下。</p>
+ * 請改寫為一般十進位（{@code 1000}）；錯誤訊息明確說明此規則。</p>
  *
- * <h2>兩條路徑一致</h2>
- * <p>Brigadier 路徑送給客戶端的是 vanilla {@code double(min, max)}
- * （客戶端先行驗證範圍）；{@code resolve} 從原始輸入重取 token 走同一個
- * 解析器（不經 double 中轉），接受的值與傳統路徑完全一致。</p>
+ * <h2>兩條路徑一致（stringWord 節點）</h2>
+ * <p>Brigadier 路徑送給客戶端的是字串單詞（{@code stringWord}）節點：
+ * 節點只承接單 token，不做任何數值驗證，合法性完全由伺服器端同一個
+ * 解析器判定。傳統路徑的執行委派把原始輸入切分後走同一個解析器；
+ * {@code resolve} 直接取該節點的字串值走同一解析器（不經 double 中轉），
+ * 接受的值與傳統路徑完全一致。</p>
+ *
+ * <p>取捨：字串節點沒有 vanilla double 的客戶端數值提示（範圍提示、
+ * 即時語法檢查皆無），換來兩條路徑完全一致的伺服器端錯誤
+ *（四類非法值皆為 {@code ACELIB-CMD-015}，訊息來自指定的訊息表）。
+ * 需要客戶端數值提示的下游請改用 {@code doubleArg}。</p>
+ *
+ * <p>上述一致性以 Brigadier {@code word()} 字元集（{@code [0-9A-Za-z_-.+]}）內的輸入為前提：字元集外的輸入
+ *（例如含逗號的 {@code 1,000}）在 Brigadier 路徑會被平台提前拒絕、
+ * 拿不到 {@code ACELIB-CMD-015}，此時請改用不帶分隔的寫法或走傳統路徑。</p>
  */
 final class BigDecimalArgument extends BaseArgument<BigDecimal> {
 
@@ -130,23 +135,14 @@ final class BigDecimalArgument extends BaseArgument<BigDecimal> {
     @Override
     public ArgumentType<?> brigadierType(ArgumentTypeFactory factory) {
         Objects.requireNonNull(factory, "factory");
-        return factory.boundedDouble(min.doubleValue(), max.doubleValue());
+        return factory.stringWord();
     }
 
     @Override
     public BigDecimal resolve(CommandContext<CommandSourceStack> ctx)
             throws CommandSyntaxException {
         Objects.requireNonNull(ctx, "ctx");
-        String input = ctx.getInput();
-        for (ParsedCommandNode<CommandSourceStack> parsed : ctx.getNodes()) {
-            if (parsed.getNode() instanceof ArgumentCommandNode<?, ?> node
-                && node.getName().equals(name)) {
-                StringRange range = parsed.getRange();
-                String token = range.get(input);
-                return parse(token, DefaultCommandMessages.instance());
-            }
-        }
-        throw new SimpleCommandExceptionType(
-            () -> "unknown argument: " + name).create();
+        String raw = ctx.getArgument(name, String.class);
+        return parse(raw, DefaultCommandMessages.instance());
     }
 }
