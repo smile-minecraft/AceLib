@@ -3,6 +3,7 @@ package com.smile.acelib.command;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -10,7 +11,7 @@ import org.bukkit.World;
 /**
  * 型別化引數工廠（下游組裝入口）。
  *
- * <p>十個引數型別各自具備解析、驗證與自動補全：</p>
+ * <p>十一個引數型別各自具備解析、驗證與自動補全：</p>
  * <ul>
  *   <li>{@link #player} — 在線玩家（離線／不存在 → {@code ACELIB-CMD-007}）</li>
  *   <li>{@link #offlinePlayer} — 離線玩家（從未上線 → {@code ACELIB-CMD-015}）</li>
@@ -25,6 +26,9 @@ import org.bukkit.World;
  *       但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現，
  *       Geyser Current Limitations，Unfixable，見模組頁補全支援矩陣）</li>
  *   <li>{@link #material} — 材質（不存在 → {@code ACELIB-CMD-015}）</li>
+ *   <li>{@link #dynamic} — 動態字串選項（供應函式每次解析與補全重新取值，
+ *       執行期增刪立刻反映；開放式引數節點，不編譯為 literal 分支
+ *       → {@code ACELIB-CMD-015}）</li>
  * </ul>
  *
  * @see CommandArgument
@@ -148,5 +152,26 @@ public final class Arguments {
      */
     public static CommandArgument<Material> material(String name) {
         return new MaterialArgument(name);
+    }
+
+    /**
+     * 動態字串選項引數（開放式引數節點，回傳宣告形式；原本預期基岩可見，
+     * 但 2026-10-08 真人基岩客戶端實測顯示基岩端建議列並未出現，
+     * Geyser Current Limitations，Unfixable，見模組頁補全支援矩陣）。
+     *
+     * <p>每次解析與補全都重新呼叫供應函式取得最新集合：執行期增刪選項
+     * 立刻反映，不需要重新註冊或重建指令樹。解析大小寫不敏感；值不在當前
+     * 集合時走 {@code ACELIB-CMD-015}；供應集合為空時任何值都非法；
+     * 供應函式拋錯時解析得到在地化錯誤（例外不洩漏給呼叫端）、補全回空；
+     * 清單中的 {@code null} 元素忽略。</p>
+     *
+     * @param name            引數名；不可為 null 或空字串
+     * @param optionsSupplier 選項供應函式；不可為 null（每次解析與補全各呼叫一次）
+     * @return 動態選項引數；永不為 null
+     * @since 1.5.0
+     */
+    public static CommandArgument<String> dynamic(String name,
+                                                 Supplier<List<String>> optionsSupplier) {
+        return new DynamicOptionsArgument(name, optionsSupplier);
     }
 }

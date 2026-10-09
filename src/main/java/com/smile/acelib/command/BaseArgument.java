@@ -10,7 +10,7 @@ import java.util.Objects;
  * 型別化引數共用基底（package 內）。
  *
  * <p>收斂名稱校驗、前綴過濾與 {@code ACELIB-CMD-015} 錯誤建構，避免
- * 十種引數各自重寫。</p>
+ * 十一種引數各自重寫。</p>
  */
 abstract class BaseArgument<T> implements CommandArgument<T> {
 
@@ -58,6 +58,21 @@ abstract class BaseArgument<T> implements CommandArgument<T> {
     /** 建構 {@code ACELIB-CMD-015} 例外（預設英文訊息）。 */
     protected CommandException invalid(String value, String reason) {
         return invalid(value, reason, null);
+    }
+
+    /**
+     * 建構 {@code ACELIB-CMD-015} 例外並附上內部原因（玩家訊息不變）。
+     *
+     * <p>原因只進原因鏈（管理員經堆疊追查），不進玩家可見訊息；不新增公開
+     * 簽章（{@link Throwable#initCause} 即可附著）。</p>
+     */
+    protected CommandException invalid(String value, String reason,
+                                       CommandMessages messages, Throwable cause) {
+        CommandException ex = invalid(value, reason, messages);
+        if (cause != null) {
+            ex.initCause(cause);
+        }
+        return ex;
     }
 
     /** 大小寫不敏感前綴過濾（保留候選原形，不可變回傳）。 */

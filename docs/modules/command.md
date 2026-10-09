@@ -162,6 +162,7 @@ TypedCommand shop = TypedCommand.builder("shop")
 | `enumArg(name, E.class)` | 列舉常數 | 不在常數內 → `ACELIB-CMD-015` |
 | `fixed(name, options...)` | canonical 字串 | 不在選項內 → `ACELIB-CMD-015` |
 | `material(name)` | `Material` | 未知材質 → `ACELIB-CMD-015` |
+| `dynamic(name, optionsSupplier)`（自 1.5.0 起） | canonical 字串 | 不在當前集合內 → `ACELIB-CMD-015`（見下） |
 
 **單 token 不變條件**：所有開放式引數拒絕空白、空字串與含空白字元的輸入。這不是形式限制 — Brigadier 執行委派依原始輸入的空白切分重建 args，含空白的 token 會破壞切分與解析的一致性。固定選項的字面值本身也不含空白。
 
@@ -180,6 +181,12 @@ TypedCommand shop = TypedCommand.builder("shop")
 Brigadier 樹送給客戶端的是 vanilla world 型別，它只接受**維度鍵**；而 `Bukkit.getWorld(String)` 認的是 **Bukkit 世界名**。主世界在這兩套命名下分別是 `overworld` 與 `world`，若只認後者，客戶端已驗證通過的輸入會在解析階段被拒。維度鍵為小寫規範形式，解析時也會以小寫重試，讓大小寫不敏感語意一致。
 
 補全仍回傳 Bukkit 世界名（`world.suggest("")` 列出已載入世界的名稱），因為那是下游 handler 拿到 `World` 後可直接使用的名稱。
+
+**動態選項**：`Arguments.dynamic(name, optionsSupplier)` 的選項集合由供應函式提供，每次解析與補全都重新呼叫，供應集合用可變 `List` 在執行期增刪時立刻反映，不需要重新註冊或重建指令樹。解析大小寫不敏感，回傳集合內的宣告形式；值不在當前集合時走 `CommandMessages` 在地化錯誤（`ACELIB-CMD-015`）；供應集合為空時任何值都非法；供應函式拋錯時解析得到在地化錯誤、補全回空（補全不中斷輸入）；清單中的 `null` 元素忽略。本引數是開放式引數節點（argument 節點，不是 literal 分支 — 平台沒有取消單一註冊的方法，固定選項分支做不到執行期增刪），因此基岩版補全與其他開放式引數相同（伺服器端建議送不到基岩版，見下表）。選項固定不變時請用 `fixed`（literal 分支）。
+
+供應函式必須回傳穩定快照（呼叫內自行複製後再回傳），不要回傳仍被別處修改中的集合：回傳的集合在複製期間被並發修改時視為供應失敗（解析得在地化 `ACELIB-CMD-015`、補全回空）。供應失敗可以追查：解析例外的玩家訊息不變，但原始例外附於原因鏈（`getCause()`）；補全路徑另以 `AceLib` logger 記 WARNING（含引數名、供應失敗事實與原始例外堆疊）。管理員看到 `ACELIB-CMD-015` 的 `options unavailable` 時，先查原因鏈或 console 的 WARNING，再找供應函式。
+
+值的字元有限制：Brigadier `stringWord` 節點只接受 `[0-9A-Za-z_-.+]`。中文、冒號這類字元集外的值在傳統路徑解析可成功（`parse` 本身不設字元集限制），但 Brigadier 路徑到不了 `resolve`（平台以標準字元集錯誤提前拒絕）；補全是伺服器端建議，不受此限制，仍可能列出字元集外的值。兩條路徑都要走的值請用字元集內的寫法。
 
 ## 自訂引數型別
 
@@ -223,6 +230,7 @@ CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>
 | `bigDecimal` | 無建議（Brigadier 節點為字串單詞，無客戶端數值提示；合法性完全由伺服器端 `BigDecimal` 解析器決定，兩條路徑錯誤一致） | 推論：無建議列（未逐項實測） | 同上。 |
 | `duration` | 建議語法範例（`1s`、`1d`…） | 推論：無建議列（未逐項實測） | 範例僅供 Java 版參考；同一平台限制一體適用。 |
 | `offlinePlayer` | best-effort（只列在線玩家） | 推論：無建議列（未逐項實測） | 離線名單無法低成本枚舉；同一平台限制下基岩同樣無建議列。 |
+| `dynamic` | 可用（每次補全重新呼叫供應函式） | 推論：無建議列（未逐項實測） | 開放式引數節點；伺服器建議送不到基岩，同上。 |
 
 **基岩補全實測結果**（2026-10-08，真人基岩客戶端 `.linoQsmile`，Folia 26.2-7＋Geyser 2.11.3-b1247；完整觀測見 `.ultrawork/evidence/acelib-v140/t07/BEDROCK-RESULT.md`）：literal 分支（`parse-mode`、`parse-fixed`、`trade`）與玩家引數（`parse`）送出後皆回 `missing arguments`（參數數 1／1／2／1，與預期結構相符），**建議列皆未出現**。歸因是 Geyser 官方 Current Limitations 的 Unfixable 條目：「Anything that relies on tab complete or typing in the chat UI … Bedrock sends no packet that indicates they are in this menu」（https://geysermc.org/wiki/geyser/current-limitations/）；基岩端僅內建指令有自動完成。非本框架缺陷。樣本涵蓋 literal 分支與玩家引數；該平台限制對所有引數型別一體適用（基岩 UI 無法按型別區分）。
 

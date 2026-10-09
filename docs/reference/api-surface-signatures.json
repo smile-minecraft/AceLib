@@ -76,6 +76,7 @@
       "method bigDecimal(java.lang.String,java.math.BigDecimal,java.math.BigDecimal,int) : com.smile.acelib.command.CommandArgument<java.math.BigDecimal>",
       "method doubleArg(java.lang.String,double,double) : com.smile.acelib.command.CommandArgument<java.lang.Double>",
       "method duration(java.lang.String) : com.smile.acelib.command.CommandArgument<java.lang.Long>",
+      "method dynamic(java.lang.String,java.util.function.Supplier<java.util.List<java.lang.String>>) : com.smile.acelib.command.CommandArgument<java.lang.String>",
       "method enumArg(java.lang.String,java.lang.Class<E>) : com.smile.acelib.command.CommandArgument<E>",
       "method fixed(java.lang.String,java.lang.String[]) : com.smile.acelib.command.CommandArgument<java.lang.String>",
       "method intArg(java.lang.String,int,int) : com.smile.acelib.command.CommandArgument<java.lang.Integer>",
