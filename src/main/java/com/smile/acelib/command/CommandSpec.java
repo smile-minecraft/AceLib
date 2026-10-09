@@ -42,9 +42,12 @@ public final class CommandSpec {
     private final String usage;
     private final String permission;
     private final Map<String, SubCommandSpec> subCommands;
+    /** key = 小寫子指令別名 → 主規格（dispatch／tab complete 用）。 */
+    private final Map<String, SubCommandSpec> subByAlias;
 
     private CommandSpec(Builder b) {
-        this.name = Objects.requireNonNull(b.name, "name").toLowerCase();
+        this.name = Objects.requireNonNull(b.name, "name")
+            .toLowerCase(java.util.Locale.ROOT);
         if (b.name.isEmpty()) {
             throw new IllegalArgumentException("command name cannot be empty");
         }
@@ -56,15 +59,27 @@ public final class CommandSpec {
         this.permission = b.permission;  // null allowed
         // 用 LinkedHashMap 保留插入順序，方便 help 顯示
         Map<String, SubCommandSpec> map = new LinkedHashMap<>();
+        Map<String, SubCommandSpec> aliasMap = new LinkedHashMap<>();
         for (SubCommandSpec sub : b.subCommands) {
             String subName = sub.name();
-            if (map.containsKey(subName)) {
+            if (map.containsKey(subName)
+                || aliasMap.containsKey(subName)) {
                 throw new IllegalArgumentException(
                     "duplicate subcommand name: " + subName);
             }
             map.put(subName, sub);
+            for (String alias : sub.aliases()) {
+                String key = alias.toLowerCase(java.util.Locale.ROOT);
+                if (map.containsKey(key) || aliasMap.containsKey(key)) {
+                    throw new IllegalArgumentException(
+                        "subcommand alias '" + alias
+                            + "' conflicts with existing subcommand or alias");
+                }
+                aliasMap.put(key, sub);
+            }
         }
         this.subCommands = Collections.unmodifiableMap(map);
+        this.subByAlias = Collections.unmodifiableMap(aliasMap);
     }
 
     /** 主指令名稱（小寫）。 */
@@ -86,14 +101,18 @@ public final class CommandSpec {
     public Map<String, SubCommandSpec> subCommands() { return subCommands; }
 
     /**
- 查找子指令（含大小寫不敏感比對）。
+ 查找子指令（含別名與大小寫不敏感比對）。別名視為主名。
  *
- * @param name 子指令名稱
+ * @param name 子指令名稱或別名
  * @return 對應 spec 或 null（不存在時）
  */
 public SubCommandSpec findSubCommand(String name) {
     if (name == null) return null;
-    return subCommands.get(name.toLowerCase());
+    SubCommandSpec direct = subCommands.get(name.toLowerCase(java.util.Locale.ROOT));
+    if (direct != null) {
+        return direct;
+    }
+    return subByAlias.get(name.toLowerCase(java.util.Locale.ROOT));
 }
 
     /**

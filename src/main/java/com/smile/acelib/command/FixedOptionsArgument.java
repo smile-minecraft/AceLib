@@ -62,10 +62,11 @@ final class FixedOptionsArgument extends BaseArgument<String> {
             }
         }
         CommandMessages effective = effective(messages);
+        String reason = "expected one of " + String.join("|", options);
         throw new CommandException(CommandErrorKind.INVALID_ARGUMENT,
-            effective.invalidArgument(name, raw,
-                "expected one of " + String.join("|", options)),
-            Map.of("arg", name, "value", raw, "options", String.join(",", options)));
+            effective.invalidArgument(name, raw, reason),
+            Map.of("arg", name, "value", raw, "reason", reason,
+                "options", String.join(",", options)));
     }
 
     @Override

@@ -36,6 +36,7 @@ import java.util.Objects;
 public final class SubCommandSpec {
 
     private final String name;
+    private final List<String> aliases;
     private final String description;
     private final String usage;
     private final String permission;
@@ -49,10 +50,12 @@ public final class SubCommandSpec {
     private final SubCommandCompleter completer;
 
     private SubCommandSpec(Builder b) {
-        this.name = Objects.requireNonNull(b.name, "name").toLowerCase();
+        this.name = Objects.requireNonNull(b.name, "name")
+            .toLowerCase(java.util.Locale.ROOT);
         if (b.name.isEmpty()) {
             throw new IllegalArgumentException("subcommand name cannot be empty");
         }
+        this.aliases = checkAliases(b.name, b.aliases);
         this.description = b.description == null ? "" : b.description;
         this.usage = b.usage == null ? "" : b.usage;
         this.permission = b.permission;  // null is allowed
@@ -79,8 +82,50 @@ public final class SubCommandSpec {
         this.completer = b.completer;  // null allowed
     }
 
+    /**
+     * 檢查子指令別名：不可為 null／空、不可與主名相同、彼此不可重複
+     * （一律小寫比較）。
+     *
+     * @param name    子指令主名（錯誤訊息用）
+     * @param aliases 呼叫端提供的別名；null 視為無別名
+     * @return 不可變別名清單（保留原形式）；永不為 null
+     * @throws IllegalArgumentException 別名非法或衝突並說明原因
+     */
+    static List<String> checkAliases(String name, List<String> aliases) {
+        if (aliases == null || aliases.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String primary = name.toLowerCase(java.util.Locale.ROOT);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String alias : aliases) {
+            if (alias == null || alias.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "subcommand alias cannot be null or empty: " + name);
+            }
+            String key = alias.toLowerCase(java.util.Locale.ROOT);
+            if (key.equals(primary)) {
+                throw new IllegalArgumentException(
+                    "subcommand alias '" + alias
+                        + "' conflicts with its own name: " + name);
+            }
+            if (!seen.add(key)) {
+                throw new IllegalArgumentException(
+                    "duplicate subcommand alias: " + alias);
+            }
+        }
+        return Collections.unmodifiableList(new ArrayList<>(aliases));
+    }
+
     /** 子指令名稱（小寫）。 */
     public String name() { return name; }
+
+    /**
+     * 子指令別名（以呼叫端提供的形式保留，不轉小寫；不可變）。
+     *
+     * <p>比較一律小寫；dispatch 與 tab complete 把別名視為主名。
+     * help 只列主名。</p>
+     */
+    public List<String> aliases() { return aliases; }
 
     /** 描述（給 help 用）。 */
     public String description() { return description; }
@@ -130,6 +175,7 @@ public final class SubCommandSpec {
      */
     public static final class Builder {
         private final String name;
+        private List<String> aliases;
         private String description;
         private String usage;
         private String permission;
@@ -144,6 +190,17 @@ public final class SubCommandSpec {
 
         private Builder(String name) {
             this.name = name;
+        }
+
+        /**
+         * 設定子指令別名（可選；保留原形式，比較一律小寫）。
+         *
+         * @param aliases 別名；不可含 null／空字串，不可與主名或彼此相同
+         *                （大小寫不敏感；違反時 {@link #build()} 拒絕）
+         */
+        public Builder aliases(String... aliases) {
+            this.aliases = aliases == null ? null : Arrays.asList(aliases);
+            return this;
         }
 
         public Builder description(String description) {

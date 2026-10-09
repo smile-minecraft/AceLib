@@ -516,7 +516,7 @@ class CommandRegistryTest {
                 "acelib", List.of("fail"));
             CommandException ex = replySink.lastError();
             assertNotNull(ex);
-            assertEquals(CommandErrorKind.ASYNC_EXECUTION_FAILED, ex.getKind());
+            assertEquals(CommandErrorKind.EXECUTION_FAILED, ex.getKind());
             assertEquals("ACELIB-CMD-008", ex.getCode());
             assertTrue(ex.getMessage().contains("db down"));
         }
@@ -585,7 +585,7 @@ class CommandRegistryTest {
                         } catch (RuntimeException ex) {
                             // 重新包裝為 CommandException
                             throw new CommandException(
-                                CommandErrorKind.ASYNC_EXECUTION_FAILED,
+                                CommandErrorKind.EXECUTION_FAILED,
                                 "data not loaded",
                                 Map.of("sub", "query", "cause", ex.getMessage()));
                         }
@@ -809,7 +809,7 @@ class CommandRegistryTest {
     }
 
     // ---------------------------------------------------------------------
-    // Test helpers
+    // 測試輔助方法
     // ---------------------------------------------------------------------
 
     private static void assertDoesNotThrow(Runnable r) {

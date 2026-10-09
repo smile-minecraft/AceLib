@@ -45,9 +45,23 @@ class CommandExceptionTest {
         assertEquals("ACELIB-CMD-005", CommandErrorKind.PLAYER_NOT_ALLOWED.defaultCode());
         assertEquals("ACELIB-CMD-006", CommandErrorKind.COOLDOWN_ACTIVE.defaultCode());
         assertEquals("ACELIB-CMD-007", CommandErrorKind.PLAYER_OFFLINE.defaultCode());
-        assertEquals("ACELIB-CMD-008", CommandErrorKind.ASYNC_EXECUTION_FAILED.defaultCode());
+        assertEquals("ACELIB-CMD-008", CommandErrorKind.EXECUTION_FAILED.defaultCode());
         assertEquals("ACELIB-CMD-009", CommandErrorKind.REGISTRY_DISABLED.defaultCode());
         assertEquals("ACELIB-CMD-010", CommandErrorKind.CUSTOM.defaultCode());
+    }
+
+    @Test
+    @DisplayName("EXECUTION_FAILED 沿用 ACELIB-CMD-008（舊名已移除）")
+    void executionFailed_keepsCmd008() {
+        assertEquals("ACELIB-CMD-008",
+            CommandErrorKind.EXECUTION_FAILED.defaultCode());
+        assertThrows(IllegalArgumentException.class,
+            () -> CommandErrorKind.valueOf("ASYNC_EXECUTION_FAILED"));
+        CommandMessages messages = DefaultCommandMessages.instance();
+        CommandException ex = new CommandException(
+            CommandErrorKind.EXECUTION_FAILED, "original",
+            java.util.Map.of("sub", "ban"));
+        assertEquals(messages.executionFailed("ban"), messages.localize(ex));
     }
 
     @Test

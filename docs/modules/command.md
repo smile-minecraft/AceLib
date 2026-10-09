@@ -96,6 +96,8 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 
 一個子指令名稱只能有一組引數：`TypedCommand` 與 `CommandSpec` 都在建構時拒絕重複的子指令名稱（`IllegalArgumentException: duplicate subcommand name`），同一個子指令名稱不會出現兩組不同的引數配置。需要多種參數形狀時，請拆成不同名稱的子指令。
 
+子指令也可以有別名（AceLib 1.5.0 起）：`TypedSubCommand.builder("ban").aliases("b")`。別名在兩條執行路徑都視為主名——傳統路徑經 `CommandSpec.findSubCommand` 解析為主規格，Brigadier 路徑掛上指向同一子樹的額外 literal 分支；handler 拿到的型別值、權限檢查與冷卻 key 都用主名，help 只列主名。比較一律小寫：別名與自身主名相同、同一子指令內重複、與其他子指令的主名或別名相同，都在建構時以 `IllegalArgumentException` 拒絕並說明。根指令的別名機制不變。
+
 ### 省略引數與重複引數
 
 尾段引數可以省略或重複，不用為每種參數形狀各寫一個子指令（AceLib 1.5.0 起提供）：
@@ -249,6 +251,21 @@ CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>
 - 自訂實作 — 未覆寫的方法回傳空字串即視為缺 key。
 
 型別化引數的解析錯誤在建構子以 `.messages(...)` 指定訊息表（預設英文），錯誤訊息由該表產生。
+
+不是所有錯誤訊息都能客製。Brigadier 路徑中，送給客戶端的 vanilla 引數型別會先被平台驗證：沒通過時平台直接回自己的客戶端訊息，根本到不了 AceLib 的解析器與訊息表；同一個輸入在傳統路徑則回上表的 `ACELIB-CMD-*` 在地化錯誤。平台先驗證、不能客製的情況如下（皆為 Brigadier 路徑）：
+
+| 引數 | 平台產生的錯誤 | 說明 |
+| --- | --- | --- |
+| `player` | 選擇器語法錯、選不到人 | vanilla 玩家選擇器先驗證；`resolve` 拿不到人時亦為平台標準錯誤 |
+| `offlinePlayer` | 同上（profile 選擇器） | 同上 |
+| `intArg`／`doubleArg` | 非數字、超出範圍 | vanilla bounded 型別由客戶端先行驗證 |
+| `duration` | 語法不符 | vanilla time 型別先行驗證 |
+| `world` | 未知的維度鍵 | vanilla world 型別只接受維度鍵 |
+| `material` | 未知的物品鍵 | vanilla item registry 先行驗證 |
+
+必要固定選項（`enumArg`／`fixed`）不在上表：literal 分支保留成功與補全，集合外的值由錯誤後備節點（單 token 字串、不提供補全；以 Paper `CustomArgumentType` 包裝、原生為字串單詞，平台註冊可轉換）承接，切分重建後走相容層解析，回在地化 `ACELIB-CMD-015`（訊息表可客製）；合法值仍走 literal 分支。省略的固定選項本就是字串節點，同樣走訊息表。
+
+`bigDecimal`、自訂引數、`dynamic` 與省略／重複位置皆為字串節點，沒有平台先驗證：字元集內的輸入在兩條路徑都走訊息表（`ACELIB-CMD-015`）；字元集外的輸入仍會被平台提前拒絕（見上）。
 
 **權限過濾**：說明與補全都依權限過濾。傳統路徑由 `CommandRegistry` 的既有流程處理（無權限時不列出該子指令）；Brigadier 路徑以 `requires` 過濾客戶端可見結構，並在 `suggests` 回呼再次確認權限。兩條路徑都只做可見性過濾，執行時的授權仍由 dispatcher 統一檢查。
 

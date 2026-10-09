@@ -46,10 +46,11 @@ final class IntArgument extends BaseArgument<Integer> {
         }
         if (value < min || value > max) {
             CommandMessages effective = effective(messages);
+            String reason = "out of range " + min + "-" + max;
             throw new CommandException(CommandErrorKind.INVALID_ARGUMENT,
-                effective.invalidArgument(name, raw,
-                    "out of range " + min + "-" + max),
-                Map.of("arg", name, "value", raw, "min", min, "max", max));
+                effective.invalidArgument(name, raw, reason),
+                Map.of("arg", name, "value", raw, "reason", reason,
+                    "min", min, "max", max));
         }
         return value;
     }

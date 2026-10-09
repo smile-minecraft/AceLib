@@ -169,10 +169,10 @@
       "method visibleTo(org.bukkit.permissions.Permissible) : boolean"
     ],
     "com.smile.acelib.command.CommandErrorKind": [
-      "field ASYNC_EXECUTION_FAILED : com.smile.acelib.command.CommandErrorKind",
       "field CONSOLE_NOT_ALLOWED : com.smile.acelib.command.CommandErrorKind",
       "field COOLDOWN_ACTIVE : com.smile.acelib.command.CommandErrorKind",
       "field CUSTOM : com.smile.acelib.command.CommandErrorKind",
+      "field EXECUTION_FAILED : com.smile.acelib.command.CommandErrorKind",
       "field INVALID_ARGUMENT : com.smile.acelib.command.CommandErrorKind",
       "field MISSING_ARGUMENTS : com.smile.acelib.command.CommandErrorKind",
       "field NO_PERMISSION : com.smile.acelib.command.CommandErrorKind",
@@ -323,6 +323,7 @@
       "method fixed(java.util.List<java.lang.String>) : com.smile.acelib.command.SubCommandCompleter"
     ],
     "com.smile.acelib.command.SubCommandSpec": [
+      "method aliases() : java.util.List<java.lang.String>",
       "method argNames() : java.util.List<java.lang.String>",
       "method builder(java.lang.String) : com.smile.acelib.command.SubCommandSpec$Builder",
       "method completer() : com.smile.acelib.command.SubCommandCompleter",
@@ -383,6 +384,7 @@
       "method execute(com.smile.acelib.command.TypedContext) : void"
     ],
     "com.smile.acelib.command.TypedSubCommand": [
+      "method aliases() : java.util.List<java.lang.String>",
       "method arguments() : java.util.List<com.smile.acelib.command.CommandArgument<?>>",
       "method buildBranch(com.smile.acelib.command.ArgumentTypeFactory,com.smile.acelib.command.BrigadierDispatch,java.lang.String) : com.mojang.brigadier.builder.LiteralArgumentBuilder<io.papermc.paper.command.brigadier.CommandSourceStack>",
       "method builder(java.lang.String) : com.smile.acelib.command.TypedSubCommand$Builder",

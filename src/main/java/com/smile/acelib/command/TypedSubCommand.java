@@ -1,21 +1,29 @@
 package com.smile.acelib.command;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.LiteralMessage;
+import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import org.bukkit.command.CommandSender;
@@ -64,6 +72,7 @@ import org.bukkit.entity.Player;
 public final class TypedSubCommand {
 
     private final String name;
+    private final List<String> aliases;
     private final String description;
     private final String usage;
     private final String permission;
@@ -86,6 +95,7 @@ public final class TypedSubCommand {
             throw new IllegalArgumentException("subcommand name cannot be empty");
         }
         this.name = builder.name.toLowerCase(java.util.Locale.ROOT);
+        this.aliases = SubCommandSpec.checkAliases(builder.name, builder.aliases);
         this.description = builder.description == null ? "" : builder.description;
         this.permission = builder.permission;
         this.playerOnly = builder.playerOnly;
@@ -221,6 +231,16 @@ public final class TypedSubCommand {
         return name;
     }
 
+    /**
+     * 子指令別名（以呼叫端提供的形式保留，不轉小寫；不可變）。
+     *
+     * <p>比較一律小寫；傳統路徑與 Brigadier 路徑都把別名視為主名
+     * （同一 handler、同一引數、同一冷卻 key）。help 只列主名。</p>
+     */
+    public List<String> aliases() {
+        return aliases;
+    }
+
     /** 描述。 */
     public String description() {
         return description;
@@ -266,6 +286,7 @@ public final class TypedSubCommand {
         SubCommandSpec.Builder builder = SubCommandSpec.builder(name)
             .description(description)
             .usage(usage)
+            .aliases(aliases.toArray(new String[0]))
             .cooldownMillis(cooldownMillis)
             .handler(ctx -> {
                 Map<CommandArgument<?>, Object> values = new IdentityHashMap<>();
@@ -373,7 +394,12 @@ public final class TypedSubCommand {
     /**
      * 建構 Brigadier 子樹（根指令組裝用）。
      *
-     * <p>固定選項展開為 literal 分支；開放式引數為 argument 節點
+     * <p>固定選項展開為 literal 分支（合法值走字面，成功與補全不變），
+     * 另掛一個錯誤後備節點（單 token 字串、不提供補全）：集合外的值由此
+     * 承接，切分重建後走相容層解析，回在地化 {@code ACELIB-CMD-015}
+     * 而非 Brigadier 通用錯誤。後備型別拒絕字面完全一致的輸入，
+     * 合法 literal 不被搶走；後續引數的展開與 literal 分支共用同一結構。
+     * 開放式引數為 argument 節點
      * （附伺服器端 suggests，依子指令權限過濾）。每一層（含子指令字面
      * 本身）皆掛 executes，把原始輸入切分後委派給
      * {@code dispatch}（單一真相來源；部分輸入同樣得到在地化的
@@ -401,8 +427,46 @@ public final class TypedSubCommand {
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(dispatch, "dispatch");
         Objects.requireNonNull(rootLabel, "rootLabel");
+        return buildBranchAs(name, factory, dispatch, rootLabel);
+    }
+
+    /**
+     * 主名＋別名的全部分支（根指令組裝 Brigadier 樹用；package 內可見）。
+     *
+     * <p>每個分支掛同一套引數子樹與執行委派（單一真相來源：執行時切分重建
+     * 後走相容層 dispatch，別名同樣解析為主規格）。字面一律小寫
+     * （主名本就小寫；別名折小寫與傳統路徑的大小寫不敏感一致）。</p>
+     *
+     * @param factory  引數型別工廠；不可為 null
+     * @param dispatch 執行委派；不可為 null
+     * @param rootLabel 根指令標籤（委派時回填）；不可為 null
+     * @return 主名分支在首、其後為別名分支的不可變清單；永不為 null
+     */
+    List<LiteralArgumentBuilder<CommandSourceStack>> buildBranches(
+            ArgumentTypeFactory factory,
+            BrigadierDispatch dispatch,
+            String rootLabel) {
+        Objects.requireNonNull(factory, "factory");
+        Objects.requireNonNull(dispatch, "dispatch");
+        Objects.requireNonNull(rootLabel, "rootLabel");
+        List<LiteralArgumentBuilder<CommandSourceStack>> branches =
+            new ArrayList<>(1 + aliases.size());
+        branches.add(buildBranchAs(name, factory, dispatch, rootLabel));
+        for (String alias : aliases) {
+            branches.add(buildBranchAs(
+                alias.toLowerCase(java.util.Locale.ROOT),
+                factory, dispatch, rootLabel));
+        }
+        return List.copyOf(branches);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> buildBranchAs(
+            String literalName,
+            ArgumentTypeFactory factory,
+            BrigadierDispatch dispatch,
+            String rootLabel) {
         LiteralArgumentBuilder<CommandSourceStack> literal =
-            Commands.<CommandSourceStack>literal(name).requires(requirement());
+            Commands.<CommandSourceStack>literal(literalName).requires(requirement());
         attachExecutes(literal, dispatch, rootLabel);
         appendArguments(literal, 0, factory, dispatch, rootLabel);
         return literal;
@@ -430,13 +494,22 @@ public final class TypedSubCommand {
                 LiteralArgumentBuilder<CommandSourceStack> branch =
                     Commands.<CommandSourceStack>literal(option);
                 attachExecutes(branch, dispatch, rootLabel);
-                if (lastFixedSlot && hasOptional()) {
-                    attachOverflow(branch, dispatch, rootLabel, arg);
-                } else {
-                    appendArguments(branch, index + 1, factory, dispatch, rootLabel);
-                }
+                continueAfterFixedSlot(branch, index, factory, dispatch,
+                    rootLabel, lastFixedSlot, arg);
                 parent.then(branch);
             }
+            // 錯誤後備節點：集合外的值由此承接，切分重建後走相容層解析，
+            // 產在地化 ACELIB-CMD-015。型別拒絕與選項字面完全一致的輸入
+            // （大小寫敏感，與 literal 比對語意相同），合法值永遠走上面的
+            // literal 分支；後備不提供補全，literal 的建議內容不變。
+            RequiredArgumentBuilder<CommandSourceStack, String> fallback =
+                Commands.argument(fallbackNodeName(arg),
+                    new FixedFallbackType(arg.fixedOptions()));
+            fallback.suggests((ctx, builder) -> builder.buildFuture());
+            attachExecutes(fallback, dispatch, rootLabel);
+            continueAfterFixedSlot(fallback, index, factory, dispatch,
+                rootLabel, lastFixedSlot, arg);
+            parent.then(fallback);
             return;
         }
         // 開放節點：必要引數用各自的 vanilla 型別（客戶端先行驗證，既有契約
@@ -460,6 +533,74 @@ public final class TypedSubCommand {
     /** 是否含省略引數。 */
     private boolean hasOptional() {
         return !defaults.isEmpty();
+    }
+
+    /**
+     * 固定選項層的後續展開（literal 分支與錯誤後備共用，結構一致）。
+     */
+    private void continueAfterFixedSlot(ArgumentBuilder<CommandSourceStack, ?> node,
+                                        int index,
+                                        ArgumentTypeFactory factory,
+                                        BrigadierDispatch dispatch,
+                                        String rootLabel,
+                                        boolean lastFixedSlot,
+                                        CommandArgument<?> arg) {
+        if (lastFixedSlot && hasOptional()) {
+            attachOverflow(node, dispatch, rootLabel, arg);
+        } else {
+            appendArguments(node, index + 1, factory, dispatch, rootLabel);
+        }
+    }
+
+    /**
+     * 錯誤後備節點名（避開已宣告引數名與選項字面，免得 Brigadier
+     * 同層子節點衝突）。
+     */
+    private String fallbackNodeName(CommandArgument<?> arg) {
+        String base = "_" + arg.name() + "_fallback";
+        String candidate = base;
+        while (hasArgumentNamed(candidate)
+            || arg.fixedOptions().contains(candidate)) {
+            candidate = "_" + candidate;
+        }
+        return candidate;
+    }
+
+    /**
+     * 固定選項的錯誤後備型別（單 token 字串；Paper 平台可註冊）。
+     *
+     * <p>實作 Paper {@code CustomArgumentType}，原生型別為
+     * {@code stringWord}：平台註冊轉換只接受此類包裝（普通
+     * {@code ArgumentType} 會被轉換拒絕），送客戶端的節點仍是字串單詞。
+     * 行為同 {@code stringWord}，唯獨拒絕與選項字面完全一致
+     * （大小寫敏感，與 literal 比對語意相同）的輸入：合法值永遠走
+     * literal 分支，後備只承接集合外的值。拒絕訊息不進使用者可見流程
+     * （後備成功即進 dispatch；字面一致即有 literal 承接），僅為結構正確。</p>
+     */
+    private static final class FixedFallbackType
+            implements CustomArgumentType<String, String> {
+        private final Set<String> options;
+
+        FixedFallbackType(Collection<String> options) {
+            this.options = Set.copyOf(
+                Objects.requireNonNull(options, "options"));
+        }
+
+        @Override
+        public String parse(StringReader reader) throws CommandSyntaxException {
+            String word = StringArgumentType.word().parse(reader);
+            if (options.contains(word)) {
+                throw new SimpleCommandExceptionType(
+                    new LiteralMessage(
+                        "use the literal branch: " + word)).create();
+            }
+            return word;
+        }
+
+        @Override
+        public ArgumentType<String> getNativeType() {
+            return StringArgumentType.word();
+        }
     }
 
     /**
@@ -673,6 +814,7 @@ public final class TypedSubCommand {
     /** 型別化子指令 builder。 */
     public static final class Builder {
         private final String name;
+        private List<String> aliases;
         private String description;
         private String usage;
         private String permission;
@@ -689,6 +831,23 @@ public final class TypedSubCommand {
 
         private Builder(String name) {
             this.name = name;
+        }
+
+        /**
+         * 設定子指令別名（可選；與 {@link TypedCommand.Builder#aliases} 同形）。
+         *
+         * <p>別名儲存保留原形式、比較一律小寫；別名與主名或彼此衝突
+         * （大小寫不敏感）在 {@link #build()} 以
+         * {@link IllegalArgumentException} 拒絕並說明。跨子指令的衝突
+         * （別名對其他子指令主名／別名）由 {@link TypedCommand} 建構時拒絕。</p>
+         *
+         * @param aliases 別名；不可含 null／空字串
+         * @return this
+         */
+        public Builder aliases(String... aliases) {
+            this.aliases = aliases == null ? null
+                : Collections.unmodifiableList(new ArrayList<>(Arrays.asList(aliases)));
+            return this;
         }
 
         public Builder description(String description) {

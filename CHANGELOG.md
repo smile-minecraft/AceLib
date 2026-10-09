@@ -17,6 +17,9 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 新增 BigDecimal 精確數值引數（Arguments.bigDecimal）：以 BigDecimal 解析不經 double 中轉，範圍端點包含，小數位上限依輸入 scale 檢查，科學記號一律拒絕；非法值回 ACELIB-CMD-015。
 - 型別化指令支援省略引數與重複引數：尾段引數可宣告預設值（省略時依執行者計算一次），最後一個引數可重複（零個起，handler 以不可變 List 取值）；傳統與 Brigadier 兩條路徑行為一致。
 - 新增 Arguments.dynamic(name, optionsSupplier)：由供應函式提供選項的動態選項引數，每次解析與補全重新取值，執行期增刪立刻反映；大小寫不敏感、回傳宣告形式，非法值走 ACELIB-CMD-015。
+- CommandErrorKind.ASYNC_EXECUTION_FAILED 改名為 EXECUTION_FAILED，錯誤碼 ACELIB-CMD-008 不變。舊名已移除，參照舊名的程式需改名後重新編譯。
+- 修正 CommandMessages.localize 缺少 INVALID_ARGUMENT 分支：型別化引數解析失敗（固定選項、列舉、數值、自訂、動態選項等）此前在 presentation 層落到預設分支回空字串、退回拋出點原文；現在依 kind + vars 以 invalidArgument(arg, value, reason) 重算，缺 key 才退回原文。
+- 子指令支援別名：TypedSubCommand.builder("ban").aliases("b")；別名在傳統路徑與 Brigadier 路徑都視為主名（同一 handler、同一冷卻 key；help 只列主名）。比較一律小寫；與主名或彼此衝突在建構時以 IllegalArgumentException 拒絕。
 
 ## [1.4.0] - 2026-10-08
 

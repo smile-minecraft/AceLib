@@ -1113,7 +1113,7 @@ class TypedOptionalRepeatableTest {
             assertTrue(!ran.get(), "契約違規不得進入 handler");
             CommandException err = sink.lastError();
             assertNotNull(err);
-            assertEquals(CommandErrorKind.ASYNC_EXECUTION_FAILED, err.getKind());
+            assertEquals(CommandErrorKind.EXECUTION_FAILED, err.getKind());
             assertEquals("ACELIB-CMD-008", err.getCode());
         }
     }

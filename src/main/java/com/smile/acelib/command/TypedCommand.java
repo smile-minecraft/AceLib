@@ -75,6 +75,14 @@ public final class TypedCommand {
                 throw new IllegalArgumentException(
                     "duplicate subcommand name: " + sub.name());
             }
+            for (String alias : sub.aliases()) {
+                String key = alias.toLowerCase(java.util.Locale.ROOT);
+                if (!seen.add(key)) {
+                    throw new IllegalArgumentException(
+                        "subcommand alias '" + alias + "' of '" + sub.name()
+                            + "' conflicts with existing subcommand or alias");
+                }
+            }
         }
         this.subcommands = Collections.unmodifiableList(
             new ArrayList<>(builder.subcommands));
@@ -180,7 +188,10 @@ public final class TypedCommand {
                     return Command.SINGLE_SUCCESS;
                 });
         for (TypedSubCommand sub : subcommands) {
-            root.then(sub.buildBranch(factory, dispatch, name));
+            for (LiteralArgumentBuilder<CommandSourceStack> branch
+                    : sub.buildBranches(factory, dispatch, name)) {
+                root.then(branch);
+            }
         }
         return root.build();
     }

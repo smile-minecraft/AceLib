@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -30,7 +31,7 @@ import java.util.logging.Logger;
  *   <li>冷卻檢查 → {@link CommandErrorKind#COOLDOWN_ACTIVE}</li>
  *   <li>呼叫 handler；handler 拋 {@link CommandException} → 自動呼叫
  *       {@link ReplySink#sendError}；拋其他 {@link RuntimeException} → 包裝成
- *       {@link CommandErrorKind#ASYNC_EXECUTION_FAILED}</li>
+ *       {@link CommandErrorKind#EXECUTION_FAILED}</li>
  * </ol>
  *
  * <h2>tab complete 流程</h2>
@@ -110,7 +111,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
             }
         }
         for (String alias : spec.aliases()) {
-            if (byName.containsKey(alias.toLowerCase())) {
+            if (byName.containsKey(alias.toLowerCase(Locale.ROOT))) {
                 throw new IllegalArgumentException(
                     "alias conflicts with existing command: " + alias);
             }
@@ -118,14 +119,14 @@ public final class CommandRegistryImpl implements CommandRegistry {
         byPrimary.put(primary, spec);
         byName.put(primary, spec);
         for (String alias : spec.aliases()) {
-            byName.put(alias.toLowerCase(), spec);
+            byName.put(alias.toLowerCase(Locale.ROOT), spec);
         }
     }
 
     @Override
     public void unregister(String name) {
         Objects.requireNonNull(name, "name");
-        CommandSpec spec = byName.remove(name.toLowerCase());
+        CommandSpec spec = byName.remove(name.toLowerCase(Locale.ROOT));
         if (spec == null) {
             return;
         }
@@ -133,7 +134,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
         if (name.equalsIgnoreCase(spec.name())) {
             byPrimary.remove(spec.name());
             for (String alias : spec.aliases()) {
-                byName.remove(alias.toLowerCase());
+                byName.remove(alias.toLowerCase(Locale.ROOT));
             }
         }
         // 若是別名解除，僅移除該別名 entry（保留 primary 與其他別名）
@@ -147,7 +148,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
     @Override
     public CommandSpec findCommand(String name) {
         if (name == null) return null;
-        return byName.get(name.toLowerCase());
+        return byName.get(name.toLowerCase(Locale.ROOT));
     }
 
     @Override
@@ -183,7 +184,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
         }
 
         // 2. 主指令查找
-        CommandSpec spec = byName.get(commandLabel.toLowerCase());
+        CommandSpec spec = byName.get(commandLabel.toLowerCase(Locale.ROOT));
         if (spec == null) {
             replySink.sendError(sender, new CommandException(
                 CommandErrorKind.UNKNOWN_SUBCOMMAND,
@@ -275,10 +276,10 @@ public final class CommandRegistryImpl implements CommandRegistry {
         } catch (CommandException ex) {
             replySink.sendError(sender, ex);
         } catch (RuntimeException ex) {
-            // 不要靜默吞掉；包裝成 ACELIB-CMD-008 async execution failed
+            // 不要靜默吞掉；包裝成 ACELIB-CMD-008 execution failed
             logUnexpected("subcommand handler threw", ex);
             replySink.sendError(sender, new CommandException(
-                CommandErrorKind.ASYNC_EXECUTION_FAILED,
+                CommandErrorKind.EXECUTION_FAILED,
                 "execution failed for " + sub.name() + ": " + safeMessage(ex),
                 Map.of("sub", sub.name(), "cause", safeMessage(ex))));
         }
@@ -296,7 +297,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
         if (disabled) {
             return List.of();
         }
-        CommandSpec spec = byName.get(commandLabel.toLowerCase());
+        CommandSpec spec = byName.get(commandLabel.toLowerCase(Locale.ROOT));
         if (spec == null) {
             return List.of();
         }
@@ -320,7 +321,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
         if (sub == null) {
             // 未知子指令 → 列出「以 subName 為前綴」的可見子指令（過濾無權限）
             List<String> result = new ArrayList<>();
-            String prefix = subName.toLowerCase();
+            String prefix = subName.toLowerCase(Locale.ROOT);
             for (SubCommandSpec s : spec.subCommands().values()) {
                 if (sender.hasPermission(s.permission()) && s.name().startsWith(prefix)) {
                     result.add(s.name());
@@ -353,7 +354,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
     public String formatHelp(String commandLabel, Sender sender) {
         Objects.requireNonNull(commandLabel, "commandLabel");
         Objects.requireNonNull(sender, "sender");
-        CommandSpec spec = byName.get(commandLabel.toLowerCase());
+        CommandSpec spec = byName.get(commandLabel.toLowerCase(Locale.ROOT));
         if (spec == null) {
             return "";
         }
@@ -412,7 +413,7 @@ public final class CommandRegistryImpl implements CommandRegistry {
     private static void logUnexpected(String context, Throwable t) {
         try {
             LOGGER.log(Level.WARNING,
-                "[" + CommandErrorKind.ASYNC_EXECUTION_FAILED.defaultCode() + "] "
+                "[" + CommandErrorKind.EXECUTION_FAILED.defaultCode() + "] "
                     + context + ": " + t.getMessage(), t);
         } catch (Throwable ignore) {
             // 日誌失敗不應中斷 dispatch

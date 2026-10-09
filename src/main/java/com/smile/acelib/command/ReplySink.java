@@ -45,7 +45,7 @@ public interface ReplySink {
      *   <li>若丟出的是 {@link CommandException}：攜帶 {@link CommandException#getCode()}
      *       與 {@link CommandException#getMessage()}；可選擇套用 lang template</li>
      *   <li>若丟出的是其他 {@link RuntimeException}：降級為 generic error message
-     *       + 對應 code（{@code ACELIB-CMD-008} async execution failed 等）</li>
+     *       + 對應 code（{@code ACELIB-CMD-008} execution failed 等）</li>
      * </ul>
      *
      * @param sender 目標 sender；不可為 null

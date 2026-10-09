@@ -107,8 +107,10 @@ public interface CommandMessages {
             case COOLDOWN_ACTIVE -> cooldownActive(str(vars, "sub"),
                 num(vars, "remaining"));
             case PLAYER_OFFLINE -> playerOffline(str(vars, "player"));
+            case INVALID_ARGUMENT -> invalidArgument(str(vars, "arg"),
+                str(vars, "value"), invalidReason(vars));
             case REGISTRY_DISABLED -> registryDisabled();
-            case ASYNC_EXECUTION_FAILED -> executionFailed(str(vars, "sub"));
+            case EXECUTION_FAILED -> executionFailed(str(vars, "sub"));
             default -> "";
         };
     }
@@ -140,5 +142,28 @@ public interface CommandMessages {
             return (int) asLong;
         }
         return 0;
+    }
+
+    /**
+     * 取 INVALID_ARGUMENT 的 reason：有 {@code reason} 鍵直接用；只有舊式
+     * {@code options} 鍵（逗號分隔）時重建成 {@code expected one of a|b}；
+     * 兩者皆無回空字串（由 {@code invalidArgument} 實作決定是否省略括號）。
+     */
+    private static String invalidReason(Map<String, Object> vars) {
+        Object reason = vars.get("reason");
+        if (reason != null) {
+            String text = String.valueOf(reason);
+            if (!text.isEmpty()) {
+                return text;
+            }
+        }
+        Object options = vars.get("options");
+        if (options != null) {
+            String text = String.valueOf(options);
+            if (!text.isEmpty()) {
+                return "expected one of " + text.replace(',', '|');
+            }
+        }
+        return "";
     }
 }
