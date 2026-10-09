@@ -21,6 +21,13 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 修正 CommandMessages.localize 缺少 INVALID_ARGUMENT 分支：型別化引數解析失敗（固定選項、列舉、數值、自訂、動態選項等）此前在 presentation 層落到預設分支回空字串、退回拋出點原文；現在依 kind + vars 以 invalidArgument(arg, value, reason) 重算，缺 key 才退回原文。
 - 子指令支援別名：TypedSubCommand.builder("ban").aliases("b")；別名在傳統路徑與 Brigadier 路徑都視為主名（同一 handler、同一冷卻 key；help 只列主名）。比較一律小寫；與主名或彼此衝突在建構時以 IllegalArgumentException 拒絕。
 
+### 新增內容（第四階段 訊息、設定與資料的新增介面）
+
+- 訊息渲染現在可以分辨失敗原因：`MessageService#renderDetailed` 回傳 `DetailedRender`，以 `RenderStatus` 區分語系尚未載入（`LOCALE_NOT_LOADED`，整條查找鏈皆無內容）、缺 key（`KEY_MISSING`）與渲染失敗（`RENDER_FAILED`）。缺 key 的診斷帶完整 key 與可用語系；`RenderedMessage` 本身的內容、診斷字串與記錄維持不變。
+- 發送訊息新增回傳結果的入口：`sendChatWithFallbackResult`、`sendActionBarWithFallbackResult`、`sendTitleWithFallbackResult`、`broadcastWithFallbackResult` 回傳 `SendResult`（是否送達、是否確實套用基岩降級）。舊的 void 入口改為委派，行為不變；`fallbackApplied` 只代表降級已套用到送出的 Component，不代表客戶端已經看見。
+- 基岩降級新增 `BedrockFallbackStyle.PLAIN_TEXT` 攤平選項（整體轉純文字）；預設仍為 `HINTS` 提示風格。
+- 新增 `MessageService#formatPlain`：給 console 與外部頻道用的純文字輸出，去除全部 MiniMessage 標記只留可讀文字，可選是否帶 `message.prefix`（預設不帶）。
+
 ## [1.4.0] - 2026-10-08
 
 v1.4.0 新增生命週期宿主、每玩家顯示、測試套件與測試 JAR、任務完成語意與作用域、事件處理完成後的操作、插件作用域訊息與在地化、插件隔離介面流程與元件、設定啟動快照與型別綁定、型別化指令框架、逐玩家儲存與玩家資料模型，以及外部整合門面；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.4.0.jar` 與 `AceLib-1.4.0-test-fixtures.jar`，管理員可直接下載，或從 `v1.4.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.4.0`）取得。

@@ -8,6 +8,14 @@ import com.smile.acelib.config.LangManager;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
+import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -20,8 +28,12 @@ import net.kyori.adventure.title.Title;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.translation.GlobalTranslator;
 import org.bukkit.Server;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -46,6 +58,14 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>{@link #render(String, Map)} / {@link #render(String, Map, Locale)} —
  *       單次共用渲染（{@link RenderedMessage}：component／text／formText 三視圖；
  *       聊天、ActionBar、GUI 與表單共用同一份結果）</li>
+ *   <li>{@link #renderDetailed(String, Map)} /
+ *       {@link #renderDetailed(String, Map, Locale)} — 帶狀態的單次渲染
+ *       （{@link DetailedRender}：成功／語系未載入／缺 key／渲染失敗可分辨，
+ *       缺 key 診斷帶完整 key 與可用語系）</li>
+ *   <li>{@link #format(String, Map)} — 純文字格式化（含 {@code message.prefix}）</li>
+ *   <li>{@link #formatPlain(String, Map)} /
+ *       {@link #formatPlain(String, Map, boolean)} — 純文字格式化
+ *       （去除全部 MiniMessage 標記只留可讀文字，可選是否帶 prefix）</li>
  *   <li>{@link #sendChat(Player, String, Map)} — 玩家 chat</li>
  *   <li>{@link #sendActionBar(Player, String, Map)} — 玩家 action bar</li>
  *   <li>{@link #sendTitle(Player, String, Map)} — 玩家 title</li>
@@ -329,6 +349,102 @@ public final class MessageService {
     }
 
     /**
+     * 純文字格式化：給 console 與外部頻道使用，去除全部 MiniMessage 標記只留可讀文字。
+     *
+     * <p>預設不帶 {@code message.prefix}（與 {@link #formatConsole} 一致）；
+     * 要帶前綴時用 {@link #formatPlain(String, Map, boolean)}。</p>
+     *
+     * <p>實作：模板經安全變數替換（使用者值先跳脫，與 {@link #format} 同規則）後
+     * 解析為 Component，再走 plain 序列化；解析失敗時盡力去除標記
+     * （見 {@link #stripTagsBestEffort}），仍回傳可讀文字，不中斷執行。</p>
+     *
+     * <p>錯誤處理：key 為 null 拋 {@link NullPointerException}；
+     * key 缺失回傳空字串 + {@code ACELIB-MSG-001}；
+     * 讀取拋錯回傳空字串 + {@code ACELIB-MSG-003}。</p>
+     *
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @return 去除標記的純文字；key 缺失或讀取失敗時為空字串
+     * @since 1.5.0
+     */
+    public String formatPlain(String key, Map<String, Object> vars) {
+        return formatPlain(key, vars, false);
+    }
+
+    /**
+     * 純文字格式化（可選前綴）：同 {@link #formatPlain(String, Map)}，
+     * 另依 {@code withPrefix} 決定是否在正文前加上 {@code message.prefix}。
+     *
+     * <p>前綴與正文合併後一起解析：前綴本身若含 MiniMessage 標記，
+     * 會被當成格式解析而非原文透出，保證輸出不殘留標記。</p>
+     *
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @param withPrefix 是否加上 {@code message.prefix}
+     * @return 去除標記的純文字；key 缺失或讀取失敗時為空字串
+     * @since 1.5.0
+     */
+    public String formatPlain(String key, Map<String, Object> vars, boolean withPrefix) {
+        Objects.requireNonNull(key, "key");
+        Locale effective = lang.getCurrentLocale();
+        if (effective == null) {
+            effective = lang.getDefaultLocale();
+        }
+        if (effective == null) {
+            effective = Locale.ROOT;
+        }
+        Optional<String> opt;
+        try {
+            opt = lang.get(key, null);
+        } catch (Throwable t) {
+            safeLog(Level.WARNING,
+                "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key + ": " + t.getMessage(),
+                t);
+            return "";
+        }
+        if (opt == null || opt.isEmpty()) {
+            safeLog(Level.WARNING,
+                "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
+            return "";
+        }
+        String template = opt.get();
+        if (template == null) {
+            safeLog(Level.WARNING,
+                "[" + ERR_FORMAT_ERROR + "] lang.get returned Optional with null body for key="
+                    + key);
+            return "";
+        }
+        String substituted = safeSubstitute(template, vars);
+        String source = withPrefix ? prefixOf(effective) + substituted : substituted;
+        Component parsed = deserializeOrNull(source, null, ERR_FORMAT_ERROR,
+            "formatPlain parse failed for key=" + key);
+        if (parsed != null) {
+            return PlainTextComponentSerializer.plainText().serialize(parsed);
+        }
+        return stripTagsBestEffort(source);
+    }
+
+    /**
+     * 失敗路徑的盡力去標記（package-private；可單測）。
+     *
+     * <p>依序去除：完整 MiniMessage 標記（{@code <...>}）、legacy 色彩碼
+     * （{@code §X}）、結尾未閉合的 {@code <...}。原文中的 {@code <}
+     * （例如 {@code a < b}，無配對 {@code >} 且非行尾標記開頭）會保留，
+     * 避免誤傷可讀文字。</p>
+     *
+     * @param source 原始字串；可為 null（→ 空字串）
+     * @return 去除標記後的字串；never null
+     */
+    static String stripTagsBestEffort(String source) {
+        if (source == null) {
+            return "";
+        }
+        String out = source.replaceAll("<[^<>]*>", "");
+        out = out.replaceAll("§.", "");
+        return out.replaceAll("<[^<>\\s]*$", "");
+    }
+
+    /**
      * 表單文字格式化（基岩表單可安全顯示字串）：讀取 rich template
      * （MiniMessage 字串），經安全變數替換後以 {@link FormText} 規則轉換。
      *
@@ -421,6 +537,44 @@ public final class MessageService {
     }
 
     /**
+     * 以目前全域 locale 渲染一次，並回傳帶狀態的結果。
+     *
+     * <p>與 {@link #render(String, Map)} 讀取同一份模板、產生同一份
+     * {@link RenderedMessage}（內容、診斷字串與記錄完全一致），外加
+     * {@link RenderStatus} 分類與缺 key／未載入時的 enriched 診斷
+     * （完整 key 與可用語系）。</p>
+     *
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @return 帶狀態的單次渲染結果；never null
+     * @since 1.5.0
+     */
+    public DetailedRender renderDetailed(String key, Map<String, Object> vars) {
+        Objects.requireNonNull(key, "key");
+        return renderDetailedPipeline(key, vars, null, false, 0);
+    }
+
+    /**
+     * 以指定語系渲染一次，並回傳帶狀態的結果。
+     *
+     * <p>模板按該語系分層讀取（磁碟請求 locale → 磁碟預設 locale →
+     * 內建請求 locale → 內建預設 locale），與
+     * {@link #render(String, Map, Locale)} 同規則。「語系未載入」指整條查找鏈
+     * （請求語系與預設語系的磁碟檔與內建資源）皆無內容；任一層有內容但 key
+     * 不存在時為缺 key。</p>
+     *
+     * @param key 訊息 key；不可為 null
+     * @param vars 變數替換表；可為 null
+     * @param locale 指定語系；可為 null（→ 全域目前語系）
+     * @return 帶狀態的單次渲染結果；never null
+     * @since 1.5.0
+     */
+    public DetailedRender renderDetailed(String key, Map<String, Object> vars, Locale locale) {
+        Objects.requireNonNull(key, "key");
+        return renderDetailedPipeline(key, vars, locale, false, 0);
+    }
+
+    /**
      * 單一渲染管線：模板只讀一次，三種呈現皆由該次結果衍生。
      *
      * @param clickHints 表單視圖是否附加 click 可讀提示
@@ -428,6 +582,17 @@ public final class MessageService {
      */
     private RenderedMessage renderInternal(String key, Map<String, Object> vars, Locale locale,
                                            boolean clickHints, int maxLength) {
+        return renderDetailedPipeline(key, vars, locale, clickHints, maxLength).rendered();
+    }
+
+    /**
+     * 帶狀態的單一渲染管線：本體邏輯與 {@link #renderInternal} 共用，
+     * 保證 {@link RenderedMessage} 的內容、診斷字串與記錄完全一致，
+     * 外加 {@link RenderStatus} 分類與 enriched 診斷。
+     */
+    private DetailedRender renderDetailedPipeline(String key, Map<String, Object> vars,
+                                                  Locale locale,
+                                                  boolean clickHints, int maxLength) {
         // mock 情境下 getCurrentLocale()/getDefaultLocale() 可能回傳 null；
         // 真實 LangManager 建構時即設預設語系，不受影響。此處逐層退回，永不 NPE。
         Locale effective = locale != null ? locale : lang.getCurrentLocale();
@@ -448,23 +613,60 @@ public final class MessageService {
             safeLog(Level.WARNING,
                 "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key + ": " + t.getMessage(),
                 t);
-            return new RenderedMessage(key, effective, Component.empty(), "", "",
+            RenderedMessage failed = new RenderedMessage(key, effective, Component.empty(), "", "",
                 false, "[" + ERR_FORMAT_ERROR + "] lang.get threw for key=" + key);
+            return new DetailedRender(failed, RenderStatus.RENDER_FAILED, List.of(),
+                failed.diagnosis());
         }
         if (opt == null || opt.isEmpty()) {
-            safeLog(Level.WARNING,
-                "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
-            return new RenderedMessage(key, effective, Component.empty(), "", "",
+            RenderedMessage missing = new RenderedMessage(key, effective, Component.empty(), "", "",
                 true, "[" + ERR_KEY_MISSING + "] message key missing: " + key
                     + " (locale=" + effective + ")");
+            Locale requested = locale != null ? locale : lang.getCurrentLocale();
+            Locale def = lang.getDefaultLocale();
+            // LangManager 的 per-locale 讀取會把「檔案損壞」吞成空（負向快取），
+            // 檔案存在檢查分不出「載入失敗」與「真的沒內容」。
+            // 此處以驗證性讀取拿實際載入結果：任一層載入失敗即為渲染失敗，
+            // 只有各層都「缺席或載入成功但無該 key」才繼續區分缺 key／未載入。
+            Optional<LoadFailure> failure = firstLoadFailure(requested, def);
+            if (failure.isPresent()) {
+                LoadFailure loadFailure = failure.get();
+                safeLog(Level.WARNING,
+                    "[" + ERR_FORMAT_ERROR + "] language file load failed for key=" + key
+                        + ": " + loadFailure.detail(), loadFailure.cause());
+                RenderedMessage failed = new RenderedMessage(key, effective, Component.empty(),
+                    "", "", false, "[" + ERR_FORMAT_ERROR + "] language file load failed for key="
+                        + key + ": " + loadFailure.detail());
+                return new DetailedRender(failed, RenderStatus.RENDER_FAILED, List.of(),
+                    failed.diagnosis());
+            }
+            List<Locale> available = availableLocales();
+            String availableText = formatLocales(available);
+            if (chainHasContent(requested, def)) {
+                safeLog(Level.WARNING,
+                    "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
+                return new DetailedRender(missing, RenderStatus.KEY_MISSING, available,
+                    missing.diagnosis() + "; availableLocales=" + availableText);
+            }
+            safeLog(Level.WARNING,
+                "[" + ERR_KEY_MISSING + "] locale not loaded for key=" + key
+                    + " (requested=" + requested
+                    + ", default=" + lang.getDefaultLocale() + ")");
+            return new DetailedRender(missing, RenderStatus.LOCALE_NOT_LOADED, available,
+                "[" + ERR_KEY_MISSING + "] locale not loaded for key=" + key
+                    + " (requested=" + requested
+                    + ", default=" + lang.getDefaultLocale() + ")"
+                    + "; availableLocales=" + availableText);
         }
         String template = opt.get();
         if (template == null) {
             safeLog(Level.WARNING,
                 "[" + ERR_FORMAT_ERROR + "] lang.get returned Optional with null body for key="
                     + key);
-            return new RenderedMessage(key, effective, Component.empty(), "", "",
+            RenderedMessage failed = new RenderedMessage(key, effective, Component.empty(), "", "",
                 false, "[" + ERR_FORMAT_ERROR + "] null body for key=" + key);
+            return new DetailedRender(failed, RenderStatus.RENDER_FAILED, List.of(),
+                failed.diagnosis());
         }
         // 純文字視圖：與富文字視圖共用同一份安全替換結果（使用者值已跳脫），
         // 保證兩者輸出一致；模板本身的 MiniMessage 標記保留不解析。
@@ -485,7 +687,236 @@ public final class MessageService {
         Component component = applyPrefixIfNeeded(content, effective);
         String formText = FormText.renderInternal(content, formLocale,
             clickHints, maxLength, this::buildBedrockHint);
-        return new RenderedMessage(key, effective, component, text, formText, false, diagnosis);
+        RenderedMessage rendered =
+            new RenderedMessage(key, effective, component, text, formText, false, diagnosis);
+        if (parsed == null) {
+            return new DetailedRender(rendered, RenderStatus.RENDER_FAILED, List.of(), diagnosis);
+        }
+        return new DetailedRender(rendered, RenderStatus.OK, List.of(), "");
+    }
+
+    /**
+     * 整條查找鏈是否有任何內容（任一磁碟檔存在，或任一內建資源存在）。
+     *
+     * <p>查找鏈指請求語系與預設語系的磁碟檔與內建資源（與
+     * {@code LangManager.get(Locale, String)} 的四層順序對應）。
+     * 任一層有內容代表語系已載入，此時查無 key 為缺 key；四層皆無才算語系未載入。</p>
+     */
+    private boolean chainHasContent(Locale requested, Locale def) {
+        if (requested != null
+            && (diskLangFileExists(requested) || builtinLangResourceExists(requested))) {
+            return true;
+        }
+        return def != null && (diskLangFileExists(def) || builtinLangResourceExists(def));
+    }
+
+    /**
+     * 磁碟語言檔是否存在（不讀內容，只判斷檔案）。
+     */
+    private boolean diskLangFileExists(Locale locale) {
+        try {
+            File dir = new File(plugin.getDataFolder(), LangManager.LANG_DIR);
+            return new File(dir, fileNameFor(locale)).isFile();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 內建語言資源是否存在（不讀內容，只判斷資源；串流立即關閉）。
+     */
+    private boolean builtinLangResourceExists(Locale locale) {
+        try (InputStream in =
+                 plugin.getResource(LangManager.LANG_DIR + "/" + fileNameFor(locale))) {
+            return in != null;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 載入失敗的描述（哪一層壞、原因是什麼）。
+     */
+    private record LoadFailure(String detail, Throwable cause) {
+    }
+
+    /**
+     * 查找鏈第一個載入失敗的層（磁碟檔或內建資源無法解析）。
+     *
+     * <p>手段選擇理由：{@code LangManager} 的 per-locale 讀取把解析例外吞成
+     * {@code Optional.empty()}（config 模組的既有設計，不可改），且其內部快取
+     * 無法從外部觀測；「檔案存在」分不出損壞與缺內容。訊息模組只能以自己的一次
+     * 驗證性讀取（與 {@code LangManager} 相同的 {@code YamlConfiguration}
+     * 解析呼叫，只讀不寫）拿實際載入結果。只在「查無 key」的失敗路徑執行，
+     * 成功渲染不受影響。</p>
+     *
+     * @param requested 請求語系；可為 null（→ 跳過該層）
+     * @param def 預設語系；可為 null（→ 跳過該層）
+     * @return 第一個載入失敗；各層皆缺席或載入成功時為空
+     */
+    private Optional<LoadFailure> firstLoadFailure(Locale requested, Locale def) {
+        Set<Locale> chain = new LinkedHashSet<>();
+        if (requested != null) {
+            chain.add(requested);
+        }
+        if (def != null) {
+            chain.add(def);
+        }
+        for (Locale locale : chain) {
+            Optional<LoadFailure> disk = checkDiskLoad(locale);
+            if (disk.isPresent()) {
+                return disk;
+            }
+        }
+        for (Locale locale : chain) {
+            Optional<LoadFailure> builtin = checkBuiltinLoad(locale);
+            if (builtin.isPresent()) {
+                return builtin;
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 驗證單一磁碟語言檔能否解析（與 {@code LangManager} 同解析呼叫）。
+     *
+     * <p>檔案不存在（含中途被刪的競態）視為缺席，不算失敗，避免誤判。</p>
+     */
+    private Optional<LoadFailure> checkDiskLoad(Locale locale) {
+        File file;
+        try {
+            File dir = new File(plugin.getDataFolder(), LangManager.LANG_DIR);
+            file = new File(dir, fileNameFor(locale));
+        } catch (Throwable t) {
+            return Optional.empty();
+        }
+        if (!file.isFile()) {
+            return Optional.empty();
+        }
+        try {
+            YamlConfiguration cfg = new YamlConfiguration();
+            cfg.load(file);
+            return Optional.empty();
+        } catch (java.io.FileNotFoundException ex) {
+            return Optional.empty();
+        } catch (java.io.IOException | InvalidConfigurationException ex) {
+            return Optional.of(new LoadFailure("disk file " + file.getAbsolutePath()
+                + " cannot be parsed（" + ex.getMessage() + "）", ex));
+        } catch (Throwable t) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 驗證單一內建語言資源能否解析（與 {@code LangManager} 同解析呼叫）。
+     *
+     * <p>資源不存在（{@code getResource} 回 null，拋錯亦視為查不到）時視為缺席，
+     * 語意與 {@code LangManager} 及 {@link #builtinLangResourceExists} 一致；
+     * 取得串流後讀取或關閉失敗時為載入失敗。</p>
+     */
+    private Optional<LoadFailure> checkBuiltinLoad(Locale locale) {
+        String path = LangManager.LANG_DIR + "/" + fileNameFor(locale);
+        InputStream in;
+        try {
+            in = plugin.getResource(path);
+        } catch (Throwable t) {
+            return Optional.empty();
+        }
+        if (in == null) {
+            return Optional.empty();
+        }
+        byte[] bytes;
+        try (InputStream autoClose = in) {
+            bytes = autoClose.readAllBytes();
+        } catch (Throwable t) {
+            return Optional.of(new LoadFailure("builtin resource " + path
+                + " cannot be read（" + t.getMessage() + "）", t));
+        }
+        try {
+            YamlConfiguration cfg = new YamlConfiguration();
+            cfg.loadFromString(new String(bytes, StandardCharsets.UTF_8));
+            return Optional.empty();
+        } catch (Throwable t) {
+            return Optional.of(new LoadFailure("builtin resource " + path
+                + " cannot be parsed（" + t.getMessage() + "）", t));
+        }
+    }
+
+    /**
+     * 磁碟 {@code lang/} 目錄下實際存在的語系（依檔名排序）。
+     *
+     * <p>內建資源（plugin JAR 內）無法枚舉，不列入；呼叫端若只有內建資源而無磁碟檔，
+     * 此清單為空，但渲染仍可能成功（內建資源補缺口）。</p>
+     */
+    private List<Locale> availableLocales() {
+        List<Locale> out = new ArrayList<>();
+        try {
+            File dir = new File(plugin.getDataFolder(), LangManager.LANG_DIR);
+            File[] files = dir.listFiles((parent, name) -> name.endsWith(".yml"));
+            if (files == null) {
+                return List.of();
+            }
+            for (File file : files) {
+                Locale parsed = parseLangFileName(file.getName());
+                if (parsed != null) {
+                    out.add(parsed);
+                }
+            }
+        } catch (Throwable t) {
+            return List.of();
+        }
+        out.sort(Comparator.comparing(Locale::toString));
+        return List.copyOf(out);
+    }
+
+    /**
+     * 與 {@code LangManager} 相同的 locale→檔名規則（該方法為 package-private，
+     * 此處為跨套件重述；規則變更時需同步）。
+     */
+    private static String fileNameFor(Locale locale) {
+        String language = locale.getLanguage();
+        String country = locale.getCountry();
+        if (country == null || country.isEmpty()) {
+            return language + ".yml";
+        }
+        return language + "_" + country + ".yml";
+    }
+
+    /**
+     * 語言檔檔名→locale；格式不符回傳 null（略過該檔）。
+     */
+    private static Locale parseLangFileName(String name) {
+        if (name == null || !name.endsWith(".yml")) {
+            return null;
+        }
+        String base = name.substring(0, name.length() - ".yml".length());
+        if (base.isEmpty()) {
+            return null;
+        }
+        int idx = base.indexOf('_');
+        if (idx < 0) {
+            return base.matches("[a-zA-Z]{2,8}") ? new Locale(base) : null;
+        }
+        String language = base.substring(0, idx);
+        String country = base.substring(idx + 1);
+        if (!language.matches("[a-zA-Z]{2,8}") || !country.matches("[a-zA-Z]{2,8}")) {
+            return null;
+        }
+        return new Locale(language, country);
+    }
+
+    /**
+     * 可用語系清單→診斷字串（locale 字串形式，例如 {@code [en_US, zh_TW]}）。
+     */
+    private static String formatLocales(List<Locale> locales) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < locales.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(locales.get(i).toString());
+        }
+        return sb.append(']').toString();
     }
 
     /**
@@ -1184,40 +1615,92 @@ public final class MessageService {
      * {@link LangManager} 依 locale 提供）；Java 玩家、Floodgate 缺席或無法判定
      * 時，直接送出原始 Component，不改變既有行為。</p>
      *
+     * <p>本方法委派給
+     * {@link #sendChatWithFallbackResult(Player, Component, Locale)} 並使用
+     * {@link BedrockFallbackStyle#HINTS}，行為與 AceLib 1.4.0 逐字一致；
+     * 要拿發送結果時改用 {@code *WithFallbackResult} 入口。</p>
+     *
      * @param player         目標玩家；可為 null（→ silent no-op）
      * @param message        原始 Component；可為 null（→ silent no-op）
      * @param localeOverride 每次呼叫的 locale 覆寫；可為 null（→ 依 Player.locale /
      *                      Floodgate languageCode / default 解析）
      */
     public void sendChatWithFallback(Player player, Component message, Locale localeOverride) {
+        sendChatWithFallbackCore(player, message, localeOverride, BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家發送原始 {@link Component}（chat），並回傳發送結果。
+     *
+     * <p>降級風格為 {@link BedrockFallbackStyle#HINTS}（預設）；要攤平成純文字時用
+     * {@link #sendChatWithFallbackResult(Player, Component, Locale, BedrockFallbackStyle)}。</p>
+     *
+     * @param player         目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param message        原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendChatWithFallbackResult(Player player, Component message,
+                                                 Locale localeOverride) {
+        return sendChatWithFallbackCore(player, message, localeOverride,
+            BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家發送原始 {@link Component}（chat），並回傳發送結果。
+     *
+     * @param player         目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param message        原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @param style          基岩降級風格；可為 null（→ {@link BedrockFallbackStyle#HINTS}）
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendChatWithFallbackResult(Player player, Component message,
+                                                 Locale localeOverride,
+                                                 BedrockFallbackStyle style) {
+        return sendChatWithFallbackCore(player, message, localeOverride, style);
+    }
+
+    /**
+     * {@link #sendChatWithFallback} 與 {@code sendChatWithFallbackResult} 共用的核心：
+     * 守衛、降級與發送流程完全一致，只有回傳差別。
+     */
+    private SendResult sendChatWithFallbackCore(Player player, Component message,
+                                                 Locale localeOverride,
+                                                 BedrockFallbackStyle style) {
         if (!isServiceActive()) {
-            return;
+            return new SendResult(false, false);
         }
         if (player == null) {
             warnSilently("sendChatWithFallback called with null player");
-            return;
+            return new SendResult(false, false);
         }
         if (message == null) {
             warnSilently("sendChatWithFallback called with null message");
-            return;
+            return new SendResult(false, false);
         }
         if (!player.isOnline()) {
             warnSilently("sendChatWithFallback to offline player=" + safeName(player));
-            return;
+            return new SendResult(false, false);
         }
-        Component toSend = maybeFallback(player, message, localeOverride);
+        FallbackOutcome outcome = applyFallbackWithOutcome(player, message, localeOverride, style);
         synchronized (plugin) {
             if (!isServiceActive()) {
-                return;
+                return new SendResult(false, false);
             }
             try {
-                player.sendMessage(toSend);
+                player.sendMessage(outcome.component());
+                return new SendResult(true, outcome.applied());
             } catch (IllegalStateException ex) {
                 logPlayerOperationFailure(player, "sendChatWithFallback", ex);
+                return new SendResult(false, outcome.applied());
             } catch (Throwable t) {
                 safeLog(Level.WARNING,
                     "[" + ERR_FORMAT_ERROR + "] sendChatWithFallback failed for player="
                         + safeName(player) + ": " + t.getMessage(), t);
+                return new SendResult(false, outcome.applied());
             }
         }
     }
@@ -1226,39 +1709,92 @@ public final class MessageService {
      * 對單一玩家發送原始 {@link Component}（action bar），並對明確的基岩版玩家
      * 執行 click 互動降級。語意同 {@link #sendChatWithFallback}。
      *
+     * <p>本方法委派共用核心並使用 {@link BedrockFallbackStyle#HINTS}，
+     * 行為與 AceLib 1.4.0 逐字一致；要拿發送結果時改用
+     * {@code sendActionBarWithFallbackResult} 入口。</p>
+     *
      * @param player         目標玩家；可為 null（→ silent no-op）
      * @param message        原始 Component；可為 null（→ silent no-op）
      * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
      */
     public void sendActionBarWithFallback(Player player, Component message, Locale localeOverride) {
+        sendActionBarWithFallbackCore(player, message, localeOverride,
+            BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家發送原始 {@link Component}（action bar），並回傳發送結果。
+     *
+     * <p>降級風格為 {@link BedrockFallbackStyle#HINTS}（預設）；要攤平成純文字時用
+     * {@link #sendActionBarWithFallbackResult(Player, Component, Locale,
+     * BedrockFallbackStyle)}。</p>
+     *
+     * @param player         目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param message        原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendActionBarWithFallbackResult(Player player, Component message,
+                                                      Locale localeOverride) {
+        return sendActionBarWithFallbackCore(player, message, localeOverride,
+            BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家發送原始 {@link Component}（action bar），並回傳發送結果。
+     *
+     * @param player         目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param message        原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @param style          基岩降級風格；可為 null（→ {@link BedrockFallbackStyle#HINTS}）
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendActionBarWithFallbackResult(Player player, Component message,
+                                                      Locale localeOverride,
+                                                      BedrockFallbackStyle style) {
+        return sendActionBarWithFallbackCore(player, message, localeOverride, style);
+    }
+
+    /**
+     * {@link #sendActionBarWithFallback} 與
+     * {@code sendActionBarWithFallbackResult} 共用的核心。
+     */
+    private SendResult sendActionBarWithFallbackCore(Player player, Component message,
+                                                      Locale localeOverride,
+                                                      BedrockFallbackStyle style) {
         if (!isServiceActive()) {
-            return;
+            return new SendResult(false, false);
         }
         if (player == null) {
             warnSilently("sendActionBarWithFallback called with null player");
-            return;
+            return new SendResult(false, false);
         }
         if (message == null) {
             warnSilently("sendActionBarWithFallback called with null message");
-            return;
+            return new SendResult(false, false);
         }
         if (!player.isOnline()) {
             warnSilently("sendActionBarWithFallback to offline player=" + safeName(player));
-            return;
+            return new SendResult(false, false);
         }
-        Component toSend = maybeFallback(player, message, localeOverride);
+        FallbackOutcome outcome = applyFallbackWithOutcome(player, message, localeOverride, style);
         synchronized (plugin) {
             if (!isServiceActive()) {
-                return;
+                return new SendResult(false, false);
             }
             try {
-                player.sendActionBar(toSend);
+                player.sendActionBar(outcome.component());
+                return new SendResult(true, outcome.applied());
             } catch (IllegalStateException ex) {
                 logPlayerOperationFailure(player, "sendActionBarWithFallback", ex);
+                return new SendResult(false, outcome.applied());
             } catch (Throwable t) {
                 safeLog(Level.WARNING,
                     "[" + ERR_FORMAT_ERROR + "] sendActionBarWithFallback failed for player="
                         + safeName(player) + ": " + t.getMessage(), t);
+                return new SendResult(false, outcome.applied());
             }
         }
     }
@@ -1274,39 +1810,97 @@ public final class MessageService {
      */
     public void sendTitleWithFallback(Player player, Component title, Component subtitle,
                                      Locale localeOverride) {
+        sendTitleWithFallbackCore(player, title, subtitle, localeOverride,
+            BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家顯示 title / subtitle（原始 {@link Component}），並回傳發送結果。
+     *
+     * <p>降級風格為 {@link BedrockFallbackStyle#HINTS}（預設）；title 與 subtitle
+     * 分別降級，任一實際套用即標記。要攤平成純文字時用
+     * {@link #sendTitleWithFallbackResult(Player, Component, Component, Locale,
+     * BedrockFallbackStyle)}。</p>
+     *
+     * @param player 目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param title 原始 title Component；可為 null（→ silent no-op，回傳未送達）
+     * @param subtitle 原始 subtitle Component；可為 null（視為空）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendTitleWithFallbackResult(Player player, Component title,
+                                                  Component subtitle,
+                                                  Locale localeOverride) {
+        return sendTitleWithFallbackCore(player, title, subtitle, localeOverride,
+            BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對單一玩家顯示 title / subtitle（原始 {@link Component}），並回傳發送結果。
+     *
+     * @param player 目標玩家；可為 null（→ silent no-op，回傳未送達）
+     * @param title 原始 title Component；可為 null（→ silent no-op，回傳未送達）
+     * @param subtitle 原始 subtitle Component；可為 null（視為空）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null
+     * @param style 基岩降級風格；可為 null（→ {@link BedrockFallbackStyle#HINTS}）
+     * @return 發送結果（含是否確實套用基岩降級）；never null
+     * @since 1.5.0
+     */
+    public SendResult sendTitleWithFallbackResult(Player player, Component title,
+                                                  Component subtitle,
+                                                  Locale localeOverride,
+                                                  BedrockFallbackStyle style) {
+        return sendTitleWithFallbackCore(player, title, subtitle, localeOverride, style);
+    }
+
+    /**
+     * 共用核心：守衛、降級與發送流程與舊 void 入口一致，只有回傳差別。
+     */
+    private SendResult sendTitleWithFallbackCore(Player player, Component title,
+                                                  Component subtitle,
+                                                  Locale localeOverride,
+                                                  BedrockFallbackStyle style) {
         if (!isServiceActive()) {
-            return;
+            return new SendResult(false, false);
         }
         if (player == null) {
             warnSilently("sendTitleWithFallback called with null player");
-            return;
+            return new SendResult(false, false);
         }
         if (title == null) {
             warnSilently("sendTitleWithFallback called with null title");
-            return;
+            return new SendResult(false, false);
         }
         if (!player.isOnline()) {
             warnSilently("sendTitleWithFallback to offline player=" + safeName(player));
-            return;
+            return new SendResult(false, false);
         }
-        Component titleOut = maybeFallback(player, title, localeOverride);
-        Component subtitleOut = subtitle == null ? null : maybeFallback(player, subtitle, localeOverride);
+        FallbackOutcome titleOut = applyFallbackWithOutcome(player, title, localeOverride, style);
+        FallbackOutcome subtitleOut = subtitle == null
+            ? null
+            : applyFallbackWithOutcome(player, subtitle, localeOverride, style);
         synchronized (plugin) {
             if (!isServiceActive()) {
-                return;
+                return new SendResult(false, false);
             }
             try {
                 Title adventureTitle = Title.title(
-                    titleOut,
-                    subtitleOut == null ? Component.empty() : subtitleOut,
+                    titleOut.component(),
+                    subtitleOut == null ? Component.empty() : subtitleOut.component(),
                     10, 70, 20);
                 player.showTitle(adventureTitle);
+                boolean applied = titleOut.applied()
+                    || (subtitleOut != null && subtitleOut.applied());
+                return new SendResult(true, applied);
             } catch (IllegalStateException ex) {
                 logPlayerOperationFailure(player, "sendTitleWithFallback", ex);
+                return new SendResult(false, titleOut.applied());
             } catch (Throwable t) {
                 safeLog(Level.WARNING,
                     "[" + ERR_FORMAT_ERROR + "] sendTitleWithFallback failed for player="
                         + safeName(player) + ": " + t.getMessage(), t);
+                return new SendResult(false, titleOut.applied());
             }
         }
     }
@@ -1319,29 +1913,78 @@ public final class MessageService {
      * @param localeOverride 每次呼叫的 locale 覆寫；可為 null（→ 依各玩家解析）
      */
     public void broadcastWithFallback(Component message, Locale localeOverride) {
+        broadcastWithFallbackCore(message, localeOverride, BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對所有線上玩家廣播原始 {@link Component}，並回傳發送結果。
+     *
+     * <p>每位明確的基岩版玩家各自執行 click 互動降級（依各玩家 locale 解析）；
+     * 任一玩家送達即 {@code delivered=true}，任一玩家實際套用降級即
+     * {@code fallbackApplied=true}。單一玩家失敗不影響其他玩家。</p>
+     *
+     * <p>降級風格為 {@link BedrockFallbackStyle#HINTS}（預設）；要攤平成純文字時用
+     * {@link #broadcastWithFallbackResult(Component, Locale, BedrockFallbackStyle)}。</p>
+     *
+     * @param message 原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null（→ 依各玩家解析）
+     * @return 發送結果；never null
+     * @since 1.5.0
+     */
+    public SendResult broadcastWithFallbackResult(Component message, Locale localeOverride) {
+        return broadcastWithFallbackCore(message, localeOverride, BedrockFallbackStyle.HINTS);
+    }
+
+    /**
+     * 對所有線上玩家廣播原始 {@link Component}，並回傳發送結果。
+     *
+     * @param message 原始 Component；可為 null（→ silent no-op，回傳未送達）
+     * @param localeOverride 每次呼叫的 locale 覆寫；可為 null（→ 依各玩家解析）
+     * @param style 基岩降級風格；可為 null（→ {@link BedrockFallbackStyle#HINTS}）
+     * @return 發送結果；never null
+     * @since 1.5.0
+     */
+    public SendResult broadcastWithFallbackResult(Component message, Locale localeOverride,
+                                                  BedrockFallbackStyle style) {
+        return broadcastWithFallbackCore(message, localeOverride, style);
+    }
+
+    /**
+     * 共用核心：守衛、逐玩家降級與發送流程與舊 void 入口一致，只有回傳差別。
+     */
+    private SendResult broadcastWithFallbackCore(Component message, Locale localeOverride,
+                                                  BedrockFallbackStyle style) {
         if (!isServiceActive()) {
-            return;
+            return new SendResult(false, false);
         }
         if (message == null) {
             warnSilently("broadcastWithFallback called with null message");
-            return;
+            return new SendResult(false, false);
         }
         synchronized (plugin) {
             if (!isServiceActive()) {
-                return;
+                return new SendResult(false, false);
             }
             Server srv = safeServer();
             if (srv == null) {
                 warnSilently("broadcastWithFallback called but server is unavailable");
-                return;
+                return new SendResult(false, false);
             }
+            boolean delivered = false;
+            boolean fallbackApplied = false;
             for (Player p : srv.getOnlinePlayers()) {
                 if (p == null || !p.isOnline()) {
                     continue;
                 }
                 try {
-                    Component toSend = maybeFallback(p, message, localeOverride);
-                    p.sendMessage(toSend);
+                    FallbackOutcome outcome =
+                        applyFallbackWithOutcome(p, message, localeOverride, style);
+                    // 降級完成即累積：後續發送失敗不抹掉已套用的事實
+                    // （與單人入口失敗時仍回 outcome.applied() 一致）。
+                    // delivered 只在發送成功後更新。
+                    fallbackApplied = fallbackApplied || outcome.applied();
+                    p.sendMessage(outcome.component());
+                    delivered = true;
                 } catch (IllegalStateException ex) {
                     logPlayerOperationFailure(p, "broadcastWithFallback", ex);
                 } catch (Throwable t) {
@@ -1350,29 +1993,67 @@ public final class MessageService {
                             + safeName(p) + ": " + t.getMessage(), t);
                 }
             }
+            return new SendResult(delivered, fallbackApplied);
         }
     }
 
     /**
-     * 若玩家為明確基岩版，則套用 click 降級；否則原樣回傳原始 Component。
-     * 若 Floodgate locale lookup 拋例外（已記 ACELIB-MSG-004），則放棄降級、保留原始 Component，避免在無法判定 locale 時仍套用 fallback。
+     * 降級結果：送出的 Component 與本次是否確實套用降級。
      */
-    private Component maybeFallback(Player player, Component message, Locale localeOverride) {
+    private record FallbackOutcome(Component component, boolean applied) {
+    }
+
+    /**
+     * 若玩家為明確基岩版，則依風格套用降級；否則原樣回傳原始 Component。
+     *
+     * <p>若 Floodgate locale lookup 拋例外（已記 ACELIB-MSG-004），則放棄降級、
+     * 保留原始 Component，避免在無法判定 locale 時仍套用 fallback。
+     * HINTS 只有降級器實際改寫輸出（click 被剝離並插入提示）才標記；
+     * 無 click 的訊息走此路徑輸出與輸入為同一實例，不標記。
+     * PLAIN_TEXT 只要走進基岩分支（lookup 成功）就標記。</p>
+     */
+    private FallbackOutcome applyFallbackWithOutcome(Player player, Component message,
+                                                      Locale localeOverride,
+                                                      BedrockFallbackStyle style) {
+        BedrockFallbackStyle effective = style != null ? style : BedrockFallbackStyle.HINTS;
         if (!isBedrockPlayer(player)) {
-            return message;
+            return new FallbackOutcome(message, false);
         }
         Locale locale;
         try {
             locale = resolveFallbackLocale(player, localeOverride);
         } catch (BedrockLookupFailed ex) {
-            return message;
+            return new FallbackOutcome(message, false);
         }
-        return applyBedrockFallback(message, locale);
+        if (effective == BedrockFallbackStyle.PLAIN_TEXT) {
+            return new FallbackOutcome(flattenToPlain(message, locale), true);
+        }
+        Component downgraded = applyBedrockFallback(message, locale);
+        return new FallbackOutcome(downgraded, downgraded != message);
+    }
+
+    /**
+     * 整棵 Component 攤成純文字（translatable 先依 locale 解析，保證可讀）。
+     *
+     * <p>永不拋錯：解析或序列化失敗時退回盡力而為的純文字，不中斷發送。</p>
+     */
+    private Component flattenToPlain(Component message, Locale locale) {
+        try {
+            Component resolved =
+                locale == null ? message : GlobalTranslator.render(message, locale);
+            return Component.text(PlainTextComponentSerializer.plainText().serialize(resolved));
+        } catch (Throwable t) {
+            try {
+                return Component.text(PlainTextComponentSerializer.plainText().serialize(message));
+            } catch (Throwable inner) {
+                return Component.text("");
+            }
+        }
     }
 
     /**
      * Floodgate lookup 無法判定時的內部中斷信號；由 {@link #safeFloodgateLanguageCode(Player)} 拋出，
-     * 僅在 {@link #maybeFallback(Player, Component, Locale)} 邊界被攔截以保留原始 Component。
+     * 僅在 {@link #applyFallbackWithOutcome} 邊界被攔截以保留原始 Component。
      */
     private static final class BedrockLookupFailed extends RuntimeException {
         BedrockLookupFailed(Throwable cause) {

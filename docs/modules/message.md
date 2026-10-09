@@ -93,6 +93,26 @@ String text = rendered.text();
 - **`formatFormText(key, vars, locale)` 的模板來源**：指定語系非 `null` 時按該語系分層讀取；舊版固定讀全域模板。單語系服無差異，多語系服屬刻意修正（見 CHANGELOG 行為變更）。
 - **已知限制**：一次渲染會讀兩次 prefix（純文字與富文字視圖各一次）。`reload` 剛好落在兩次讀取之間時，兩種視圖可能拿到不同版本的 prefix；下一次渲染即一致，不需處理。
 
+## 分辨渲染失敗的原因
+
+`render` 只告訴你成功或缺 key。要分辨「語系沒載入」「缺 key」「渲染失敗」時，用 `renderDetailed`（自 AceLib 1.5.0 提供）：
+
+```java
+DetailedRender detailed = messages.renderDetailed("command.reload.done", Map.of("plugin", getName()));
+
+switch (detailed.status()) {
+    case OK -> deliver(detailed.rendered());
+    case KEY_MISSING -> getLogger().warning("缺 key：" + detailed.diagnosis());
+    case LOCALE_NOT_LOADED -> getLogger().warning("語系尚未載入：" + detailed.diagnosis());
+    case RENDER_FAILED -> getLogger().warning("渲染失敗：" + detailed.diagnosis());
+}
+```
+
+- `rendered()` 與 `render` 的結果完全一致（同一份 Component、字串與診斷）；`diagnosis()` 是 enriched 版本：缺 key 時含完整 key 與可用語系（例如 `availableLocales=[en_US, zh_TW]`），語系未載入時含請求語系與預設語系。指定語系檔損壞且其他層也沒有該 key 時為渲染失敗（`RENDER_FAILED`），診斷保留解析錯誤的原因；其他層有該 key 時仍正常回退。
+- 「語系未載入」指整條查找鏈都沒有內容：請求語系與預設語系的磁碟檔都不存在，且內建資源也沒有。任一層有內容但 key 不存在時，屬於缺 key。
+- `availableLocales()` 只掃描磁碟 `lang/` 目錄下的檔案；plugin JAR 內的內建資源無法枚舉，不列入。若服上只有內建資源而沒有磁碟檔，清單為空不代表沒有語系。
+- 指定語系的版本是 `renderDetailed(key, vars, locale)`；`locale` 為 `null` 時跟隨全域目前語系。
+
 ## 顯示標籤與程式識別字
 
 GUI 按鈕與表單選項的顯示文字用 `MessageLabel` 與程式分支用的識別字分開：
@@ -128,6 +148,19 @@ messages.sendConsole("console.started", Map.of());
 ```
 
 缺少訊息 key 時會回傳空字串並記錄 warning，不會中斷其他流程。玩家為 `null` 或已離線時，玩家輸出會安全略過。
+
+## 給外部頻道用的純文字輸出
+
+給 console 與外部頻道用的純文字版本是 `formatPlain`（自 AceLib 1.5.0 提供）：MiniMessage 標記全部去除，只剩可讀文字。
+
+```java
+String plain = messages.formatPlain("broadcast.announcement", Map.of());
+String withPrefix = messages.formatPlain("broadcast.announcement", Map.of(), true);
+```
+
+- `formatPlain(key, vars)` 預設不帶 `message.prefix`（與 `formatConsole` 一致）；第三個參數傳 `true` 才帶前綴。
+- 使用者變數值先跳脫再解析，與 `format` 同規則；解析失敗時盡力去除標記後回傳可讀文字，不中斷執行。
+- 缺 key 回空字串（記 `ACELIB-MSG-001`），讀取失敗回空字串（記 `ACELIB-MSG-003`）。
 
 ## Paper 與 Folia
 
@@ -253,6 +286,22 @@ message.bedrock.fallback.copy_to_clipboard: 'Copy to clipboard: <payload>'
 - 取得 `Player.locale()` 或 `BedrockService.getPlayerInfo` 拋例外時，記錄對應 warning 後退回下一層 locale，發送本身不中斷。
 
 > **Beta 限制**：相容性觀察基於 Folia `26.2-4` + Geyser `2.11.2-b1232` + Floodgate `2.2.5-SNAPSHOT` 的探索性實機測試，結果不作為穩定版保證。Bedrock 的 click 失效與 hover 未驗證狀態以[相容性矩陣](../reference/bedrock-message-compatibility-matrix.md)為準，文件不把觀察寫成穩定承諾。
+
+## 拿發送結果與攤平降級
+
+要知道訊息有沒有送達、有沒有套用基岩降級時，用 `*WithFallbackResult` 入口（自 AceLib 1.5.0 提供）：
+
+```java
+SendResult result = messages.sendChatWithFallbackResult(player, component, null);
+if (result.fallbackApplied()) {
+    // 這次確實對基岩玩家做了降級
+}
+```
+
+- `delivered()` 表示實際呼叫了發送且未拋錯；目標為 `null`、離線、服務停用或發送拋錯時為 `false`。廣播時任一玩家送達即為 `true`。
+- `fallbackApplied()` 表示本次確實套用了基岩降級：提示風格為實際插入可讀提示（無 click 的訊息不算套用），攤平風格為走了基岩分支。此旗標只代表降級已套用到送出的 Component，不代表客戶端已經看見。
+- 四個入口都有不帶與帶風格兩種：`sendChatWithFallbackResult`、`sendActionBarWithFallbackResult`、`sendTitleWithFallbackResult`、`broadcastWithFallbackResult`。
+- 預設風格是提示（`BedrockFallbackStyle.HINTS`），與 AceLib 1.4.0 的 `*WithFallback` 行為一致；舊的 void 入口維持不變。明確傳入 `BedrockFallbackStyle.PLAIN_TEXT` 時，基岩玩家的訊息會整體攤成純文字（無 click、無顏色與裝飾）。
 
 ## 表單文字轉換（FormText）
 

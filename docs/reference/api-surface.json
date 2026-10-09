@@ -1491,6 +1491,24 @@
       "mainCallers": "LifecycleHost；下游 plugin 處理註冊、撤銷與 reload 結果。"
     },
     {
+      "fqcn": "com.smile.acelib.message.BedrockFallbackStyle",
+      "package": "com.smile.acelib.message",
+      "simpleName": "BedrockFallbackStyle",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "基岩降級風格列舉（HINTS 預設提示風格、PLAIN_TEXT 整體攤平純文字）；v1.5.0 新增。",
+      "mainCallers": "MessageService *WithFallbackResult 風格多載；消費者選擇降級風格。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.DetailedRender",
+      "package": "com.smile.acelib.message",
+      "simpleName": "DetailedRender",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "帶狀態的單次渲染結果值型別（RenderedMessage＋RenderStatus＋可用語系＋enriched 診斷）；v1.5.0 新增。",
+      "mainCallers": "MessageService.renderDetailed。"
+    },
+    {
       "fqcn": "com.smile.acelib.message.FormText",
       "package": "com.smile.acelib.message",
       "simpleName": "FormText",
@@ -1554,6 +1572,15 @@
       "mainCallers": "MessageScope 解析器發送；下游自訂語系來源。"
     },
     {
+      "fqcn": "com.smile.acelib.message.RenderStatus",
+      "package": "com.smile.acelib.message",
+      "simpleName": "RenderStatus",
+      "kind": "enum",
+      "classification": "Supported",
+      "reason": "單次渲染狀態分類列舉（OK／LOCALE_NOT_LOADED／KEY_MISSING／RENDER_FAILED）；v1.5.0 新增。",
+      "mainCallers": "DetailedRender.status；MessageService.renderDetailed。"
+    },
+    {
       "fqcn": "com.smile.acelib.message.RenderedMessage",
       "package": "com.smile.acelib.message",
       "simpleName": "RenderedMessage",
@@ -1561,6 +1588,15 @@
       "classification": "Supported",
       "reason": "單次渲染結果（component／text／formText 三視圖＋缺 key／渲染失敗診斷；聊天／ActionBar／GUI／表單共用）。",
       "mainCallers": "MessageService.render；MessageScope 共用發送。"
+    },
+    {
+      "fqcn": "com.smile.acelib.message.SendResult",
+      "package": "com.smile.acelib.message",
+      "simpleName": "SendResult",
+      "kind": "record",
+      "classification": "Supported",
+      "reason": "單次發送結果值型別（是否送達、是否確實套用基岩降級）；v1.5.0 新增。",
+      "mainCallers": "MessageService *WithFallbackResult 入口。"
     },
     {
       "fqcn": "com.smile.acelib.platform.Platform",

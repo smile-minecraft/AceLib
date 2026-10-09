@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：221 個 public 頂層型別
-- Supported：170
+- 總數：225 個 public 頂層型別
+- Supported：174
 - SPI：25
 - Internal：26
 
@@ -270,6 +270,8 @@
 
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
+| `com.smile.acelib.message.BedrockFallbackStyle` | enum | Supported | 基岩降級風格列舉（HINTS 預設提示風格、PLAIN_TEXT 整體攤平純文字）；v1.5.0 新增。 |  | MessageService *WithFallbackResult 風格多載；消費者選擇降級風格。 |
+| `com.smile.acelib.message.DetailedRender` | record | Supported | 帶狀態的單次渲染結果值型別（RenderedMessage＋RenderStatus＋可用語系＋enriched 診斷）；v1.5.0 新增。 |  | MessageService.renderDetailed。 |
 | `com.smile.acelib.message.FormText` | class | Supported | Adventure Component → 基岩表單可安全顯示字串的靜態渲染入口（click/hover 移除、hex 降 16 色、translatable 解析、換行 §r、長度截斷）；下游同一份語系餵聊天與表單。 |  | 消費者；MessageService.formatFormText。 |
 | `com.smile.acelib.message.FormTextOptions` | record | Supported | 表單文字渲染選項值型別（click 提示開關、可見字元上限、locale；defaults 為 false/0/null）。 |  | FormText.render；MessageService.formatFormText。 |
 | `com.smile.acelib.message.MessageLabel` | record | Supported | 顯示標籤值型別（穩定程式識別字 id＋渲染顯示文字 text；缺 key 時文字退回 id）。 |  | MessageScope.label；GUI 按鈕／表單選項顯示。 |
@@ -277,7 +279,9 @@
 | `com.smile.acelib.message.MessageScopes` | class | Supported | 插件作用域訊息服務統一工廠（per-plugin 隔離建立與清理；重複建立以 ACELIB-MSG-006 拒絕）。 |  | 消費者 onEnable／onDisable。 |
 | `com.smile.acelib.message.MessageService` | class | Supported | 訊息格式化/發送服務；v1 穩定。 |  | 消費者；LangManager。 |
 | `com.smile.acelib.message.PlayerLocaleResolver` | interface | Supported | 玩家語系解析器（可替換；預設跟隨 Player.locale；不強制偏好儲存方式）。 |  | MessageScope 解析器發送；下游自訂語系來源。 |
+| `com.smile.acelib.message.RenderStatus` | enum | Supported | 單次渲染狀態分類列舉（OK／LOCALE_NOT_LOADED／KEY_MISSING／RENDER_FAILED）；v1.5.0 新增。 |  | DetailedRender.status；MessageService.renderDetailed。 |
 | `com.smile.acelib.message.RenderedMessage` | record | Supported | 單次渲染結果（component／text／formText 三視圖＋缺 key／渲染失敗診斷；聊天／ActionBar／GUI／表單共用）。 |  | MessageService.render；MessageScope 共用發送。 |
+| `com.smile.acelib.message.SendResult` | record | Supported | 單次發送結果值型別（是否送達、是否確實套用基岩降級）；v1.5.0 新增。 |  | MessageService *WithFallbackResult 入口。 |
 
 ### com.smile.acelib.platform
 

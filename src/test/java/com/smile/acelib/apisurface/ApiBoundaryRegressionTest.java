@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-     void canonicalTopLevelInventoryIs221() throws IOException {
+     void canonicalTopLevelInventoryIs225() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -253,17 +253,26 @@ class ApiBoundaryRegressionTest {
         // 自訂引數型別任務再 +1 SPI（→ 221）：
         //   - com.smile.acelib.command.ArgumentTypeFactory（interface, SPI）—
         //     自訂引數選用 Brigadier 型別的公開 SPI（自 1.5.0 起公開，既有方法簽章與語意不變）
+        // 訊息第四階段任務再 +4 Supported（→ 225）：
+        //   - com.smile.acelib.message.BedrockFallbackStyle（enum, Supported）—
+        //     基岩降級風格（HINTS 預設／PLAIN_TEXT 攤平）
+        //   - com.smile.acelib.message.DetailedRender（record, Supported）—
+        //     帶狀態的單次渲染結果
+        //   - com.smile.acelib.message.RenderStatus（enum, Supported）—
+        //     單次渲染狀態分類
+        //   - com.smile.acelib.message.SendResult（record, Supported）—
+        //     單次發送結果（是否送達／是否套用基岩降級）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 170,
-            "Supported 數量偏離 canonical 170，實際=" + supported);
+        assertTrue(supported == 174,
+            "Supported 數量偏離 canonical 174，實際=" + supported);
         assertTrue(spi == 25,
             "SPI 數量偏離 canonical 25，實際=" + spi);
         assertTrue(internal == 26,
             "Internal 數量偏離 canonical 26，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 221,
-            "top-level inventory 偏離 canonical 221，實際=" + types.size());
+        assertTrue(types.size() == 225,
+            "top-level inventory 偏離 canonical 225，實際=" + types.size());
     }
 
     @Test

@@ -1597,6 +1597,22 @@
       "method status() : com.smile.acelib.lifecycle.LifecycleHost$Status",
       "method toString() : java.lang.String"
     ],
+    "com.smile.acelib.message.BedrockFallbackStyle": [
+      "field HINTS : com.smile.acelib.message.BedrockFallbackStyle",
+      "field PLAIN_TEXT : com.smile.acelib.message.BedrockFallbackStyle",
+      "method valueOf(java.lang.String) : com.smile.acelib.message.BedrockFallbackStyle",
+      "method values() : com.smile.acelib.message.BedrockFallbackStyle[]"
+    ],
+    "com.smile.acelib.message.DetailedRender": [
+      "ctor(com.smile.acelib.message.RenderedMessage,com.smile.acelib.message.RenderStatus,java.util.List<java.util.Locale>,java.lang.String)",
+      "method availableLocales() : java.util.List<java.util.Locale>",
+      "method diagnosis() : java.lang.String",
+      "method equals(java.lang.Object) : boolean",
+      "method hashCode() : int",
+      "method rendered() : com.smile.acelib.message.RenderedMessage",
+      "method status() : com.smile.acelib.message.RenderStatus",
+      "method toString() : java.lang.String"
+    ],
     "com.smile.acelib.message.FormText": [
       "method render(net.kyori.adventure.text.Component) : java.lang.String",
       "method render(net.kyori.adventure.text.Component,com.smile.acelib.message.FormTextOptions) : java.lang.String"
@@ -1654,34 +1670,54 @@
       "method broadcast(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method broadcast(net.kyori.adventure.text.Component) : void",
       "method broadcastWithFallback(net.kyori.adventure.text.Component,java.util.Locale) : void",
+      "method broadcastWithFallbackResult(net.kyori.adventure.text.Component,java.util.Locale) : com.smile.acelib.message.SendResult",
+      "method broadcastWithFallbackResult(net.kyori.adventure.text.Component,java.util.Locale,com.smile.acelib.message.BedrockFallbackStyle) : com.smile.acelib.message.SendResult",
       "method format(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : java.lang.String",
       "method formatComponent(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : net.kyori.adventure.text.Component",
       "method formatConsole(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : java.lang.String",
       "method formatFormText(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,com.smile.acelib.message.FormTextOptions) : java.lang.String",
       "method formatFormText(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : java.lang.String",
+      "method formatPlain(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : java.lang.String",
+      "method formatPlain(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,boolean) : java.lang.String",
       "method getCapability() : com.smile.acelib.platform.PlatformCapability",
       "method getPlatform() : com.smile.acelib.platform.Platform",
       "method parseMiniMessage(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : net.kyori.adventure.text.Component",
       "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : com.smile.acelib.message.RenderedMessage",
       "method render(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : com.smile.acelib.message.RenderedMessage",
+      "method renderDetailed(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : com.smile.acelib.message.DetailedRender",
+      "method renderDetailed(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.util.Locale) : com.smile.acelib.message.DetailedRender",
       "method sendActionBar(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage) : void",
       "method sendActionBar(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendActionBar(org.bukkit.entity.Player,net.kyori.adventure.text.Component) : void",
       "method sendActionBarWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : void",
+      "method sendActionBarWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : com.smile.acelib.message.SendResult",
+      "method sendActionBarWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale,com.smile.acelib.message.BedrockFallbackStyle) : com.smile.acelib.message.SendResult",
       "method sendChat(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage) : void",
       "method sendChat(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendChat(org.bukkit.entity.Player,net.kyori.adventure.text.Component) : void",
       "method sendChatWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : void",
+      "method sendChatWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale) : com.smile.acelib.message.SendResult",
+      "method sendChatWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,java.util.Locale,com.smile.acelib.message.BedrockFallbackStyle) : com.smile.acelib.message.SendResult",
       "method sendConsole(java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendTitle(org.bukkit.entity.Player,com.smile.acelib.message.RenderedMessage,com.smile.acelib.message.RenderedMessage) : void",
       "method sendTitle(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendTitle(org.bukkit.entity.Player,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>,java.lang.String,java.util.Map<java.lang.String, java.lang.Object>) : void",
       "method sendTitle(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component) : void",
-      "method sendTitleWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component,java.util.Locale) : void"
+      "method sendTitleWithFallback(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component,java.util.Locale) : void",
+      "method sendTitleWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component,java.util.Locale) : com.smile.acelib.message.SendResult",
+      "method sendTitleWithFallbackResult(org.bukkit.entity.Player,net.kyori.adventure.text.Component,net.kyori.adventure.text.Component,java.util.Locale,com.smile.acelib.message.BedrockFallbackStyle) : com.smile.acelib.message.SendResult"
     ],
     "com.smile.acelib.message.PlayerLocaleResolver": [
       "method playerLocale(java.util.Locale) : com.smile.acelib.message.PlayerLocaleResolver",
       "method resolve(org.bukkit.entity.Player) : java.util.Locale"
+    ],
+    "com.smile.acelib.message.RenderStatus": [
+      "field KEY_MISSING : com.smile.acelib.message.RenderStatus",
+      "field LOCALE_NOT_LOADED : com.smile.acelib.message.RenderStatus",
+      "field OK : com.smile.acelib.message.RenderStatus",
+      "field RENDER_FAILED : com.smile.acelib.message.RenderStatus",
+      "method valueOf(java.lang.String) : com.smile.acelib.message.RenderStatus",
+      "method values() : com.smile.acelib.message.RenderStatus[]"
     ],
     "com.smile.acelib.message.RenderedMessage": [
       "ctor(java.lang.String,java.util.Locale,net.kyori.adventure.text.Component,java.lang.String,java.lang.String,boolean,java.lang.String)",
@@ -1694,6 +1730,14 @@
       "method locale() : java.util.Locale",
       "method missing() : boolean",
       "method text() : java.lang.String",
+      "method toString() : java.lang.String"
+    ],
+    "com.smile.acelib.message.SendResult": [
+      "ctor(boolean,boolean)",
+      "method delivered() : boolean",
+      "method equals(java.lang.Object) : boolean",
+      "method fallbackApplied() : boolean",
+      "method hashCode() : int",
       "method toString() : java.lang.String"
     ],
     "com.smile.acelib.platform.Platform": [
