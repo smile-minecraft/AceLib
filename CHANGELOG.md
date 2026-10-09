@@ -7,6 +7,8 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 ### 修補內容（第二階段 行為缺陷）
 
 - 設定繫結的 `double` 欄位一律拒絕 `NaN` 與正負無限大，不論有無 `@ConfigRange`；錯誤沿用 `ACELIB-CFG-007` 並帶完整欄位路徑，有範圍時訊息一併帶出允許範圍。有限值的範圍語意不變。
+- 行為變更：`MessageService` 純文字視圖（`RenderedMessage.text()`／`format()`，含字串發送多載）與富文字視圖共用安全替換，變數值裡的 `<...>` 會先跳脫（`MiniMessage.escapeTags`）再套用模板，模板本身的標記不受影響。玩家名稱或自訂文字帶 `<...>` 時純文字輸出與 1.4.0 不同（原文→跳脫字面）。
+- `render(key, vars, locale)` 的 `message.prefix` 改取指定語系（缺時退回預設語系），此前固定取全域目前語系。`formatConsole` 維持原文不跳脫。
 
 ## [1.4.0] - 2026-10-08
 

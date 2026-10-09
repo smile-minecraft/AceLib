@@ -466,10 +466,11 @@ public final class MessageService {
             return new RenderedMessage(key, effective, Component.empty(), "", "",
                 false, "[" + ERR_FORMAT_ERROR + "] null body for key=" + key);
         }
-        // 純文字視圖：與 format() 同規則（不跳脫使用者值），保證兩者輸出一致。
-        String text = prefixOf() + plainSubstitute(template, vars);
-        // 富文字視圖：使用者值先跳脫再解析（防 MiniMessage 注入），與 formatComponent 同規則。
+        // 純文字視圖：與富文字視圖共用同一份安全替換結果（使用者值已跳脫），
+        // 保證兩者輸出一致；模板本身的 MiniMessage 標記保留不解析。
         String substituted = safeSubstitute(template, vars);
+        String text = prefixOf(effective) + substituted;
+        // 富文字視圖：沿用同一份替換結果再解析（防 MiniMessage 注入），與 formatComponent 同規則。
         Component parsed = deserializeOrNull(substituted, null, ERR_FORMAT_ERROR,
             "render parse failed for key=" + key);
         String diagnosis = "";
@@ -481,51 +482,21 @@ public final class MessageService {
         } else {
             content = parsed;
         }
-        Component component = applyPrefixIfNeeded(content, true);
+        Component component = applyPrefixIfNeeded(content, effective);
         String formText = FormText.renderInternal(content, formLocale,
             clickHints, maxLength, this::buildBedrockHint);
         return new RenderedMessage(key, effective, component, text, formText, false, diagnosis);
     }
 
     /**
-     * 不跳脫的 {@code {var}} 替換（與 {@link LangManager} 規則一致，供純文字視圖使用）。
+     * 指定語系的 prefix 字串（無 prefix、查詢失敗或 mock 回傳 null 時為空字串）。
+     *
+     * <p>按渲染語系分層讀取（與本體模板同規則），不固定讀全域目前語系。</p>
      */
-    private static String plainSubstitute(String template, Map<String, Object> vars) {
-        if (vars == null || vars.isEmpty()) {
-            return template;
-        }
-        StringBuilder sb = new StringBuilder(template.length() + 32);
-        int i = 0;
-        int len = template.length();
-        while (i < len) {
-            char c = template.charAt(i);
-            if (c == '{') {
-                int end = template.indexOf('}', i + 1);
-                if (end > 0) {
-                    String varKey = template.substring(i + 1, end);
-                    if (vars.containsKey(varKey)) {
-                        sb.append(vars.get(varKey));
-                        i = end + 1;
-                        continue;
-                    }
-                    sb.append(template, i, end + 1);
-                    i = end + 1;
-                    continue;
-                }
-            }
-            sb.append(c);
-            i++;
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 目前 prefix 字串（無 prefix、查詢失敗或 mock 回傳 null 時為空字串）。
-     */
-    private String prefixOf() {
+    private String prefixOf(Locale locale) {
         Optional<String> prefix;
         try {
-            prefix = lang.get(PREFIX_KEY);
+            prefix = lang.get(locale, PREFIX_KEY);
         } catch (Throwable t) {
             return "";
         }
@@ -1548,11 +1519,8 @@ public final class MessageService {
     // Component 管線內部 helper
     // -----------------------------------------------------------------
 
-    private Component applyPrefixIfNeeded(Component component, boolean applyPrefix) {
-        if (!applyPrefix) {
-            return component;
-        }
-        Optional<String> prefix = lang.get(PREFIX_KEY);
+    private Component applyPrefixIfNeeded(Component component, Locale locale) {
+        Optional<String> prefix = lang.get(locale, PREFIX_KEY);
         if (prefix.isEmpty() || prefix.get().isEmpty()) {
             return component;
         }

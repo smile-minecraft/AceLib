@@ -85,11 +85,13 @@ String text = rendered.text();
 
 同一實例可直接餵發送入口，不重讀語言檔：`sendChat(player, rendered)`、`sendActionBar(player, rendered)`、`sendTitle(player, title, subtitle)`、`broadcast(rendered)`。缺 key 的渲染結果不會發送（診斷已在渲染時記錄）。
 
-`render(key, vars, locale)` 以指定語系渲染；`locale` 為 `null` 時跟隨全域目前語系。注意兩點邊界：
+`render(key, vars, locale)` 以指定語系渲染；`locale` 為 `null` 時跟隨全域目前語系。注意以下邊界：
 
 - **舊字串入口維持舊語意**：`sendChat(player, key, vars)` 等字串多載仍送 `format()` 字串（經 `player.sendMessage(String)`，MiniMessage 不解析），與歷史行為一致。「共用渲染」只對 `render`／`RenderedMessage`／scope 路徑成立；同一模板在舊字串路徑與新 Component 路徑的顯示可能不同，這是沿用既有行為，不是回歸。
-- **prefix 取自全域語系**：`render(locale)` 的模板按指定語系分層讀取，但 `message.prefix` 固定讀全域目前語系，不隨指定語系切換。
+- **prefix 跟隨渲染語系**：`render(locale)` 的模板與 `message.prefix` 都按指定語系分層讀取（指定語系缺 prefix 時退回預設語系，與模板同規則）。`locale` 為 `null` 時兩者都跟隨全域目前語系，但讀取路徑不同：本文讀全域目前語系檔，prefix 仍走分層讀取；目前語系檔缺 prefix 而預設語系檔有時，prefix 會多一層磁碟回退拿到預設值，這與 1.4.0 固定讀全域檔不同。
+- **純文字視圖的變數值會被跳脫（行為變更）**：`text`／`format` 與富文字視圖共用同一份安全替換結果，使用者變數值裡的 `<...>` 會先經 `MiniMessage.escapeTags` 跳脫再套入模板，模板本身的標記（如 `<red>`、`<gradient>`）不受影響。玩家名稱或自訂文字帶 `<...>` 時，純文字輸出會和 AceLib 1.4.0 不同：以前是原文，現在是跳脫後的字面寫法（例如 `\<red>`）。下游若曾依賴「純文字原文透出」做二次解析或字串比對，升級後要改用跳脫後的字面比對，或改走富文字／表單安全字串視圖。`formatConsole` 走另一條替換（`LangManager` 內部，不經共用渲染），維持原文不跳脫。
 - **`formatFormText(key, vars, locale)` 的模板來源**：指定語系非 `null` 時按該語系分層讀取；舊版固定讀全域模板。單語系服無差異，多語系服屬刻意修正（見 CHANGELOG 行為變更）。
+- **已知限制**：一次渲染會讀兩次 prefix（純文字與富文字視圖各一次）。`reload` 剛好落在兩次讀取之間時，兩種視圖可能拿到不同版本的 prefix；下一次渲染即一致，不需處理。
 
 ## 顯示標籤與程式識別字
 
@@ -151,7 +153,7 @@ messages.sendTitle(player, title, subtitle);
 messages.broadcast(c);
 ```
 
-- `formatComponent(key, vars)`：讀取 raw MiniMessage 模板並保留 `{var}`，由 AceLib 做安全替換（使用者值會先跳脫，避免值中的 `<tag>` 被當成 MiniMessage 標籤注入），再反序列化為 Component，並套用 `message.prefix`。
+- `formatComponent(key, vars)`：讀取 raw MiniMessage 模板並保留 `{var}`，由 AceLib 做安全替換（使用者值會先跳脫，避免值中的 `<tag>` 被當成 MiniMessage 標籤注入），再反序列化為 Component，並套用 `message.prefix`。純文字視圖（`text`／`format`）共用同一份替換結果，只是保留模板標記不解析。
 - `parseMiniMessage(input, vars)`：直接解析 MiniMessage 字串；`vars` 以 `<key>` placeholder 形式、一律 `unparsed` 注入，使用者值不會被解析成標籤或 click/hover 互動。
 - `sendChat` / `sendActionBar` / `sendTitle` / `broadcast`（Component 多載）：直接送出原始 Component，**不**套 prefix、**不**執行任何 Bedrock fallback；prefix 與 key 模板請使用 `formatComponent`。
 
