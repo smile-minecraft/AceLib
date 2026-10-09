@@ -85,7 +85,7 @@ public final class CommandProbeCases {
             "材質解析為 Material");
 
         // 第三階段：省略引數＋重複引數（同一 give 子指令：
-        // [player] [amount 預設1] [extra:material...]）。
+        // 依序為 player、amount（預設 1）、可重複的 extra 材質）。
         add(cases, "give-default", GROUP_PARSE, "give Steve",
             "省略 amount → 預設 1（source=default），重複引數零個 → notes=[]；"
                 + "回 ok player=Steve amount=1 source=default notes=[]");
