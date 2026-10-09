@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-     void canonicalTopLevelInventoryIs220() throws IOException {
+     void canonicalTopLevelInventoryIs221() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -250,17 +250,20 @@ class ApiBoundaryRegressionTest {
         //   - LifecycleHost（interface）— 下游模組生命週期管理入口
         //   - LifecycleModule（record）— 下游模組與相依關係宣告
         //   - LifecycleResult（record）— 操作狀態與結構化問題
+        // 自訂引數型別任務再 +1 SPI（→ 221）：
+        //   - com.smile.acelib.command.ArgumentTypeFactory（interface, SPI）—
+        //     自訂引數選用 Brigadier 型別的公開 SPI（自 1.5.0 起公開，既有方法簽章與語意不變）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
         assertTrue(supported == 170,
             "Supported 數量偏離 canonical 170，實際=" + supported);
-        assertTrue(spi == 24,
-            "SPI 數量偏離 canonical 24，實際=" + spi);
+        assertTrue(spi == 25,
+            "SPI 數量偏離 canonical 25，實際=" + spi);
         assertTrue(internal == 26,
             "Internal 數量偏離 canonical 26，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 220,
-            "top-level inventory 偏離 canonical 220，實際=" + types.size());
+        assertTrue(types.size() == 221,
+            "top-level inventory 偏離 canonical 221，實際=" + types.size());
     }
 
     @Test

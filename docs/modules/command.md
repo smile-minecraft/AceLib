@@ -12,6 +12,7 @@ Command 模組公開 `CommandSpec`、`SubCommandSpec`、`CommandContext`、`Comm
 - [型別化指令框架](#型別化指令框架)
 - [註冊生命週期與相容對照](#註冊生命週期與相容對照)
 - [型別化引數](#型別化引數)
+- [自訂引數型別](#自訂引數型別)
 - [補全支援矩陣](#補全支援矩陣)
 - [錯誤在地化](#錯誤在地化)
 - [指令冷卻的清理時機](#指令冷卻的清理時機)
@@ -141,6 +142,34 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 Brigadier 樹送給客戶端的是 vanilla world 型別，它只接受**維度鍵**；而 `Bukkit.getWorld(String)` 認的是 **Bukkit 世界名**。主世界在這兩套命名下分別是 `overworld` 與 `world`，若只認後者，客戶端已驗證通過的輸入會在解析階段被拒。維度鍵為小寫規範形式，解析時也會以小寫重試，讓大小寫不敏感語意一致。
 
 補全仍回傳 Bukkit 世界名（`world.suggest("")` 列出已載入世界的名稱），因為那是下游 handler 拿到 `World` 後可直接使用的名稱。
+
+## 自訂引數型別
+
+下游以 `CommandArgument.custom` 只需解析函式與補全函式就能建立自己的引數型別（自 AceLib 1.5.0 起提供）。解析函式接收原始字串與 `CommandMessages`，回傳型別值或擲出帶在地化訊息的 `CommandException`；補全函式接收前綴，回傳候選清單（大小寫不敏感比對與前綴過濾由實作自行完成）。
+
+```java
+CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>",
+    (raw, messages) -> {
+        try {
+            double value = Double.parseDouble(raw);
+            if (!Double.isNaN(value) && !Double.isInfinite(value)
+                && value >= 0 && value <= 100) {
+                return value / 100.0;
+            }
+        } catch (NumberFormatException ignored) {
+            // 落到下方的統一錯誤，不讓數字格式錯誤逃逸為未在地化例外。
+        }
+        throw new CommandException(CommandErrorKind.INVALID_ARGUMENT,
+            messages.invalidArgument("rate", raw, "expected <number> in 0-100"),
+            Map.of("arg", "rate", "value", raw));
+    },
+    prefix -> List.of("25", "50", "75", "100").stream()
+        .filter(option -> option.startsWith(prefix)).toList());
+```
+
+自訂引數一律是單 token 開放式引數：`parse` 拒絕含空白的輸入（`ACELIB-CMD-015`）；Brigadier 型別固定為 `stringWord`，編譯為 argument 節點；`resolve` 取出原始字串後走同一個解析函式（此時取預設英文訊息，接受的值一致）。完整可編譯的寫法見 `examples/consumer-plugin` 的 `CommandV150Example`（外部 `com.example` 套件，裸數字百分比，註冊的指令在兩條路徑都能執行）。
+
+值的字元有限制：Brigadier `word` 型別只接受 `[0-9A-Za-z_-.+]`（`word` 不處理引號形式，超出該字元集的值連同引號形式一併被拒）。超出該字元集的值只在傳統路徑可用，Brigadier 路徑會以標準字元集錯誤拒絕；兩條路徑都要走的值請用字元集內的寫法。
 
 ## 補全支援矩陣
 

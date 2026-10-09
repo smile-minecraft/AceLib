@@ -62,6 +62,16 @@
       "method isBedrockPlayer(java.util.UUID) : boolean",
       "method shutdown() : void"
     ],
+    "com.smile.acelib.command.ArgumentTypeFactory": [
+      "method boundedDouble(double,double) : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method boundedInt(int,int) : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method duration() : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method material() : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method offlinePlayer() : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method player() : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method stringWord() : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method world() : com.mojang.brigadier.arguments.ArgumentType<?>"
+    ],
     "com.smile.acelib.command.Arguments": [
       "method doubleArg(java.lang.String,double,double) : com.smile.acelib.command.CommandArgument<java.lang.Double>",
       "method duration(java.lang.String) : com.smile.acelib.command.CommandArgument<java.lang.Long>",
@@ -106,6 +116,7 @@
     "com.smile.acelib.command.CommandArgument": [
       "method bedrockVisible() : boolean",
       "method brigadierType(com.smile.acelib.command.ArgumentTypeFactory) : com.mojang.brigadier.arguments.ArgumentType<?>",
+      "method custom(java.lang.String,java.lang.String,com.smile.acelib.command.CommandArgument$Parser<T>,com.smile.acelib.command.CommandArgument$Suggester) : com.smile.acelib.command.CommandArgument<T>",
       "method fixedOptions() : java.util.List<java.lang.String>",
       "method isFixedOptions() : boolean",
       "method name() : java.lang.String",

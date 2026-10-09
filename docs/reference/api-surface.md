@@ -12,9 +12,9 @@
 
 ## 統計
 
-- 總數：220 個 public 頂層型別
+- 總數：221 個 public 頂層型別
 - Supported：170
-- SPI：24
+- SPI：25
 - Internal：26
 
 ## 分類明細
@@ -40,6 +40,7 @@
 | Type | Kind | Classification | Reason | Retention | Main callers |
 | --- | --- | --- | --- | --- | --- |
 | `com.smile.acelib.command.AceLibStatusHandler` | class | Internal | 內部 /acelib status 指令處理器，封裝 console/玩家分流與 region-safe 派送；非消費者 API。 | AceLibPlugin（com.smile.acelib）跨 package 建構註冊 /acelib status；v1 前保留 public 供既有組裝鏈使用。 | BukkitCommandBridge。 |
+| `com.smile.acelib.command.ArgumentTypeFactory` | interface | SPI | 自訂引數選用 Brigadier 型別的公開 SPI；下游實作 CommandArgument 時在 brigadierType 內選用對應型別；自 AceLib 1.5.0 起公開，既有方法簽章與語意不變。 |  | CommandArgument.brigadierType；TypedCommand.toBrigadierNode；消費者自訂引數。 |
 | `com.smile.acelib.command.Arguments` | class | Supported | 型別化引數工廠（玩家／離線玩家／整數／小數／時間長度／世界／列舉／材質，具解析驗證與自動補全）；v1.4.0 新增。 |  | TypedSubCommand；消費者組裝引數。 |
 | `com.smile.acelib.command.BrigadierDispatch` | interface | SPI | Brigadier 執行委派回呼（來源＋重建 args 交回 dispatch，維持單一真相來源）；v1.4.0 新增。 |  | TypedCommand.toBrigadierNode；BrigadierRegistrar 內部實作。 |
 | `com.smile.acelib.command.BrigadierRegistrar` | class | Supported | 型別化指令註冊器（內部 registry＋Brigadier 雙寫入；下游正式組裝入口，不再需要 plugin.yml 宣告）；v1.4.0 新增。 |  | 消費者 onEnable 註冊；AceLibPlugin 管理指令。 |

@@ -11,6 +11,10 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - `render(key, vars, locale)` 的 `message.prefix` 改取指定語系（缺時退回預設語系），此前固定取全域目前語系。`formatConsole` 維持原文不跳脫。
 - 修正 `PlayerDataStores.fromDataStore(...)` 轉接的失敗回復：`applyChanges`／`deletePlayer` 在 `save()` 失敗時把記憶體樹、欄位存在性與 `revision` 還原為操作前並以 `ACELIB-DATA-008` 回報（還原失敗掛 `suppressed`）；缺席刪除改為不觸發 `save()` 的 no-op；寫入改以點分隔路徑存純值（原先存入 `Record` 節點會被 `ACELIB-DATA-006` 拒絕）。`revision` 僅對同一轉接實例有效，不持久化；不承諾跨行程原子性，亦不對 delegate 已部分落盤做逆轉。還原以整節點深拷貝寫回，保留頂層 null、空節點與字面點號鍵。
 
+### 新增內容（第三階段 型別化指令的引數）
+
+- 下游可以實作自己的引數型別：`ArgumentTypeFactory` 公開為 SPI，`CommandArgument.custom` 只需解析函式與補全函式即可建立引數（自訂引數為單 token 開放式引數，Brigadier 型別固定為 `stringWord`）；consumer 範例新增外部套件實作。
+
 ## [1.4.0] - 2026-10-08
 
 v1.4.0 新增生命週期宿主、每玩家顯示、測試套件與測試 JAR、任務完成語意與作用域、事件處理完成後的操作、插件作用域訊息與在地化、插件隔離介面流程與元件、設定啟動快照與型別綁定、型別化指令框架、逐玩家儲存與玩家資料模型，以及外部整合門面；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.4.0.jar` 與 `AceLib-1.4.0-test-fixtures.jar`，管理員可直接下載，或從 `v1.4.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.4.0`）取得。

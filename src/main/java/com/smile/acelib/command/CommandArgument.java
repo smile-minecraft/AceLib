@@ -34,11 +34,91 @@ import java.util.Objects;
  * （{@code ACELIB-CMD-015}）：Brigadier 執行委派依原始輸入空白切分重建
  * args，含空白的 token 會破壞切分與解析的一致性。</p>
  *
+ * <h2>自訂引數型別</h2>
+ * <p>下游以 {@link #custom} 只需解析函式與補全函式即可建立自己的引數型別；
+ * 自訂引數一律是單 token 開放式引數（Brigadier 型別固定為
+ * {@code stringWord}）。自 AceLib 1.5.0 起提供。</p>
+ *
  * @param <T> 解析後的型別值
  * @see Arguments
  * @since 1.4.0
  */
 public interface CommandArgument<T> {
+
+    /**
+     * 自訂引數的解析函式。
+     *
+     * @param <T> 解析後的型別值
+     * @since 1.5.0
+     */
+    @FunctionalInterface
+    interface Parser<T> {
+
+        /**
+         * 以指定訊息表把原始字串解析為型別值。
+         *
+         * @param raw      玩家輸入的原始字串；不可為 null（已通過單 token 檢查）
+         * @param messages 錯誤訊息表；永不為 null（呼叫端傳 null 時框架已換為預設英文）
+         * @return 解析後的型別值；永不為 null
+         * @throws CommandException 解析失敗（建議 {@code ACELIB-CMD-015}；
+         *         訊息經 {@code messages} 產生以走在地化）
+         */
+        T parse(String raw, CommandMessages messages);
+    }
+
+    /**
+     * 自訂引數的補全函式。
+     *
+     * @since 1.5.0
+     */
+    @FunctionalInterface
+    interface Suggester {
+
+        /**
+         * 列出符合前綴的候選。
+         *
+         * <p>大小寫不敏感比對、前綴過濾由實作自行完成；框架不再二次過濾，
+         * 回傳即為兩條路徑共用的建議清單。</p>
+         *
+         * @param prefix 已輸入前綴；不可為 null
+         * @return 符合前綴的候選（不可變，可能為空）；永不為 null
+         */
+        List<String> suggest(String prefix);
+    }
+
+    /**
+     * 以解析函式與補全函式建立自訂引數（下游實作自己的引數型別的入口）。
+     *
+     * <p>建成實例的行為：</p>
+     * <ul>
+     *   <li>傳統路徑 {@code parse} 先過單 token 不變條件
+     *      （含空白即拋 {@code ACELIB-CMD-015}），再委派給 {@code parser}</li>
+     *   <li>{@code brigadierType} 固定回傳 {@code factory.stringWord()}
+     *      （自訂引數是單 token 開放式引數，編譯為 argument 節點）</li>
+     *   <li>{@code resolve} 從 Brigadier context 取出原始字串後走同一個
+     *       {@code parser}；此時無訊息表在作用域，取預設英文，
+     *       接受的值與傳統路徑一致</li>
+     * </ul>
+     *
+     * <p>兩條路徑的值一致，但可接受的字元受 Brigadier {@code word} 型別限制
+     * （{@code [0-9A-Za-z_-.+]}；{@code word} 不處理引號形式，超出該字元集
+     * 的值連同引號形式一併被拒）；超出該字元集的值只在傳統路徑可用。</p>
+     *
+     * @param name       引數名；不可為 null 或空字串
+     * @param usageToken help／錯誤提示用的 token，例如 {@code <rate:percent>}；
+     *                   不可為 null 或空字串
+     * @param parser     解析函式；不可為 null
+     * @param suggester  補全函式；不可為 null
+     * @param <T>        解析後的型別值
+     * @return 自訂引數；永不為 null
+     * @throws NullPointerException 當任一參數為 null
+     * @throws IllegalArgumentException 當 {@code name} 或 {@code usageToken} 為空字串
+     * @since 1.5.0
+     */
+    static <T> CommandArgument<T> custom(String name, String usageToken,
+                                         Parser<T> parser, Suggester suggester) {
+        return new CustomArgument<>(name, usageToken, parser, suggester);
+    }
 
     /** 引數名（Brigadier 節點名、usage token、錯誤 vars 共用）。 */
     String name();

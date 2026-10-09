@@ -73,6 +73,15 @@
       "retention": "AceLibPlugin（com.smile.acelib）跨 package 建構註冊 /acelib status；v1 前保留 public 供既有組裝鏈使用。"
     },
     {
+      "fqcn": "com.smile.acelib.command.ArgumentTypeFactory",
+      "package": "com.smile.acelib.command",
+      "simpleName": "ArgumentTypeFactory",
+      "kind": "interface",
+      "classification": "SPI",
+      "reason": "自訂引數選用 Brigadier 型別的公開 SPI；下游實作 CommandArgument 時在 brigadierType 內選用對應型別；自 AceLib 1.5.0 起公開，既有方法簽章與語意不變。",
+      "mainCallers": "CommandArgument.brigadierType；TypedCommand.toBrigadierNode；消費者自訂引數。"
+    },
+    {
       "fqcn": "com.smile.acelib.command.Arguments",
       "package": "com.smile.acelib.command",
       "simpleName": "Arguments",
