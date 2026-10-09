@@ -92,9 +92,44 @@ TypedCommand shop = TypedCommand.builder("shop")
 registrar.register(shop);   // 在 onEnable 期間呼叫一次
 ```
 
-`ctx.get(arg)` 以**引數實例**為 key（不是字串名），因此同一個 builder 產生的實例可安全重複使用；傳入未參與本次解析的實例會拋 `IllegalArgumentException`。引數一律必填（`minArgs` 與 `maxArgs` 都等於引數數），零引數子指令則直接執行 handler。
+`ctx.get(arg)` 以**引數實例**為 key（不是字串名），因此同一個 builder 產生的實例可安全重複使用；傳入未參與本次解析的實例會拋 `IllegalArgumentException`。全必要宣告時 `minArgs` 與 `maxArgs` 都等於引數數；尾段引數也可以省略或重複（見下一節），零引數子指令則直接執行 handler。
 
 一個子指令名稱只能有一組引數：`TypedCommand` 與 `CommandSpec` 都在建構時拒絕重複的子指令名稱（`IllegalArgumentException: duplicate subcommand name`），同一個子指令名稱不會出現兩組不同的引數配置。需要多種參數形狀時，請拆成不同名稱的子指令。
+
+### 省略引數與重複引數
+
+尾段引數可以省略或重複，不用為每種參數形狀各寫一個子指令（AceLib 1.5.0 起提供）：
+
+```java
+CommandArgument<Material> itemArg = Arguments.material("item");
+CommandArgument<Integer> amountArg = Arguments.intArg("amount", 1, 64);
+CommandArgument<String> tagArg = Arguments.fixed("tag", "red", "rare");
+
+TypedCommand shop = TypedCommand.builder("shop")
+    .subcommand(TypedSubCommand.builder("give")
+        .argument(itemArg)
+        .optional(amountArg, sender -> 1)
+        .repeatable(tagArg)
+        .executes(ctx -> {
+            Material item = ctx.get(itemArg);
+            int amount = ctx.get(amountArg);        // 省略時為預設值
+            List<String> tags = ctx.getList(tagArg); // 零個為空 list，不可變
+        })
+        .build())
+    .build();
+```
+
+宣告有三條限制，違反時建構直接拒絕並說明原因：省略引數必須是連續尾段（必要引數不得接在後面）；重複引數只能有一個且必須是最後一個（後面不得再有引數）。
+
+執行時的規則：
+
+- 已提供的值先填滿省略引數，剩下的才歸重複引數；位置語法不能跳過中間引數，想跳過省略引數就必須明確給值。
+- 省略時預設值依本次執行的 sender 計算一次，有提供值時不計算，也不跨執行快取。依 sender 決定的預設（例如線上玩家預設為自己）算不出來時（例如 console），提供者應拋指令例外，由回覆出口走在地化錯誤，不靜默換成別的值。
+- 重複引數零個合法；`get(重複引數)` 與 `getList(單值引數)` 都會拒絕並指引對方。
+- 用法字串自動標示形狀：省略加中括號、重複加省略號（自行指定用法字串時以指定的為準）。
+- Brigadier 樹把重複引數編譯為 greedy 尾節點：無上限承接，執行時同樣切分重建、逐個解析。客戶端不做逐元素驗證，非法值由伺服器端回在地化錯誤（取捨比照 `bigDecimal` 的字串單詞節點）。
+- 省略引數在 Brigadier 樹一律是 stringWord 開放節點（必要引數才用各自的 vanilla 型別）：客戶端不先行驗證範圍與格式，越界與格式錯誤都由伺服器端同一個解析器判定，兩條路徑同回在地化 `ACELIB-CMD-015`。
+- 重複的固定選項（例如 `repeatable(fixed(...))`）同樣走開放式 greedy 節點，不再展開為 literal 分支：客戶端看不到選項字面結構，但補全仍列出選項、解析仍只接受選項，語意不變。
 
 ## 註冊生命週期與相容對照
 

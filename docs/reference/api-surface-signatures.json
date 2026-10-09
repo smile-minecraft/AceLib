@@ -370,6 +370,7 @@
       "method commandArgs() : java.util.List<java.lang.String>",
       "method commandLabel() : java.lang.String",
       "method get(com.smile.acelib.command.CommandArgument<T>) : T",
+      "method getList(com.smile.acelib.command.CommandArgument<T>) : java.util.List<T>",
       "method reply(java.lang.String) : void",
       "method replyError(java.lang.Throwable) : void",
       "method replyPlayerAsync(java.lang.String) : void",
