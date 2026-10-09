@@ -10,7 +10,7 @@ import java.util.Objects;
  * 型別化引數共用基底（package 內）。
  *
  * <p>收斂名稱校驗、前綴過濾與 {@code ACELIB-CMD-015} 錯誤建構，避免
- * 八種引數各自重寫。</p>
+ * 十種引數各自重寫。</p>
  */
 abstract class BaseArgument<T> implements CommandArgument<T> {
 

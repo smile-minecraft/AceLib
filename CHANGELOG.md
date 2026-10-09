@@ -14,6 +14,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 ### 新增內容（第三階段 型別化指令的引數）
 
 - 下游可以實作自己的引數型別：`ArgumentTypeFactory` 公開為 SPI，`CommandArgument.custom` 只需解析函式與補全函式即可建立引數（自訂引數為單 token 開放式引數，Brigadier 型別固定為 `stringWord`）；consumer 範例新增外部套件實作。
+- 新增 BigDecimal 精確數值引數（Arguments.bigDecimal）：以 BigDecimal 解析不經 double 中轉，範圍端點包含，小數位上限依輸入 scale 檢查，科學記號一律拒絕；非法值回 ACELIB-CMD-015。
 
 ## [1.4.0] - 2026-10-08
 

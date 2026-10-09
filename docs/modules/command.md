@@ -113,7 +113,7 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 
 ## 型別化引數
 
-`Arguments` 提供九個引數型別，每種都有解析、驗證與自動補全：
+`Arguments` 提供十個引數型別，每種都有解析、驗證與自動補全：
 
 | 引數 | 解析結果 | 驗證 |
 | --- | --- | --- |
@@ -121,6 +121,7 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 | `offlinePlayer(name)` | `OfflinePlayer` | 從未上線 → `ACELIB-CMD-015` |
 | `intArg(name, min, max)` | `Integer` | 非數字、`int` 溢位、超出 `[min, max]` → `ACELIB-CMD-015`（不 wrap、不截斷） |
 | `doubleArg(name, min, max)` | `Double` | 非數字、`NaN`、無限大、超出範圍 → `ACELIB-CMD-015` |
+| `bigDecimal(name, min, max, maxScale)` | `BigDecimal`（精確值，不經 double 中轉） | 語法錯、超出 `[min, max]`、小數位超過 `maxScale`、科學記號 → `ACELIB-CMD-015`（見下） |
 | `duration(name)` | `Long`（ticks） | 語法不符或溢位 → `ACELIB-CMD-015` |
 | `world(name)` | `World` | 未載入的世界 → `ACELIB-CMD-015`（接受 Bukkit 世界名與維度鍵兩種形式，見下） |
 | `enumArg(name, E.class)` | 列舉常數 | 不在常數內 → `ACELIB-CMD-015` |
@@ -128,6 +129,8 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 | `material(name)` | `Material` | 未知材質 → `ACELIB-CMD-015` |
 
 **單 token 不變條件**：所有開放式引數拒絕空白、空字串與含空白字元的輸入。這不是形式限制 — Brigadier 執行委派依原始輸入的空白切分重建 args，含空白的 token 會破壞切分與解析的一致性。固定選項的字面值本身也不含空白。
+
+**精確數值語法**：`bigDecimal(name, min, max, maxScale)` 全程以 `BigDecimal` 解析，不經 double 中轉 — `0.10` 與 `0.1` 的 scale 差保留，`0.1 + 0.2` 不受 double 誤差影響。範圍端點包含；小數位上限依**輸入的 scale** 檢查，不自動四捨五入（`maxScale=2` 時 `1.234` 被拒；`maxScale=0` 時連 `10.0` 都被拒，因為輸入 scale 為 1；尾隨零計入 scale）。科學記號（`1E3` 這類寫法）一律拒絕，請改寫為一般十進位。注意客戶端看到的是 vanilla double 型別（僅為範圍提示，會放行科學記號），伺服器端解析一律以 `BigDecimal` 重驗並擋下。本引數不承擔幣別與金額政策：格式化、負號政策、千分位都是下游的責任。
 
 **時間長度語法**：整數或小數＋可選單位，與 vanilla time 一致 — `100`（ticks）、`1t`、`1.5s`（30 ticks）、`1d`（24000 ticks）。回傳 ticks。`h`／`m` 單位兩端都不接受，因為客戶端的 vanilla time 語法同樣拒絕；只在伺服器端放行會造成「客戶端擋、伺服器放」的分歧。計算全程以 `long` 精確運算，不走 double（避免大數精度遺失），溢位拋 `ACELIB-CMD-015`。
 
@@ -182,6 +185,7 @@ CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>
 | `world` | 可用（列出已載入世界） | 推論：無建議列（未逐項實測） | 推論自同一平台限制（基岩 UI 無法按型別區分），見下段樣本說明。 |
 | `material` | 可用（列出材質名） | 推論：無建議列（未逐項實測） | 同上。 |
 | `intArg` / `doubleArg` | 無建議（範圍由客戶端驗證） | 推論：無建議列（未逐項實測） | 該型別本就不列候選；同一平台限制下基岩同樣無建議列。 |
+| `bigDecimal` | 無建議（範圍由客戶端 double 提示先驗，伺服器端以 `BigDecimal` 重驗） | 推論：無建議列（未逐項實測） | 同上；科學記號在客戶端放行、伺服器端拒絕。 |
 | `duration` | 建議語法範例（`1s`、`1d`…） | 推論：無建議列（未逐項實測） | 範例僅供 Java 版參考；同一平台限制一體適用。 |
 | `offlinePlayer` | best-effort（只列在線玩家） | 推論：無建議列（未逐項實測） | 離線名單無法低成本枚舉；同一平台限制下基岩同樣無建議列。 |
 

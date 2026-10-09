@@ -73,6 +73,7 @@
       "method world() : com.mojang.brigadier.arguments.ArgumentType<?>"
     ],
     "com.smile.acelib.command.Arguments": [
+      "method bigDecimal(java.lang.String,java.math.BigDecimal,java.math.BigDecimal,int) : com.smile.acelib.command.CommandArgument<java.math.BigDecimal>",
       "method doubleArg(java.lang.String,double,double) : com.smile.acelib.command.CommandArgument<java.lang.Double>",
       "method duration(java.lang.String) : com.smile.acelib.command.CommandArgument<java.lang.Long>",
       "method enumArg(java.lang.String,java.lang.Class<E>) : com.smile.acelib.command.CommandArgument<E>",
