@@ -12,7 +12,8 @@ import net.kyori.adventure.text.Component;
  *
  * <ul>
  *   <li>{@link #component} — 富文字（含 {@code message.prefix}），供聊天／GUI 使用</li>
- *   <li>{@link #text} — 純文字（含 prefix），供 ActionBar／title／console 相容路徑使用</li>
+ *   <li>{@link #text} — 與 {@code format} 輸出一致的字串（含 prefix，保留 MiniMessage
+ *       標記不解析），供 ActionBar／title／console 相容路徑使用</li>
  *   <li>{@link #formText} — 基岩表單安全字串（不帶 prefix），供表單使用</li>
  *   <li>{@link #missing}／{@link #diagnosis} — 缺 key 或渲染失敗時的可診斷資訊；
  *       正常時 {@code missing} 為 false 且 {@code diagnosis} 為空字串</li>
@@ -21,7 +22,8 @@ import net.kyori.adventure.text.Component;
  * @param key 訊息 key；never null
  * @param locale 實際使用的語系；never null
  * @param component 富文字結果；never null（缺 key 時為 {@link Component#empty()}）
- * @param text 純文字結果；never null（缺 key 時為空字串）
+ * @param text 與 {@code format} 輸出一致的字串結果（含 prefix，保留 MiniMessage
+ *             標記不解析）；never null（缺 key 時為空字串）
  * @param formText 表單安全字串；never null（缺 key 時為空字串）
  * @param missing 模板在磁碟／內建各層皆缺失時為 true
  * @param diagnosis 診斷字串（含 {@code ACELIB-MSG-*} 代碼）；正常時為空字串

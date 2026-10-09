@@ -11,6 +11,8 @@ LifecycleResult result = host.register(this, modules);
 
 `uninitialized()` 或未接到實際 plugin 的 facade 會提供 `NOT_READY` 宿主；此時註冊會回傳結構化拒絕結果。下游只呼叫 `register`／`unregister`，不得呼叫 `AceLibApi.ready(...)` 或依賴 `AceLibPlugin`。
 
+整個伺服器只有一個宿主，由 AceLib 持有：下游一律經 ready 的 `AceLibApi.getLifecycleHost()` 取得，不能自行建立。實作是 AceLib 內部類別，不對下游開放建構。
+
 ## 宣告模組與相依
 
 每個 `LifecycleModule` 宣告一個穩定 id、一組 `dependsOn` 與啟用回呼。id 在同一個 AceLib 宿主內唯一，建議使用 `<plugin-name>:<module-name>`；不同 plugin 的模組可以互相依賴。
@@ -56,6 +58,8 @@ public void onDisable() {
 ```
 
 `unregister(owner)` 只撤銷該 plugin 自己的模組。若其他 plugin 的已啟用模組直接或間接依賴它，結果會以 `ACTIVE_DEPENDENTS` 列出相依者並拒絕拆除。每個 owner 停用時 AceLib 也會自動嘗試撤銷；在 `onDisable` 明確呼叫可讓清理結果由下游處理。重複撤銷沒有已註冊模組的 owner 是安全 no-op。
+
+`close()` 即使擲出 `Error`，宿主仍會繼續清理其餘 handle：清理以捕捉 `Throwable` 的方式隔離單一 handle 的失敗，不會中斷反向清理。失敗的 handle 被保留（`unregister` 不移除，後續清理會重試同一個 handle），結果以 `CLOSE_FAILED`（`ACELIB-LIFE-007`）記入 `lastResult()`，宿主進入 `FAILED`（`shutdown` 路徑則為 `SHUTDOWN`）。對應測試：`LifecycleHostImplTest#unregister_closeThrowingErrorContinuesCleanupAndRetainsHandle`。
 
 ## 內建服務與宿主的接線邊界
 

@@ -156,6 +156,43 @@ class LifecycleHostImplTest {
     }
 
     @Test
+    @DisplayName("close 擲出 Error 時仍繼續清理其餘 handle 並保留失敗 handle")
+    void unregister_closeThrowingErrorContinuesCleanupAndRetainsHandle() {
+        Plugin owner = owner("ConsumerA");
+        AtomicBoolean failFeature = new AtomicBoolean(true);
+        assertTrue(host.register(owner, List.of(
+            module("consumer:base", Set.of(), context -> () -> events.add("close-base")),
+            module("consumer:feature", Set.of("consumer:base"), context -> () -> {
+                events.add("close-feature");
+                if (failFeature.getAndSet(false)) {
+                    throw new Error("injected close Error");
+                }
+            }))).isSuccess());
+
+        LifecycleResult result = host.unregister(owner);
+
+        assertEquals(LifecycleResult.Outcome.FAILED, result.outcome());
+        assertEquals(LifecycleHost.Status.FAILED, result.status());
+        assertTrue(result.problems().stream().anyMatch(problem ->
+            problem.code() == LifecycleResult.Code.CLOSE_FAILED
+                && "consumer:feature".equals(problem.moduleId())),
+            "失敗 handle 的 CLOSE_FAILED 問題必須保留模組 id");
+        assertEquals(List.of("close-feature", "close-base"), events,
+            "Error 不得中斷其餘 handle 的反向清理");
+        assertSame(result, host.lastResult());
+        assertEquals(LifecycleHost.Status.FAILED, host.status());
+
+        LifecycleResult retry = host.unregister(owner);
+        assertTrue(retry.isSuccess(), "失敗 handle 被保留，重試清理應能完成");
+        assertEquals(2, events.stream().filter("close-feature"::equals).count(),
+            "失敗 handle 被保留，重試時必須再次清理同一個 handle");
+        assertEquals(1, events.stream().filter("close-base"::equals).count(),
+            "已成功清理的 handle 不會重複清理");
+        assertEquals(LifecycleHost.Status.FAILED, host.status(),
+            "清理重試成功也不得把 fail-closed 宿主重新開放");
+    }
+
+    @Test
     @DisplayName("FAILED 時仍可撤銷停用 owner 的模組，但宿主保持 fail-closed")
     void failedHostAllowsOwnerCleanupWithoutReopening() {
         Plugin ownerA = owner("ConsumerA");

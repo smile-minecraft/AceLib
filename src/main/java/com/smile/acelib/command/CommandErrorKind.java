@@ -18,7 +18,7 @@ package com.smile.acelib.command;
  *   <tr><td>{@link #COOLDOWN_ACTIVE}</td><td>{@code ACELIB-CMD-006}</td><td>冷卻中（防止重複觸發）</td></tr>
  *   <tr><td>{@link #PLAYER_OFFLINE}</td><td>{@code ACELIB-CMD-007}</td><td>玩家已離線 / 失效</td></tr>
  *   <tr><td>{@link #INVALID_ARGUMENT}</td><td>{@code ACELIB-CMD-015}</td><td>引數值非法（型別解析失敗）</td></tr>
- *   <tr><td>{@link #ASYNC_EXECUTION_FAILED}</td><td>{@code ACELIB-CMD-008}</td><td>非同步指令流程失敗</td></tr>
+ *   <tr><td>{@link #ASYNC_EXECUTION_FAILED}</td><td>{@code ACELIB-CMD-008}</td><td>handler 執行失敗</td></tr>
  *   <tr><td>{@link #REGISTRY_DISABLED}</td><td>{@code ACELIB-CMD-009}</td><td>registry 已停用（plugin disable）</td></tr>
  *   <tr><td>{@link #CUSTOM}</td><td>{@code ACELIB-CMD-010}</td><td>caller 自訂錯誤代碼（由 caller 給 code）</td></tr>
  *   <tr><td>{@link #REPLY_BACKEND_UNAVAILABLE}</td><td>{@code ACELIB-CMD-011}</td><td>玩家回覆 backend 不可用（非 AceLib owner 無法 region-safe 派送）</td></tr>
@@ -60,7 +60,14 @@ public enum CommandErrorKind {
      */
     INVALID_ARGUMENT,
 
-    /** 非同步指令流程失敗。 */
+    /**
+     * handler 執行失敗。
+     *
+     * <p>對應錯誤代碼 {@code ACELIB-CMD-008}。handler 在平台派送的執行緒
+     * （Paper 主執行緒／Folia region 執行緒）同步執行；執行中拋出
+     * {@link CommandException} 以外的例外時，dispatcher 包裝為此 kind
+     * 再經回覆出口回報，不靜默吞掉。</p>
+     */
     ASYNC_EXECUTION_FAILED,
 
     /** registry 已停用（plugin disable 後）。 */

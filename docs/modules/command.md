@@ -93,6 +93,8 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 
 `ctx.get(arg)` 以**引數實例**為 key（不是字串名），因此同一個 builder 產生的實例可安全重複使用；傳入未參與本次解析的實例會拋 `IllegalArgumentException`。引數一律必填（`minArgs` 與 `maxArgs` 都等於引數數），零引數子指令則直接執行 handler。
 
+一個子指令名稱只能有一組引數：`TypedCommand` 與 `CommandSpec` 都在建構時拒絕重複的子指令名稱（`IllegalArgumentException: duplicate subcommand name`），同一個子指令名稱不會出現兩組不同的引數配置。需要多種參數形狀時，請拆成不同名稱的子指令。
+
 ## 註冊生命週期與相容對照
 
 `BrigadierRegistrar` 透過 Paper 的 `LifecycleEvents.COMMANDS` 註冊節點。平台要求 lifecycle handler 必須在 `onEnable` 期間掛載，實際的 `registrar().register(...)` 則由平台在命令同步時機執行。因此：
@@ -110,7 +112,7 @@ registrar.register(shop);   // 在 onEnable 期間呼叫一次
 
 ## 型別化引數
 
-`Arguments` 提供八種型別，每種都有解析、驗證與自動補全：
+`Arguments` 提供九個引數型別，每種都有解析、驗證與自動補全：
 
 | 引數 | 解析結果 | 驗證 |
 | --- | --- | --- |

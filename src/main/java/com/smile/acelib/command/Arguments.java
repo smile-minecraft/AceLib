@@ -9,7 +9,7 @@ import org.bukkit.World;
 /**
  * 型別化引數工廠（下游組裝入口）。
  *
- * <p>八種引數型別各自具備解析、驗證與自動補全：</p>
+ * <p>九個引數型別各自具備解析、驗證與自動補全：</p>
  * <ul>
  *   <li>{@link #player} — 在線玩家（離線／不存在 → {@code ACELIB-CMD-007}）</li>
  *   <li>{@link #offlinePlayer} — 離線玩家（從未上線 → {@code ACELIB-CMD-015}）</li>

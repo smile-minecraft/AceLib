@@ -79,7 +79,7 @@ RenderedMessage rendered = messages.render("command.reload.done", Map.of("plugin
 Component gui = rendered.component();
 // 表單取安全字串（不帶 prefix）
 String form = rendered.formText();
-// ActionBar／title 取純文字（含 prefix，與 format 輸出一致）
+// ActionBar／title 取字串（含 prefix，與 format 輸出一致，保留 MiniMessage 標記不解析）
 String text = rendered.text();
 ```
 

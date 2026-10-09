@@ -10,6 +10,7 @@
 - [建立 registry](#建立-registry)
 - [註冊與移除](#註冊與移除)
 - [一次性 listener 的實際語意](#一次性-listener-的實際語意)
+- [沒有操作提交成功後的回呼](#沒有操作提交成功後的回呼)
 - [解除與重新註冊的呼叫端責任](#解除與重新註冊的呼叫端責任)
 - [選擇 listener policy](#選擇-listener-policy)
 - [相關頁面](#相關頁面)
@@ -64,6 +65,10 @@ events.unregister(registration);
 - listener 內部重入。listener 在自己的 `onEvent` 裡同步觸發同一種事件時，內層 dispatch 看到的仍是尚未移除的清單。
 
 需要嚴格一次的語意時，請在 listener 內部自行保護（例如以 `AtomicBoolean` 記錄是否已執行），不要依賴 `registerOneShot(...)` 本身擋住重入。
+
+## 沒有操作提交成功後的回呼
+
+`SafeEventRegistry` 只提供註冊、移除與查詢（`register`／`registerOneShot`／`unregister`／`unregisterAll`／`getRecentErrors`）；沒有「操作提交成功後」的回呼。需要在事件處理完成後執行的後續動作，請直接寫在 listener 的 `onEvent` 本體內，由下游自行組合，不要等待框架提供提交回呼。
 
 ## 解除與重新註冊的呼叫端責任
 

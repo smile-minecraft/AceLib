@@ -40,6 +40,8 @@ ScheduledTask asyncTask = scheduler.runAsync(() -> {
 
 全域工作可用 `runGlobal`，延遲與重複工作使用對應的 later/timer 方法。各方法都會回傳 `ScheduledTask`，可呼叫 `cancel()`；取消是冪等操作。
 
+`runLater`／`runTimer`（含玩家與位置變體）只提供「延遲多久後執行／每隔多久執行」，框架沒有重試和延遲（退避）策略：任務執行時拋錯只會記為 `FAILED` 終態（`ACELIB-SCHED-001`），不會自動重排。需要重試或退避時，由呼叫端自行組合（例如在 `ticket.whenComplete` 的 `FAILED` 分支重新排程）。
+
 ## 無法執行時
 
 玩家離線、實體失效、chunk 未載入、平台不支援或 plugin 已停用時，scheduler 會回傳已取消的 no-op task，並記錄 `ACELIB-SCHED-*`。不要把「已取得 task」解讀為工作一定執行成功。

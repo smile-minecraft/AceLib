@@ -88,7 +88,7 @@ AceLib 所有對外拋出或記錄的錯誤，都攜帶 `ACELIB-<AREA>-<CODE>` �
 | `ACELIB-CMD-005` | 此指令僅限 console | 玩家觸發時拒絕 |
 | `ACELIB-CMD-006` | 冷卻中 | 防止重複觸發 |
 | `ACELIB-CMD-007` | 玩家已離線／失效 | 目標玩家離線 |
-| `ACELIB-CMD-008` | 非同步指令流程失敗 | async 執行異常 |
+| `ACELIB-CMD-008` | handler 執行失敗 | handler 在平台派送的執行緒（Paper 主執行緒／Folia region 執行緒）同步執行時，拋出 `CommandException` 以外的例外 |
 | `ACELIB-CMD-009` | 指令註冊服務已停用 | plugin disable 後 |
 | `ACELIB-CMD-010` | caller 自訂錯誤碼 | 由 caller 給 code |
 | `ACELIB-CMD-011` | 玩家回覆 backend 不可用 | 無法安全派送到玩家所在 region |
