@@ -61,6 +61,22 @@ ConfigSnapshot snapshot = config.snapshot();
 String locale = snapshot.getString("locale", "zh_TW");
 ```
 
+快照帶世代（`snapshot.generation()`）：每次成功發布（`load`／`reload`／`startup` 成功）世代 +1，即使內容與上一版相同也 +1；失敗不發布新世代，世代不變。`equals`／`hashCode` 只比較深層內容，世代不參與：同內容的兩個快照相等，世代不同不影響相等判斷。判斷「設定是否重載過」時比較世代，比較「內容是否相同」時直接比較快照。
+
+例外：損壞啟動等後備路徑（最後成功副本、呼叫端指定的保守後備）產生的快照世代為 0；比較世代時以 `ConfigManager.snapshot()` 的發布快照為準。
+
+## 數值讀取（`getInt`／`getLong`／`getDouble`）
+
+```java
+int port = snapshot.getInt("server.port", 8080);
+long total = snapshot.getLong("stats.total", 0L);
+double rate = snapshot.getDouble("stats.rate", 1.0);
+```
+
+三個方法的缺值語意一致：路徑不存在、值為 null 或值不是數字時回傳呼叫端給的預設值，不拋例外。數字值的檢查是嚴格的：`getInt`／`getLong` 遇到小數、NaN／無限大或超出目標型別範圍的值時拋 `ACELIB-CFG-007`（訊息含完整路徑）；`getDouble` 遇到 NaN／正負無限大（例如 YAML 的 `.nan`／`.inf`）時同樣拋 `ACELIB-CFG-007`。這與 `ConfigBinder.bind` 的 `int`／`long`／`double` 轉換是同一套規則。
+
+> **破壞性變更（1.5.0）**：`getInt` 過去對任何數字取 `intValue()`（小數靜默截斷、超大值靜默溢位）。現在小數與溢位改為拋錯，不再截斷，也不再回傳預設值。遷移方式：過去依賴截斷的寫法（例如把 `2.9` 讀成 `2`），請改用 `getDouble` 再自行取整；不確定欄位是否為整數時，先用 `snapshot.get(path) instanceof Number` 確認，或改走 `bind()` 的範圍約束一次驗證。
+
 ## 型別綁定
 
 `ConfigBinder.bind` 把快照綁定到 record 或一般類別（無參建構＋欄位注入），載入時驗證型別、數值範圍與列舉值，失敗拋 `ACELIB-CFG-007` 並帶完整欄位路徑：

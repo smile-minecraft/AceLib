@@ -299,9 +299,9 @@ Ace-Economy 的 16 個經濟子指令裡有 12 個引數數量可變，目前沒
 
 設定：
 
-- [ ] `ConfigSnapshot` 有相等語意和遞增的世代號，下游能判斷 reload 之後內容有沒有變。
-- [ ] `ConfigSnapshot` 補上 `getLong` 和 `getDouble`。
-- [ ] `ConfigSnapshot.getInt` 遇到小數和溢位時報錯。破壞性變更。
+- [x] `ConfigSnapshot` 有相等語意和遞增的世代號，下游能判斷 reload 之後內容有沒有變。
+- [x] `ConfigSnapshot` 補上 `getLong` 和 `getDouble`。
+- [x] `ConfigSnapshot.getInt` 遇到小數和溢位時報錯。破壞性變更。
 - [ ] 設定繫結支援 `Map<String, T>`、`Set<T>` 和物件清單，清單元素依宣告的型別驗證。
 - [ ] 跨欄位驗證的入口。整份設定通過後才發布新快照，失敗時保留舊快照。
 - [ ] 使用後缺檔時，下游可以在還原最後成功副本之前攔截，選擇直接失敗。

@@ -27,6 +27,9 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 發送訊息新增回傳結果的入口：`sendChatWithFallbackResult`、`sendActionBarWithFallbackResult`、`sendTitleWithFallbackResult`、`broadcastWithFallbackResult` 回傳 `SendResult`（是否送達、是否確實套用基岩降級）。舊的 void 入口改為委派，行為不變；`fallbackApplied` 只代表降級已套用到送出的 Component，不代表客戶端已經看見。
 - 基岩降級新增 `BedrockFallbackStyle.PLAIN_TEXT` 攤平選項（整體轉純文字）；預設仍為 `HINTS` 提示風格。
 - 新增 `MessageService#formatPlain`：給 console 與外部頻道用的純文字輸出，去除全部 MiniMessage 標記只留可讀文字，可選是否帶 `message.prefix`（預設不帶）。
+- 行為變更（破壞性）：`ConfigSnapshot.getInt(path, default)` 改為嚴格轉換：小數、NaN／無限大、超出 int 範圍的數字一律拋 `ACELIB-CFG-007`（訊息含完整路徑），不再靜默截斷或溢位，也不再回傳預設值。缺值、null 與非數字值的預設值語意不變。過去依賴截斷的寫法請改用 `getDouble` 再自行取整，或改走 `bind()` 的範圍約束一次驗證。
+- `ConfigSnapshot` 新增 `getLong(path, default)`／`getDouble(path, default)`：`getLong` 對小數與溢位拋 `ACELIB-CFG-007`；`getDouble` 拒絕 NaN 與正負無限大（例如 YAML 的 `.nan`／`.inf`）；缺值、null 與非數字值回傳預設值。與 `ConfigBinder.bind` 的數值轉換同規則。
+- `ConfigSnapshot` 新增世代與內容相等：`generation()` 為獨立 metadata，`ConfigManager` 每次成功發布（`load`／`reload`／`startup`）世代 +1（同內容也 +1），失敗不發布新世代；`equals`／`hashCode` 只比較深層內容，世代不參與。
 
 ## [1.4.0] - 2026-10-08
 

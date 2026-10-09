@@ -462,14 +462,20 @@
     ],
     "com.smile.acelib.config.ConfigSnapshot": [
       "ctor(java.util.Map<java.lang.String, java.lang.Object>)",
+      "ctor(java.util.Map<java.lang.String, java.lang.Object>,long)",
       "method asMap() : java.util.Map<java.lang.String, java.lang.Object>",
       "method contains(java.lang.String) : boolean",
       "method empty() : com.smile.acelib.config.ConfigSnapshot",
+      "method equals(java.lang.Object) : boolean",
+      "method generation() : long",
       "method get(java.lang.String) : java.lang.Object",
       "method getBoolean(java.lang.String,boolean) : boolean",
+      "method getDouble(java.lang.String,double) : double",
       "method getInt(java.lang.String,int) : int",
+      "method getLong(java.lang.String,long) : long",
       "method getString(java.lang.String,java.lang.String) : java.lang.String",
       "method getStringList(java.lang.String) : java.util.List<java.lang.String>",
+      "method hashCode() : int",
       "method version() : com.smile.acelib.config.ConfigVersion"
     ],
     "com.smile.acelib.config.ConfigVersion": [

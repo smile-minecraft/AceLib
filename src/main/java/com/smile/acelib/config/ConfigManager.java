@@ -85,6 +85,7 @@ public final class ConfigManager {
     private final java.util.Set<String> removedPaths = new java.util.HashSet<>();
     private volatile YamlConfiguration current;
     private volatile ConfigSnapshot snapshotRef;
+    private volatile long snapshotGeneration;
     private volatile boolean ready = false;
     private volatile ConfigFileWatcher watcher;
     private volatile ConfigChangeListener watchListener;
@@ -166,7 +167,8 @@ public final class ConfigManager {
      * 取得當前不可變快照（驗證通過後發布的值）。
      *
      * <p>快照深層不可變，外部修改必失敗；同輪操作（get／set／save）
-     * 固定回傳同一個實例，只有 load／reload／startup 成功才換新實例。</p>
+     * 固定回傳同一個實例，只有 load／reload／startup 成功才換新實例。
+     * 每次成功發布世代 +1（同內容也 +1），失敗不換新實例、世代不變。</p>
      *
      * @return 當前快照；尚未成功載入回傳 null
      */
@@ -811,7 +813,8 @@ public final class ConfigManager {
                 "設定寫回後回讀失敗：" + file.getAbsolutePath() + "（" + ex.getMessage() + "）", ex);
         }
         this.current = published;
-        this.snapshotRef = new ConfigSnapshot(published.getValues(false));
+        this.snapshotGeneration++;
+        this.snapshotRef = new ConfigSnapshot(published.getValues(false), snapshotGeneration);
         this.ready = true;
         // 從磁碟重建後，之前 set(null) 的追蹤已無意義（記憶體即磁碟）
         removedPaths.clear();
