@@ -153,6 +153,18 @@ upsert 不使用 `ON DUPLICATE KEY UPDATE` 等 vendor 專屬語法，改以先 `
 自行序列化所有操作（AceLib 內部由 `PlayerDataService` 的 per-store serial executor
 保證）。
 
+### DataStore 轉接的失敗回復範圍
+
+`PlayerDataStores.fromDataStore(...)` 包出來的轉接在改動記憶體樹之前，
+先對受影響玩家的欄位與 `revision` 做快照。`save()` 失敗時把記憶體樹與
+`revision` 還原為操作前，再以 `ACELIB-DATA-008` 回報（含原始原因）；
+還原本身失敗時，原因掛在回報例外的 `suppressed`，訊息標示還原不完整。
+
+這個保證只涵蓋 AceLib 自己的記憶體視圖：delegate 的 `save()` 若已部分落盤，
+不可逆；失敗不自動重試，也不承諾跨伺服器或跨行程原子性。`revision` 只放在
+轉接實例的記憶體裡，重建轉接即歸零。還原以整節點深拷貝寫回，因此頂層 `null`
+值、空玩家節點與字面點號鍵都能回到原始結構。
+
 ### 既有玩家資料的轉換
 
 `PlayerDataConverter` 把舊版 JSON 檔（`player-data.json`）或舊 `acelib_data_kv` 的
