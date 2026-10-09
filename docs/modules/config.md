@@ -75,7 +75,7 @@ public record ServerSettings(
 ServerSettings settings = config.bind(ServerSettings.class);
 ```
 
-不寫 `@ConfigKey` 時以 component／欄位名為路徑；含點的 `@ConfigKey` 視為從根起的絕對路徑。缺失語意：缺失的基本型別報錯，缺失的參考型別（`String`／`Integer`／列舉／`List`／巢狀型別）為 null，由呼叫端決定是否接受；`int`／`long` 嚴格轉換（小數、NaN／無限大、超出範圍一律報錯，不靜默截斷或溢位）；`List` 元素逐個轉字串，不做元素型別檢查，null 元素保留為 null；列舉按名稱精確比對（大小寫敏感），失敗訊息列出全部合法選項。
+不寫 `@ConfigKey` 時以 component／欄位名為路徑；含點的 `@ConfigKey` 視為從根起的絕對路徑。缺失語意：缺失的基本型別報錯，缺失的參考型別（`String`／`Integer`／列舉／`List`／巢狀型別）為 null，由呼叫端決定是否接受；`int`／`long` 嚴格轉換（小數、NaN／無限大、超出範圍一律報錯，不靜默截斷或溢位）；`double` 非有限值（NaN／無限大）一律報錯，不論有無 `@ConfigRange`，有範圍時訊息一併帶出允許範圍；`List` 元素逐個轉字串，不做元素型別檢查，null 元素保留為 null；列舉按名稱精確比對（大小寫敏感），失敗訊息列出全部合法選項。
 
 ## 檔案監看
 

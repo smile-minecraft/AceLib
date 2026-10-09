@@ -2,6 +2,12 @@
 
 AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](docs/reference/release-artifacts.md)；本檔只記錄版本變更。
 
+## [1.5.0] - 未發布
+
+### 修補內容（第二階段 行為缺陷）
+
+- 設定繫結的 `double` 欄位一律拒絕 `NaN` 與正負無限大，不論有無 `@ConfigRange`；錯誤沿用 `ACELIB-CFG-007` 並帶完整欄位路徑，有範圍時訊息一併帶出允許範圍。有限值的範圍語意不變。
+
 ## [1.4.0] - 2026-10-08
 
 v1.4.0 新增生命週期宿主、每玩家顯示、測試套件與測試 JAR、任務完成語意與作用域、事件處理完成後的操作、插件作用域訊息與在地化、插件隔離介面流程與元件、設定啟動快照與型別綁定、型別化指令框架、逐玩家儲存與玩家資料模型，以及外部整合門面；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.4.0.jar` 與 `AceLib-1.4.0-test-fixtures.jar`，管理員可直接下載，或從 `v1.4.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.4.0`）取得。

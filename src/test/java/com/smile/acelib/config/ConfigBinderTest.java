@@ -241,6 +241,94 @@ class ConfigBinderTest {
         assertTrue(ex.getMessage().contains("maxPlayers"), "實際：" + ex.getMessage());
     }
 
+    /** double 無範圍綁定目標。 */
+    public record DoubleHolder(
+        @ConfigBinder.ConfigKey("ratio") double ratio) {
+    }
+
+    /** double 有範圍綁定目標（含端點）。 */
+    public record RangedDoubleHolder(
+        @ConfigBinder.ConfigKey("ratio") @ConfigBinder.ConfigRange(min = 0, max = 1) double ratio) {
+    }
+
+    @Test
+    @DisplayName("有範圍的 double 拒絕 NaN（CFG-007），訊息帶路徑與範圍")
+    void bind_rangedDoubleNaN_rejectedWithPathAndRange() throws Exception {
+        ConfigSnapshot snapshot = snapshotOf("bind-double-nan.yml",
+            "version: '1.0'\ngreeting: 'hi'\nratio: .nan\n");
+
+        ConfigBindingException ex = assertThrows(ConfigBindingException.class,
+            () -> ConfigBinder.bind(snapshot, RangedDoubleHolder.class));
+
+        assertEquals("ACELIB-CFG-007", ex.getCode());
+        assertTrue(ex.getMessage().contains("ratio"), "實際：" + ex.getMessage());
+        assertTrue(ex.getMessage().contains("[0.0, 1.0]"), "實際：" + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("無範圍的 double 拒絕 NaN 與正負無限大")
+    void bind_unrangedDoubleNonFinite_rejected() {
+        for (double bad : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            ConfigSnapshot snapshot = new ConfigSnapshot(Map.of("ratio", bad));
+
+            ConfigBindingException ex = assertThrows(ConfigBindingException.class,
+                () -> ConfigBinder.bind(snapshot, DoubleHolder.class),
+                "應拒絕非有限值：" + bad);
+
+            assertEquals("ACELIB-CFG-007", ex.getCode());
+            assertTrue(ex.getMessage().contains("ratio"), "實際：" + ex.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("有範圍的 double 拒絕正負無限大，訊息帶範圍")
+    void bind_rangedDoubleInfinite_rejectedWithRange() {
+        for (double bad : new double[]{Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            ConfigSnapshot snapshot = new ConfigSnapshot(Map.of("ratio", bad));
+
+            ConfigBindingException ex = assertThrows(ConfigBindingException.class,
+                () -> ConfigBinder.bind(snapshot, RangedDoubleHolder.class),
+                "應拒絕非有限值：" + bad);
+
+            assertEquals("ACELIB-CFG-007", ex.getCode());
+            assertTrue(ex.getMessage().contains("ratio"), "實際：" + ex.getMessage());
+            assertTrue(ex.getMessage().contains("[0.0, 1.0]"), "實際：" + ex.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("經 YAML 真實載入的 .nan 與 .inf 也拒絕")
+    void bind_yamlNonFinite_rejected() throws Exception {
+        ConfigSnapshot nanSnapshot = snapshotOf("bind-yaml-nan.yml",
+            "version: '1.0'\ngreeting: 'hi'\nratio: .nan\n");
+        assertThrows(ConfigBindingException.class,
+            () -> ConfigBinder.bind(nanSnapshot, RangedDoubleHolder.class));
+
+        ConfigSnapshot infSnapshot = snapshotOf("bind-yaml-inf.yml",
+            "version: '1.0'\ngreeting: 'hi'\nratio: .inf\n");
+        ConfigBindingException ex = assertThrows(ConfigBindingException.class,
+            () -> ConfigBinder.bind(infSnapshot, RangedDoubleHolder.class));
+
+        assertEquals("ACELIB-CFG-007", ex.getCode());
+        assertTrue(ex.getMessage().contains("ratio"), "實際：" + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("有限值端點與界限外維持既有範圍語意")
+    void bind_rangedDoubleFinite_keepsRangeSemantics() {
+        assertEquals(0.0, ConfigBinder.bind(
+            new ConfigSnapshot(Map.of("ratio", 0.0)), RangedDoubleHolder.class).ratio());
+        assertEquals(1.0, ConfigBinder.bind(
+            new ConfigSnapshot(Map.of("ratio", 1.0)), RangedDoubleHolder.class).ratio());
+        assertEquals(0.5, ConfigBinder.bind(
+            new ConfigSnapshot(Map.of("ratio", 0.5)), RangedDoubleHolder.class).ratio());
+
+        assertThrows(ConfigBindingException.class, () -> ConfigBinder.bind(
+            new ConfigSnapshot(Map.of("ratio", -0.1)), RangedDoubleHolder.class));
+        assertThrows(ConfigBindingException.class, () -> ConfigBinder.bind(
+            new ConfigSnapshot(Map.of("ratio", 1.1)), RangedDoubleHolder.class));
+    }
+
     @Test
     @DisplayName("小數綁定到 long 失敗（CFG-007），不靜默截斷")
     void bind_fractionalLong_reportsCfg007() throws Exception {

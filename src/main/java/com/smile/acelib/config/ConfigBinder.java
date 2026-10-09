@@ -40,6 +40,7 @@ import java.util.Optional;
  *       為 null，由呼叫端決定是否接受</li>
  *   <li>{@code int}／{@code long} 嚴格轉換：小數、NaN／無限大、超出範圍
  *       一律報錯，不靜默截斷或溢位</li>
+ *   <li>{@code double} 非有限值（NaN／無限大）一律報錯，不論有無範圍約束</li>
  *   <li>{@code List} 元素逐個轉字串，不做元素型別檢查；
  *       YAML 的 null 元素保留為 null</li>
  *   <li>列舉按名稱精確比對（大小寫敏感）；失敗訊息列出全部合法選項</li>
@@ -401,7 +402,20 @@ public final class ConfigBinder {
         throw bindingTypeError(path, "長整數", raw);
     }
 
+    /**
+     * 範圍與有限值檢查：NaN／無限大一律拒絕（不論有無範圍），
+     * 因為 NaN 的大小比較恆為 false，單靠範圍比較會放行。
+     */
     private static void checkRange(String path, double value, ConfigRange range) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            if (range != null) {
+                throw new ConfigBindingException(path,
+                    "數值 " + value + " 非有限（NaN／無限大不允許），允許範圍 ["
+                        + range.min() + ", " + range.max() + "]");
+            }
+            throw new ConfigBindingException(path,
+                "數值 " + value + " 非有限（NaN／無限大不允許）");
+        }
         if (range != null && (value < range.min() || value > range.max())) {
             throw new ConfigBindingException(path,
                 "數值 " + value + " 超出範圍 [" + range.min() + ", " + range.max() + "]");
