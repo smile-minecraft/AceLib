@@ -240,6 +240,22 @@ CommandArgument<Double> rateArg = CommandArgument.custom("rate", "<rate:percent>
 
 固定選項的大小寫：literal 分支以小寫常數名編譯，若基岩版顯示補全會是小寫形式（本次實測建議列未出現）；傳統路徑的 `parse` 大小寫不敏感，故兩種大小寫在兩條路徑都能執行。
 
+## 第三階段引數的實機驗證（1.5.0）
+
+2026-10-09 以同一顆候選 JAR（`com.smile:acelib:1.4.0` 座標、SHA-256 `2d6d92c2…87b39a`，內容含第三階段全部類別）在兩個平台實測，探針為 `acelib-command-compatibility-probe-1.1.0-SNAPSHOT`（64 案例）：**Folia 26.2-7**（MC 26.2）與 **Paper 26.2-133**（MC 26.2，同一世界直接切換平台）。兩平台 24 個外掛全數載入，含下游 AceEconomy 2.2.0 與 ChunkLand 0.1.0；錯誤後備節點（`CustomArgumentType` 包裝）在兩平台都成功註冊與分派。
+
+實測結果（兩平台一致，handler 執行緒分別為 Folia Region Scheduler Thread 與 Server thread）：
+
+- 省略引數：省略時拿到型別化預設值（`amount=1 source=default`），提供時拿到解析值（`amount=5 source=provided`）。
+- 重複引數：零個為空清單、一個與多個為對應型別化清單（`notes=[STONE]`／`[STONE, DIRT]`）。
+- `bigDecimal`：`0.10` 精確解析（`value=0.10 scale=2`）；超小數位、科學記號、超範圍三類錯誤皆為伺服器端在地化 `ACELIB-CMD-015`（非平台錯誤）。
+- `dynamic`：執行期新增（`dyn-add gamma` 後立即可解析）與移除（`dyn-remove beta` 後 `expected one of alpha|gamma`）即時反映，無需重新註冊。
+- 自訂引數（`CommandArgument.custom`）：`75` 解析為 `0.75`，非法值走訊息表。
+- 子指令別名：`cprobe pi 5` 與 `cprobe parse-int 5` 結果完全相同。
+- 固定選項集合外值：`cprobe-args trade loud 5` 回 `invalid value for <mode>: 'loud' (expected one of buy|sell)`（錯誤後備節點路徑，非平台解析錯誤）。
+
+未觀察項目：補全彈窗的客戶端渲染（機器人不渲染建議列、無按 Tab 的自動化工具；補全內容由傳統 `tabComplete` 與 Brigadier `getCompletionSuggestions` 逐位置比對的單元測試覆蓋）；基岩版補全依 Geyser 平台限制推論不可見。完整紀錄見任務 acelib-v150-t10 的實機驗證紀錄。
+
 ## 錯誤在地化
 
 `CommandMessages` 是錯誤訊息的在地化契約，`LocalizingReplySink` 是 presentation 層的裝飾器：`CommandException` 依 kind 轉為在地化字串後再送出，缺 key 時退回例外原文（不送空字串），非 `CommandException` 原樣轉交。
