@@ -16,7 +16,9 @@ import java.util.Map;
  *   <li>{@code /cprobe lifecycle <...>} — reload／重複註冊／disable 殘留</li>
  * </ul>
  *
- * <p>案例不引用 Bukkit API（純字串），因此可在無伺服器環境做完整性測試。</p>
+ * <p>案例不引用 Bukkit API（純字串），因此可在無伺服器環境做完整性測試。
+ * 以 {@code trade} 開頭的輸入是相對於 {@code /cprobe-args} 根指令，
+ * 其餘輸入相對於 {@code /cprobe}。</p>
  */
 public final class CommandProbeCases {
 
@@ -82,6 +84,62 @@ public final class CommandProbeCases {
         add(cases, "parse-material", GROUP_PARSE, "parse-material stone",
             "材質解析為 Material");
 
+        // 第三階段：省略引數＋重複引數（同一 give 子指令：
+        // [player] [amount 預設1] [extra:material...]）。
+        add(cases, "give-default", GROUP_PARSE, "give Steve",
+            "省略 amount → 預設 1（source=default），重複引數零個 → notes=[]；"
+                + "回 ok player=Steve amount=1 source=default notes=[]");
+        add(cases, "give-provided", GROUP_PARSE, "give Steve 5",
+            "提供 amount=5（source=provided），重複引數零個 → notes=[]");
+        add(cases, "give-repeat-one", GROUP_PARSE, "give Steve 5 stone",
+            "單一重複值：amount=5，notes=[STONE]");
+        add(cases, "give-repeat-many", GROUP_PARSE, "give Steve 5 stone dirt",
+            "多個重複值：amount=5，notes=[STONE, DIRT]（順序即輸入順序）");
+
+        // 第三階段：精確數值（parse-bigdecimal，範圍 0-1000 含端點，小數位上限 2）。
+        add(cases, "parse-bigdecimal-ok", GROUP_PARSE, "parse-bigdecimal 0.10",
+            "精確值 0.10：回 ok value=0.10 scale=2（scale 保留，不經 double 中轉）");
+        add(cases, "err-bigdecimal-scale", GROUP_ERROR, "parse-bigdecimal 1.234",
+            "超小數位（上限 2 位）→ ACELIB-CMD-015（不四捨五入）");
+        add(cases, "err-bigdecimal-scientific", GROUP_ERROR, "parse-bigdecimal 1E3",
+            "科學記號 → ACELIB-CMD-015（須改寫為一般十進位）");
+        add(cases, "err-bigdecimal-range", GROUP_ERROR, "parse-bigdecimal 1000.01",
+            "超範圍（上限 1000 含）→ ACELIB-CMD-015");
+
+        // 第三階段：動態選項（初始集合 alpha／beta；dyn-add／dyn-remove
+        // 執行期增刪，供應函式每次解析與補全重新取值）。
+        add(cases, "dyn-parse-initial", GROUP_PARSE, "parse-dyn alpha",
+            "初始集合含 alpha：回 ok value=alpha（canonical 宣告形式）");
+        add(cases, "dyn-add-gamma", GROUP_PARSE, "dyn-add gamma",
+            "回報已加入 gamma；之後 parse-dyn gamma 可解析，"
+                + "parse-dyn 補全出現 gamma");
+        add(cases, "dyn-parse-added", GROUP_PARSE, "parse-dyn gamma",
+            "需先執行 dyn-add gamma：回 ok（大小寫不敏感，回宣告形式 gamma）");
+        add(cases, "dyn-remove-beta", GROUP_PARSE, "dyn-remove beta",
+            "回報已移除 beta；之後 parse-dyn beta 走 ACELIB-CMD-015");
+        add(cases, "dyn-parse-removed", GROUP_ERROR, "parse-dyn beta",
+            "需先執行 dyn-remove beta：集合內已無 beta → ACELIB-CMD-015");
+
+        // 第三階段：自訂引數（parse-percent：0-100 裸數字 → 0.0-1.0，
+        // 字元集內單 token，兩條路徑皆可解析）。
+        add(cases, "parse-percent-ok", GROUP_PARSE, "parse-percent 75",
+            "裸數字 75 → 0.75（0-100 含端點）");
+        add(cases, "err-percent-range", GROUP_ERROR, "parse-percent 150",
+            "超出 0-100 → ACELIB-CMD-015");
+        add(cases, "err-percent-nonnumeric", GROUP_ERROR, "parse-percent abc",
+            "非數字 → ACELIB-CMD-015");
+
+        // 第三階段：子指令別名（pi ≡ parse-int）。
+        add(cases, "alias-pi", GROUP_PARSE, "pi 5",
+            "別名執行與主名等價：與 parse-int 5 同回覆 ok value=5");
+
+        // 第三階段：固定選項在地化（/cprobe-args 根；成功基線＋集合外值）。
+        add(cases, "args-trade-ok", GROUP_PARSE, "trade buy 5",
+            "/cprobe-args 根：回 ok mode=buy amount=5（錯誤案例的對照基線）");
+        add(cases, "err-args-trade-loud", GROUP_ERROR, "trade loud",
+            "/cprobe-args 根：集合外值走錯誤後備節點，"
+                + "回在地化 ACELIB-CMD-015（非 Brigadier 通用錯誤）");
+
         // 錯誤路徑：ACELIB-CMD-015 的每一類。
         add(cases, "err-int-nonnumeric", GROUP_ERROR, "parse-int abc",
             "非數字 → ACELIB-CMD-015，在地化錯誤提示");
@@ -140,6 +198,14 @@ public final class CommandProbeCases {
             "best-effort 只列在線玩家（離線名單無法低成本枚舉；基岩版：推論無建議列，同 Geyser 平台限制，未逐項實測）");
         add(cases, "complete-int-none", GROUP_COMPLETE, "parse-int ",
             "整數刻意不給建議；範圍由客戶端驗證");
+        add(cases, "complete-bigdecimal-none", GROUP_COMPLETE, "parse-bigdecimal ",
+            "精確數值刻意不給建議；範圍由客戶端驗證（同整數）");
+        add(cases, "complete-dyn", GROUP_COMPLETE, "parse-dyn ",
+            "動態選項（伺服器建議；Java 版列出當前集合，增刪後即變；"
+                + "基岩版未實測，不斷言可見性）");
+        add(cases, "complete-percent", GROUP_COMPLETE, "parse-percent ",
+            "自訂引數候選 25／50／75／100（伺服器建議，前綴過濾；"
+                + "基岩版未實測，不斷言可見性）");
 
         // 生命週期：殘留檢查（以 RCON 或 console 執行，需 acelibcmdprobe.admin）。
         add(cases, "life-reregister", GROUP_LIFECYCLE, "lifecycle re-register",

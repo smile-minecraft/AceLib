@@ -21,7 +21,7 @@ plugins {
 }
 
 group = "com.smile.test"
-version = "1.0.0-SNAPSHOT"
+version = "1.1.0-SNAPSHOT"
 
 java {
     toolchain {
@@ -36,14 +36,14 @@ repositories {
 }
 
 dependencies {
-    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0-SNAPSHOT，
-    // 型別化指令框架只存在於 1.4.0；先在根目錄執行
-    // `./gradlew publishToMavenLocal` 再建置本探針）。
-    compileOnly("com.smile:acelib:1.4.0-SNAPSHOT")
+    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0，
+    // 第三階段形狀只存在於當前版本；先在根目錄執行
+    // `./gradlew publishToMavenLocal` 再建置本探針，不沿用舊座標）。
+    compileOnly("com.smile:acelib:1.4.0")
     // Paper/Folia API 由伺服器 runtime 提供，編譯期只需要 API 面。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 
-    testImplementation("com.smile:acelib:1.4.0-SNAPSHOT")
+    testImplementation("com.smile:acelib:1.4.0")
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

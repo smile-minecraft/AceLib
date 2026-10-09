@@ -116,6 +116,69 @@ class CommandProbeCasesTest {
     }
 
     @Test
+    @DisplayName("第三階段案例齊全（省略／重複／精確數值／動態／自訂／別名／固定選項在地化）")
+    void thirdStageCasesPresent() {
+        List<String> inputs = CommandProbeCases.all().stream()
+            .map(ProbeCase::input)
+            .toList();
+        Set<String> ids = CommandProbeCases.all().stream()
+            .map(ProbeCase::id)
+            .collect(java.util.stream.Collectors.toSet());
+        // 省略引數＋重複引數（同一 give 子指令：[player] [amount 預設1] [extra...]）。
+        assertTrue(inputs.contains("give Steve"), "缺少省略預設值案例");
+        assertTrue(inputs.contains("give Steve 5"), "缺少提供可選引數案例");
+        assertTrue(inputs.contains("give Steve 5 stone"), "缺少單一重複值案例");
+        assertTrue(inputs.contains("give Steve 5 stone dirt"), "缺少多個重複值案例");
+        // 精確數值：合法含 scale、超小數位、科學記號、超範圍各一。
+        assertTrue(inputs.contains("parse-bigdecimal 0.10"), "缺少 BigDecimal 合法案例");
+        assertTrue(ids.contains("err-bigdecimal-scale"), "缺少 BigDecimal 超小數位案例");
+        assertTrue(ids.contains("err-bigdecimal-scientific"), "缺少 BigDecimal 科學記號案例");
+        assertTrue(ids.contains("err-bigdecimal-range"), "缺少 BigDecimal 超範圍案例");
+        // 動態選項：初始解析、增、增後解析、刪、刪後解析、補全。
+        assertTrue(inputs.contains("parse-dyn alpha"), "缺少動態選項初始解析案例");
+        assertTrue(inputs.contains("dyn-add gamma"), "缺少動態選項新增案例");
+        assertTrue(inputs.contains("parse-dyn gamma"), "缺少新增後解析案例");
+        assertTrue(inputs.contains("dyn-remove beta"), "缺少動態選項移除案例");
+        assertTrue(inputs.contains("parse-dyn beta"), "缺少移除後解析案例");
+        assertTrue(inputs.contains("parse-dyn "), "缺少動態選項補全案例");
+        // 自訂引數（0-100 裸數字）：合法、超範圍、非數字、補全。
+        assertTrue(inputs.contains("parse-percent 75"), "缺少自訂引數合法案例");
+        assertTrue(ids.contains("err-percent-range"), "缺少自訂引數超範圍案例");
+        assertTrue(ids.contains("err-percent-nonnumeric"), "缺少自訂引數非數字案例");
+        assertTrue(inputs.contains("parse-percent "), "缺少自訂引數補全案例");
+        // 精確數值刻意不給建議（同整數）。
+        assertTrue(inputs.contains("parse-bigdecimal "), "缺少 BigDecimal 無補全案例");
+        // 子指令別名與主名等價。
+        assertTrue(inputs.contains("pi 5"), "缺少子指令別名案例");
+        // 固定選項在地化（/cprobe-args 根：成功基線＋集合外值）。
+        assertTrue(inputs.contains("trade buy 5"), "缺少 trade 成功基線案例");
+        assertTrue(ids.contains("err-args-trade-loud"), "缺少固定選項在地化錯誤案例");
+    }
+
+    @Test
+    @DisplayName("分組只用四種合法值")
+    void groupsAreKnown() {
+        Set<String> known = Set.of(CommandProbeCases.GROUP_PARSE,
+            CommandProbeCases.GROUP_ERROR, CommandProbeCases.GROUP_COMPLETE,
+            CommandProbeCases.GROUP_LIFECYCLE);
+        for (ProbeCase probeCase : CommandProbeCases.all()) {
+            assertTrue(known.contains(probeCase.group()),
+                "案例分組不合法：" + probeCase.id() + " group=" + probeCase.group());
+        }
+    }
+
+    @Test
+    @DisplayName("新增補全案例不斷言基岩可見性")
+    void newCompleteCasesDoNotClaimBedrock() {
+        for (String id : List.of("complete-dyn", "complete-percent")) {
+            ProbeCase probeCase = CommandProbeCases.byId(id);
+            assertNotNull(probeCase, "缺少補全案例：" + id);
+            assertTrue(probeCase.expectation().contains("不斷言"),
+                "補全案例不得斷言基岩可見性：" + id);
+        }
+    }
+
+    @Test
     @DisplayName("生命週期案例涵蓋重複註冊與 shutdown 殘留")
     void lifecycleCasesCoverResidueChecks() {
         List<String> inputs = CommandProbeCases.all().stream()

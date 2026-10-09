@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://json.schemastore.org/bukkit-plugin.json
 name: AceLibCommandCompatibilityProbe
 main: com.example.acelibcmdprobe.CommandCompatibilityProbePlugin
-version: 1.0.0-SNAPSHOT
+version: 1.1.0-SNAPSHOT
 api-version: '26.1.2'
 folia-supported: true
 description: AceLib 指令相容性探針：型別化引數解析／錯誤提示／補全與生命週期殘留探針
