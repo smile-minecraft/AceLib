@@ -233,6 +233,7 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
         private final PlayerDataStore target;
         private final CountDownLatch entered;
         private final CountDownLatch release;
+        private final AtomicInteger activeLoads = new AtomicInteger();
 
         GatedLoadStore(PlayerDataStore target, CountDownLatch entered,
                 CountDownLatch release) {
@@ -273,13 +274,22 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
 
         @Override
         public Optional<Record> load(UUID uuid) {
-            entered.countDown();
+            activeLoads.incrementAndGet();
             try {
-                release.await(60, TimeUnit.SECONDS);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
+                entered.countDown();
+                try {
+                    release.await(60, TimeUnit.SECONDS);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return target.load(uuid);
+            } finally {
+                if (activeLoads.decrementAndGet() == 0) {
+                    synchronized (this) {
+                        notifyAll();
+                    }
+                }
             }
-            return target.load(uuid);
         }
 
         @Override
@@ -304,7 +314,32 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
 
         @Override
         public void close() {
+            // 先放行仍阻塞在閘門的操作，再等它真正離開 store：
+            // shutdown 強制終止 serial 執行緒後，被中斷的操作仍會進 SQLite
+            // 做一次實際讀取；不等它做完就關 store、讓 JUnit 刪 @TempDir，
+            // 刪除會撞上還開著連線的背景執行緒而失敗。
+            release.countDown();
+            awaitDrained();
             target.close();
+        }
+
+        private void awaitDrained() {
+            long deadlineNanos =
+                System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            synchronized (this) {
+                while (activeLoads.get() > 0) {
+                    long remainingNanos = deadlineNanos - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        break;
+                    }
+                    try {
+                        TimeUnit.NANOSECONDS.timedWait(this, remainingNanos);
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -314,6 +349,7 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
         private final PlayerDataStore target;
         private final CountDownLatch entered;
         private final CountDownLatch release;
+        private final AtomicInteger activeSaves = new AtomicInteger();
 
         GatedSaveStore(PlayerDataStore target, CountDownLatch entered,
                 CountDownLatch release) {
@@ -359,13 +395,22 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
 
         @Override
         public void applyChanges(List<FieldChange> changes) {
-            entered.countDown();
+            activeSaves.incrementAndGet();
             try {
-                assertTrue(release.await(15, TimeUnit.SECONDS), "測試必須放行保存");
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
+                entered.countDown();
+                try {
+                    assertTrue(release.await(15, TimeUnit.SECONDS), "測試必須放行保存");
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                target.applyChanges(changes);
+            } finally {
+                if (activeSaves.decrementAndGet() == 0) {
+                    synchronized (this) {
+                        notifyAll();
+                    }
+                }
             }
-            target.applyChanges(changes);
         }
 
         @Override
@@ -385,6 +430,24 @@ class PlayerDataServiceOfflineAsyncLifecycleTest {
 
         @Override
         public void close() {
+            // 與讀取閘門同理：先放行，再等阻塞中的保存真正離開 store。
+            release.countDown();
+            long deadlineNanos =
+                System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            synchronized (this) {
+                while (activeSaves.get() > 0) {
+                    long remainingNanos = deadlineNanos - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        break;
+                    }
+                    try {
+                        TimeUnit.NANOSECONDS.timedWait(this, remainingNanos);
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
             target.close();
         }
     }
