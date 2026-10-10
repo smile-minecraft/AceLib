@@ -55,6 +55,11 @@ public final class PlayerStoreV150Example {
      * 關閉再開同一個檔案後，舊 {@code expectedRevision} 的重複寫入
      * 會被拒絕並帶回實際值。用畢呼叫回傳 store 的 {@code close()}。</p>
      *
+     * <p>前置 driver：sqlite 後端需要 {@code org.xerial:sqlite-jdbc}
+     * 在 classpath 上（與主專案同版本）；缺席時 {@code init()} 以
+     * {@code ACELIB-DATA-012} 失敗。插件運行期由 {@code plugin.yml} 的
+     * {@code libraries:} 下載，函式庫與測試用法須自行提供依賴。</p>
+     *
      * @param directory 資料目錄；不可為 null
      * @param fileName 資料庫檔名稱；不可為 null 或空白
      * @return 已初始化的逐玩家 store；永不為 null
@@ -62,6 +67,9 @@ public final class PlayerStoreV150Example {
     public static PlayerDataStore sqliteStore(Path directory, String fileName) {
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(fileName, "fileName");
+        if (fileName.isBlank()) {
+            throw new IllegalArgumentException("fileName 不可為空白");
+        }
         PlayerDataStore store =
             PlayerDataStores.sqlite(directory.resolve(fileName), SchemaVersion.V1_0);
         store.init();
@@ -83,6 +91,9 @@ public final class PlayerStoreV150Example {
     public static PlayerDataStore fileBackedStore(Path directory, String fileName) {
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(fileName, "fileName");
+        if (fileName.isBlank()) {
+            throw new IllegalArgumentException("fileName 不可為空白");
+        }
         JsonFileDataStore delegate = new JsonFileDataStore(
             "example-player-data", directory.resolve(fileName),
             SchemaVersion.V1_0, new JsonCodecImpl());
@@ -111,11 +122,19 @@ public final class PlayerStoreV150Example {
     /**
      * 有條件發幣：只有目前 {@code revision} 符合預期才寫入。
      *
-     * <p>{@code expectedRevision} 必須是<strong>同一個轉接實例</strong>回報的
-     * {@code currentRevision}（重試時用失敗回傳裡帶回的實際值）。
-     * 持久化後端（{@link #sqliteStore}）跨重開仍拒絕舊值；
-     * 檔案轉接（{@link #fileBackedStore}）重建後 revision 歸零，
-     * 沿用重啟前的值會誤判套用、重複發放。</p>
+     * <p>保證的是<strong>單一呼叫內部</strong>的原子性（條件檢查與寫入
+     * 在同一交易內，不留部分修改），<strong>不</strong>保證同一玩家上
+     * 併發呼叫之間互斥：兩個同時進行的呼叫可能基於同一個舊
+     * {@code revision} 各自判定，先提交者成功、後提交者收到
+     * {@code applied=false}。呼叫端必須序列化同一玩家的操作，
+     * 或拿回傳的實際 {@code revision} 自寫重試迴圈
+     * （見 {@code PlayerDataStore} 的序列化前提與資料模組頁）。</p>
+     *
+     * <p>檔案轉接（{@link #fileBackedStore}）上，
+     * {@code expectedRevision} 必須是<strong>同一個轉接實例</strong>回報的
+     * {@code currentRevision}（重試時用失敗回傳裡帶回的實際值），
+     * 重建後 revision 歸零、沿用重啟前的值會誤判套用、重複發放。
+     * 持久化後端（{@link #sqliteStore}）跨重開仍拒絕舊值。</p>
      *
      * @param store 逐玩家 store；不可為 null
      * @param uuid 玩家 UUID；不可為 null

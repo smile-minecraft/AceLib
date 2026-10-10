@@ -28,7 +28,8 @@ import org.junit.jupiter.api.io.TempDir;
  *
  * <p>consumer 測試路徑只有 AceLib 主 jar 與 JUnit（無 Bukkit／Adventure），
  * 因此這裡只執行不依賴伺服器的進入點：訊息線的狀態分類與發送摘要、
- * 設定線的規則與攔截、資料線以檔案後端實際執行寫入與離線讀取。
+ * 設定線的規則與攔截、資料線以 sqlite 後端實際執行寫入與離線讀取
+ * （檔案轉接只用於重開誤判的限制釘子測試）。
  * 需要伺服器的接線（{@code MessageService}／{@code ConfigManager}／{@code Player}）
  * 由主程式碼編譯證明，隨伺服器啟動執行。</p>
  */
@@ -152,6 +153,14 @@ class V150ExamplesTest {
         assertTrue(reloaded.isPresent());
         assertEquals(500, ((Number) reloaded.orElseThrow().get("coins")).intValue());
         second.close();
+    }
+
+    @Test
+    void playerStore_blankFileNameRejected(@TempDir Path dir) {
+        assertThrows(IllegalArgumentException.class,
+            () -> PlayerStoreV150Example.sqliteStore(dir, "  "));
+        assertThrows(IllegalArgumentException.class,
+            () -> PlayerStoreV150Example.fileBackedStore(dir, ""));
     }
 
     /**
