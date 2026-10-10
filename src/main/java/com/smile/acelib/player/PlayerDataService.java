@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -203,6 +204,14 @@ public final class PlayerDataService {
      * 卻仍提交任務）。
      */
     private final AtomicBoolean serialExecutorTerminated = new AtomicBoolean(false);
+
+    /**
+     * 尚未完成的 async 離線讀取登錄 — {@link #shutdownSerialExecutor()}
+     * 強制終止時，被移出佇列或被中斷的工作不會再執行，靠這本登錄簿逐一以
+     * {@code ACELIB-PLAYER-008} 完成其 future 並扣回計數。
+     */
+    private final Set<PendingOfflineRead> pendingOfflineReads =
+        ConcurrentHashMap.newKeySet();
 
     /**
      * 主要建構子。
@@ -865,6 +874,10 @@ public final class PlayerDataService {
      * <p><strong>無 late resurrection</strong>：在 in-flight task 完成寫回 cache 步驟
      * 之前，會再次檢查 shutdown flag；已 shutdown 時，task 不會將資料放回 records map，
      * 避免「以為已 shutdown、實際有殘留資料」的 race。</p>
+     *
+     * <p><strong>未完成的 async 離線讀取</strong>：graceful 終止讓它們正常跑完；
+     * 逾時被迫強制終止時，尚未完成的讀取一律以 {@code ACELIB-PLAYER-008}
+     * 完成，不會永久 pending。</p>
      */
     public void shutdown() {
         if (!shutdown.compareAndSet(false, true)) {
@@ -1162,6 +1175,9 @@ public final class PlayerDataService {
 
     /**
      * 終止 internal serialStoreExecutor（graceful + force fallback）。
+     *
+     * <p>強制終止後，以 {@code ACELIB-PLAYER-008} 完成所有尚未完成的 async
+     * 離線讀取：被移出佇列的工作不會再執行，不靠這一步就會永久 pending。</p>
      */
     private void shutdownSerialExecutor() {
         serialStoreExecutor.shutdown();
@@ -1174,7 +1190,26 @@ public final class PlayerDataService {
             Thread.currentThread().interrupt();
             serialStoreExecutor.shutdownNow();
         } finally {
+            failPendingOfflineReads();
             serialExecutorTerminated.set(true);
+        }
+    }
+
+    /**
+     * 以 {@code ACELIB-PLAYER-008} 完成所有尚未完成的 async 離線讀取。
+     *
+     * <p>每個 ticket 恰好扣回一次計數（CAS）：工作自身的 {@code finally} 與這裡
+     * 不會重複扣回；已完成的 future 不受影響（{@code completeExceptionally}
+     * 在已完成時為 no-op）。graceful 終止讓全部工作正常跑完時，這本登錄簿已空，
+     * 此方法為 no-op。</p>
+     */
+    private void failPendingOfflineReads() {
+        for (PendingOfflineRead ticket : new ArrayList<>(pendingOfflineReads)) {
+            pendingOfflineReads.remove(ticket);
+            ticket.future.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-008",
+                "internal serial store executor terminated while reading; "
+                    + "offline read did not complete"));
+            ticket.settle();
         }
     }
 
@@ -1363,8 +1398,7 @@ public final class PlayerDataService {
                     + "cannot read uuid=" + uuid);
         }
         try {
-            Callable<Optional<Record>> read = () -> playerStore.load(uuid)
-                .map(found -> (Record) new MemoryRecord("", toFieldMap(found)));
+            Callable<Optional<Record>> read = () -> loadOfflineRecord(uuid);
             Optional<Record> loaded = serialStoreExecutor
                 .submit(read)
                 .get(LOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -1382,6 +1416,95 @@ public final class PlayerDataService {
             throw new PlayerStateException("ACELIB-PLAYER-008",
                 "offline read interrupted for uuid=" + uuid);
         }
+    }
+
+    /**
+     * 讀取離線玩家的資料（非同步）。
+     *
+     * <p>語意與 {@link #getOfflineData(UUID)} 逐字一致：不需要該玩家有 active
+     * session；資料來自 store 的實際內容，因此刪除過的欄位不會在此復活。
+     * 同玩家在線時拿到的是<strong>已持久化內容</strong>：session 內尚未
+     * {@code flush} 的變更不在內，不得把回傳值當成「最新資料」。</p>
+     *
+     * <p>讀取在內部 serial store executor 上執行（store 非 thread-safe），
+     * 與同步版共用同一個 executor 與同一個單一 session 機制；呼叫端不等待、
+     * 不阻塞，因此可在 region 執行緒上呼叫。不新建執行緒池。</p>
+     *
+     * <p>與同步版不同，非同步版沒有等待逾時：讀取會在 serial executor 輪到它時
+     * 執行並完成 future。若 {@code shutdown()} 在讀取完成前強制終止 executor，
+     * 尚未完成的讀取一律以 {@code ACELIB-PLAYER-008} 完成（不會永久 pending）。</p>
+     *
+     * <p><strong>取消語意</strong>：呼叫端取消回傳的 future 不會中止 store 讀取；
+     * 讀取仍會在 serial executor 上跑完，結果被丟棄。取消不影響 executor 與內部計數。</p>
+     *
+     * <p>回呼（例如 {@code thenAccept}）的執行緒不保證：future 已完成後才註冊的回呼，
+     * 可能直接在呼叫端執行緒執行。要操作玩家、實體或世界，一律用安全排程送回正確上下文。</p>
+     *
+     * @param uuid 玩家 UUID；不可為 null
+     * @return 讀取結果的 future；從未寫入過時完成為 empty
+     * @throws NullPointerException 當 {@code uuid} 為 null（同步拋出）
+     */
+    public CompletableFuture<Optional<Record>> getOfflineDataAsync(UUID uuid) {
+        Objects.requireNonNull(uuid, "uuid");
+        if (shutdown.get()) {
+            CompletableFuture<Optional<Record>> rejected = new CompletableFuture<>();
+            rejected.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-007",
+                "PlayerDataService has been shut down; "
+                    + "cannot read offline data for uuid=" + uuid));
+            return rejected;
+        }
+        if (playerStore == null) {
+            CompletableFuture<Optional<Record>> rejected = new CompletableFuture<>();
+            rejected.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-006",
+                "getOfflineDataAsync requires a per-player PlayerDataStore; this service was "
+                    + "constructed with a legacy DataStore, which cannot read a player "
+                    + "without an active session"));
+            return rejected;
+        }
+        if (serialExecutorTerminated.get()) {
+            CompletableFuture<Optional<Record>> rejected = new CompletableFuture<>();
+            rejected.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-008",
+                "internal serial store executor has been terminated; "
+                    + "cannot read uuid=" + uuid));
+            return rejected;
+        }
+        CompletableFuture<Optional<Record>> future = new CompletableFuture<>();
+        PendingOfflineRead ticket = new PendingOfflineRead(future);
+        pendingOfflineReads.add(ticket);
+        inFlightOps.incrementAndGet();
+        try {
+            serialStoreExecutor.execute(() -> {
+                try {
+                    future.complete(loadOfflineRecord(uuid));
+                } catch (Throwable failure) {
+                    future.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-002",
+                        "failed to read offline player data for uuid=" + uuid + ": "
+                            + failure.getMessage(), failure));
+                } finally {
+                    pendingOfflineReads.remove(ticket);
+                    ticket.settle();
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            pendingOfflineReads.remove(ticket);
+            ticket.settle();
+            future.completeExceptionally(new PlayerStateException("ACELIB-PLAYER-008",
+                "offline read dispatch rejected for uuid=" + uuid, rejected));
+        }
+        return future;
+    }
+
+    /**
+     * 從逐玩家 store 載入單一玩家資料並轉成可獨立持有的視圖。
+     *
+     * <p>必須在 {@link #serialStoreExecutor} 上呼叫（store 非 thread-safe）。</p>
+     *
+     * @param uuid 玩家 UUID；不可為 null
+     * @return 該玩家目前的資料；從未寫入過時為 empty
+     */
+    private Optional<Record> loadOfflineRecord(UUID uuid) {
+        return playerStore.load(uuid)
+            .map(found -> (Record) new MemoryRecord("", toFieldMap(found)));
     }
 
     /**
@@ -1600,6 +1723,29 @@ public final class PlayerDataService {
             cause = cause.getCause();
         }
         return cause;
+    }
+
+    /**
+     * 尚未完成的 async 離線讀取登錄項：future 本體加上「恰好扣回一次」的結算旗標。
+     *
+     * <p>工作自身的 {@code finally} 與 {@link #failPendingOfflineReads()}
+     * 可能併發結算同一張 ticket（強制終止時被中斷的工作仍會跑完 {@code finally}），
+     * 以 CAS 保證 {@code inFlightOps} 只扣一次。</p>
+     */
+    private final class PendingOfflineRead {
+        final CompletableFuture<Optional<Record>> future;
+        final AtomicBoolean settled = new AtomicBoolean(false);
+
+        PendingOfflineRead(CompletableFuture<Optional<Record>> future) {
+            this.future = future;
+        }
+
+        /** 扣回一次計數；重複呼叫為 no-op。 */
+        void settle() {
+            if (settled.compareAndSet(false, true)) {
+                inFlightOps.decrementAndGet();
+            }
+        }
     }
 
     /**

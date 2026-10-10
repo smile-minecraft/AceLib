@@ -108,6 +108,23 @@ handle.close(); // 不再收到後續通知
 serial store executor 上執行、呼叫端同步等待，因此不應在 region 執行緒上呼叫。以舊 `DataStore` 建構的服務沒有
 逐玩家 store，此方法以 `ACELIB-PLAYER-006` 失敗。
 
+需要在 region 執行緒（例如事件處理中）讀取時，用 `getOfflineDataAsync(uuid)`：
+語意與同步版一致，但呼叫端不等待、讀取完成時 future 完成。同玩家在線時拿到的是
+已持久化內容，session 內尚未落盤的變更不在內，不得把結果當成最新資料。
+呼叫端取消回傳的 future 不會中止讀取（讀取照跑、結果丟棄）；`shutdown()` 強制終止
+executor 時尚未完成的讀取以 `ACELIB-PLAYER-008` 完成，不會永久 pending。
+失敗以 future 的 exceptional 完成表達：服務已關閉為 `ACELIB-PLAYER-007`、
+舊 `DataStore` 建構為 `ACELIB-PLAYER-006`、內部 executor 已終止或派送被拒為
+`ACELIB-PLAYER-008`、讀取失敗為 `ACELIB-PLAYER-002`。`uuid` 為 null 時同步拋
+`NullPointerException`。
+
+```java
+players.getOfflineDataAsync(uuid).thenAccept(offline -> {
+    // callback 執行緒不保證（future 已完成後才註冊回呼時，回呼可能直接在呼叫端執行）；
+    // 要操作玩家或世界，先用安全排程送回正確上下文
+});
+```
+
 ## 定期保存與異常終止
 
 服務建構時即啟用定期保存（週期為第三個建構參數），每個週期把全部 dirty record

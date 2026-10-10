@@ -1814,6 +1814,7 @@
       "method autosaveNow() : java.util.concurrent.CompletableFuture<java.lang.Void>",
       "method getData(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
       "method getOfflineData(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
+      "method getOfflineDataAsync(java.util.UUID) : java.util.concurrent.CompletableFuture<java.util.Optional<com.smile.acelib.data.Record>>",
       "method getSession(java.util.UUID) : java.util.Optional<com.smile.acelib.player.PlayerSession>",
       "method isShutdown() : boolean",
       "method markDirty(java.util.UUID) : void",
