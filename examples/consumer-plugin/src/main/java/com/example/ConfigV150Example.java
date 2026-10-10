@@ -130,6 +130,9 @@ public final class ConfigV150Example {
     /**
      * 缺檔攔截：使用後缺檔時拒絕靜默還原，直接失敗（純函式，不需伺服器）。
      *
+     * <p>錯誤碼由下游自行決定：此處的 {@code ACELIB-EXT-001} 只是示例寫法，
+     * AceLib 不指定缺檔攔截該用哪個碼，原樣傳播呼叫端給的碼與訊息。</p>
+     *
      * @return 缺檔攔截規則；永不為 null
      */
     public static ConfigMissingFileHandler rejectRestore() {

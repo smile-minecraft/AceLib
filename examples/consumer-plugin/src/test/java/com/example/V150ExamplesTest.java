@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.config.ConfigBindingException;
 import com.smile.acelib.config.ConfigException;
+import com.smile.acelib.config.ConfigSnapshot;
 import com.smile.acelib.data.PlayerDataStore;
 import com.smile.acelib.data.Record;
 import com.smile.acelib.message.BedrockFallbackStyle;
@@ -91,8 +92,7 @@ class V150ExamplesTest {
     }
 
     @Test
-    void playerStore_conditionalWriteAndOfflineRead(@TempDir Path dir) throws Exception {
-        PlayerDataStore store = PlayerStoreV150Example.fileBackedStore(dir, "player-data.json");
+    void playerStore_conditionalWriteAndOfflineRead(@TempDir Path dir) throws Exception {        PlayerDataStore store = PlayerStoreV150Example.fileBackedStore(dir, "player-data.json");
         PlayerDataService service = PlayerStoreV150Example.openService(store);
         try {
             UUID player = UUID.randomUUID();
@@ -123,5 +123,43 @@ class V150ExamplesTest {
         } finally {
             service.shutdown();
         }
+    }
+
+    /**
+     * 重開轉接後 revision 歸零的限制釘子：同一資料目錄建第二個轉接實例，
+     * 對已有資料的玩家以 {@code expectedRevision=0} 呼叫會誤判套用
+     * （檔案轉接的 revision 只活在轉接實例記憶體）。
+     *
+     * <p>這是「示範限制」的釘子，不是建議用法：跨重啟的發放冪等
+     * 不可用檔案轉接的 revision 實現，要用持久化後端。</p>
+     */
+    @Test
+    void playerStore_reopenedAdapterMisappliesWithStaleRevision(@TempDir Path dir) {
+        UUID player = UUID.randomUUID();
+        PlayerDataStore first = PlayerStoreV150Example.fileBackedStore(dir, "player-data.json");
+        PlayerDataStore.ConditionalWriteResult written =
+            PlayerStoreV150Example.grantCoinsIfExpected(first, player, 100, 0L);
+        assertTrue(written.applied());
+        first.close();
+
+        PlayerDataStore second = PlayerStoreV150Example.fileBackedStore(dir, "player-data.json");
+        PlayerDataStore.ConditionalWriteResult replayed =
+            PlayerStoreV150Example.grantCoinsIfExpected(second, player, 500, 0L);
+        assertTrue(replayed.applied());
+        assertEquals(1L, replayed.currentRevision());
+        Optional<Record> reloaded = second.load(player);
+        assertTrue(reloaded.isPresent());
+        assertEquals(500, ((Number) reloaded.orElseThrow().get("coins")).intValue());
+        second.close();
+    }
+
+    @Test
+    void configEmptySnapshot_reportsGenerationZeroAndDefaults() {
+        assertEquals(0L, ConfigV150Example.generationOf(ConfigSnapshot.empty()));
+        assertEquals(7L, ConfigV150Example.readLong(ConfigSnapshot.empty(), "limits.min", 7L));
+        assertEquals(0.5, ConfigV150Example.readDouble(ConfigSnapshot.empty(), "ratio", 0.5));
+        String summary = ConfigV150Example.auditSnapshot(ConfigSnapshot.empty());
+        assertTrue(summary.contains("generation=0"));
+        assertTrue(summary.contains("min=0"));
     }
 }
