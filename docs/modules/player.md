@@ -17,6 +17,7 @@
 - [定期保存與異常終止](#定期保存與異常終止)
 - [保存失敗與重登恢復](#保存失敗與重登恢復)
 - [Reload 與在線玩家重接](#reload-與在線玩家重接)
+- [併發寫入同一欄位](#併發寫入同一欄位)
 - [玩家冷卻](#玩家冷卻)
 - [關閉服務](#關閉服務)
 - [相關頁面](#相關頁面)
@@ -140,6 +141,24 @@ AceLib 成功 reload 時，舊 `PlayerDataService` 先 shutdown（dirty 已 flus
 重建後的載入等待以共用總時限為界（預設 10 秒，不隨在線人數成長）：全部載入完成或總時限耗盡即回傳，未完成的玩家各記一則 `ACELIB-PLAYER-002` 逾時警告，reload 照常成功；該玩家下次 join／quit 時走正常生命週期重建。
 
 已知空窗：舊 player listener 解除到新 listener 註冊之間有短暫空窗；恰好落在空窗內的 join 不會建立 session、quit 會以 `ACELIB-PLAYER-005` 記警告（無 session 可結束）。已 flush 回 store 的資料不受影響，不造成資料遺失；Folia 上跨 region 的事件時序較容易遇到此空窗。
+
+## 併發寫入同一欄位
+
+有 session 的玩家一律走 `getData`／`markDirty`，由服務序列化保存。服務管不到的
+寫入路徑（離線玩家、外部工具）若會同時改同一個欄位，直接對 store 用條件寫入：
+
+```java
+long expected = store.revisionOf(uuid, "balance");
+PlayerDataStore.ConditionalWriteResult result =
+    store.applyIfRevision(uuid, "balance", 130, expected);
+```
+
+一次只讓一個成功，輸家拿回報的實際 `revision` 重試。需要「先看再決定寫不寫」
+時用 `readCheckApply`（讀取、檢查、套用在同一原子區段，檢查不過不留修改）。
+語意、退回碼與各後端限制見[資料儲存](data.md)；服務本身不包裝這兩個方法，
+有 session 時也不要繞過服務直接寫 store（服務的差分基準看不到外部寫入，
+下次保存會蓋掉它）。reload 會關閉舊 store：JDBC／SQLite 的 `revision` 留在
+資料表裡，重開後可用；轉接的 `revision` 只在記憶體裡，重建即歸零。
 
 ## 玩家冷卻
 

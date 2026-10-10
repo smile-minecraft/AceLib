@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * 把既有 {@link DataStore} 包成 {@link PlayerDataStore} 語意（Internal）。
@@ -49,6 +50,17 @@ import java.util.UUID;
  * <p>{@code revision} 只放在本轉接實例的記憶體裡（每次成功 {@code save()}
  * 後推進），<strong>只對同一轉接實例的生命週期有效</strong>：重建轉接、
  * 重啟伺服器都不保留，也不持久化、不跨行程。</p>
+ *
+ * <p>計數是 <strong>per-player 而非 per-field</strong>：任一欄位寫入都會推進
+ * 該玩家所有欄位可見的 {@code revision}。因此 {@code applyIfRevision} 比對的
+ * 是這個粗粒計數——同玩家的其他欄位寫入也會讓期望值過期，呼叫端重試時應以回報的
+ * 實際值為準。這是轉接的已知限制（JDBC／SQLite 後端為真正的 per-field
+ * {@code revision}），不是跨後端一致的保證。</p>
+ *
+ * <p>新增的兩個原子原語在實例監視器內序列化：同一轉接上的併發
+ * {@code applyIfRevision}／{@code readCheckApply} 不會互相穿插；
+ * 既有 {@code applyChanges}／{@code deletePlayer} 仍依介面約定由呼叫端序列化
+ * （生產路徑由 {@code PlayerDataService} 的 serial executor 保證）。</p>
  *
  * <p>{@code close()} 不關閉 delegate：delegate 的生命週期屬於建立它的呼叫端。</p>
  *
@@ -170,6 +182,70 @@ final class DataStorePlayerDataStore implements PlayerDataStore {
         for (FieldChange change : deduped.values()) {
             revisions.merge(change.uuid(), 1L, Long::sum);
         }
+    }
+
+    @Override
+    public synchronized ConditionalWriteResult applyIfRevision(UUID uuid, String field,
+            Object value, long expectedRevision) {
+        Objects.requireNonNull(uuid, "uuid");
+        Objects.requireNonNull(field, "field");
+        Objects.requireNonNull(value,
+            "value 不可為 null；移除欄位請使用 FieldChange.deletion 搭配 applyChanges");
+        if (field.isBlank()) {
+            throw new IllegalArgumentException("field 不可為空白");
+        }
+        if (expectedRevision < 0) {
+            throw new IllegalArgumentException(
+                "expectedRevision 不可為負數：" + expectedRevision);
+        }
+        requireReady();
+        long current = revisions.getOrDefault(uuid, 0L);
+        if (current != expectedRevision) {
+            return new ConditionalWriteResult(false, current);
+        }
+        Record root = delegate.root();
+        boolean playersExisted = root.getRecord(PLAYER_ROOT, null) != null;
+        PlayerSnapshot snapshot = capturePlayer(root, uuid);
+        try {
+            root.set(PLAYER_ROOT + "." + uuidKey(uuid) + "." + field, value);
+            delegate.save();
+        } catch (RuntimeException ex) {
+            throw rollbackFailure("conditional-write", 1, ex, root,
+                List.of(snapshot), playersExisted);
+        }
+        long next = current + 1;
+        revisions.put(uuid, next);
+        return new ConditionalWriteResult(true, next);
+    }
+
+    @Override
+    public synchronized ReadCheckApplyResult readCheckApply(UUID uuid,
+            Predicate<Optional<Record>> check, List<FieldChange> changes) {
+        Objects.requireNonNull(uuid, "uuid");
+        Objects.requireNonNull(check, "check");
+        Objects.requireNonNull(changes, "changes");
+        requireReady();
+        for (FieldChange change : changes) {
+            Objects.requireNonNull(change, "changes 的元素不可為 null");
+            if (!uuid.equals(change.uuid())) {
+                throw new IllegalArgumentException(
+                    "readCheckApply 的 changes 必須全屬 uuid=" + uuid
+                        + "，實際：" + change.uuid());
+            }
+        }
+        // 判定用的資料是剛讀到的分離拷貝：呼叫端在 check 內改它不影響儲存；
+        // 判定本身尚未改動任何狀態，拋錯時無須回滾、原樣傳遞。
+        Optional<Record> current = load(uuid);
+        boolean passed = check.test(current);
+        if (!passed) {
+            return new ReadCheckApplyResult(Outcome.CHECK_REJECTED);
+        }
+        if (!changes.isEmpty()) {
+            // 本方法已持有監視器（可重入）：沿用 applyChanges 的快照／還原流程，
+            // 失敗時記憶體樹與 revision 照樣回到操作前（ACELIB-DATA-008）。
+            applyChanges(changes);
+        }
+        return new ReadCheckApplyResult(Outcome.APPLIED);
     }
 
     @Override

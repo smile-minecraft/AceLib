@@ -679,6 +679,7 @@
     ],
     "com.smile.acelib.data.PlayerDataStore": [
       "method applyChanges(java.util.List<com.smile.acelib.data.PlayerDataStore$FieldChange>) : void",
+      "method applyIfRevision(java.util.UUID,java.lang.String,java.lang.Object,long) : com.smile.acelib.data.PlayerDataStore$ConditionalWriteResult",
       "method close() : void",
       "method deletePlayer(java.util.UUID) : void",
       "method fieldCount(java.util.UUID) : int",
@@ -688,6 +689,7 @@
       "method load(java.util.UUID) : java.util.Optional<com.smile.acelib.data.Record>",
       "method name() : java.lang.String",
       "method owner() : java.lang.String",
+      "method readCheckApply(java.util.UUID,java.util.function.Predicate<java.util.Optional<com.smile.acelib.data.Record>>,java.util.List<com.smile.acelib.data.PlayerDataStore$FieldChange>) : com.smile.acelib.data.PlayerDataStore$ReadCheckApplyResult",
       "method revisionOf(java.util.UUID,java.lang.String) : long",
       "method schemaVersion() : com.smile.acelib.data.SchemaVersion"
     ],

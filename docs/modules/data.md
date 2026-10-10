@@ -165,6 +165,60 @@ upsert 不使用 `ON DUPLICATE KEY UPDATE` 等 vendor 專屬語法，改以先 `
 轉接實例的記憶體裡，重建轉接即歸零。還原以整節點深拷貝寫回，因此頂層 `null`
 值、空玩家節點與字面點號鍵都能回到原始結構。
 
+### 條件寫入與讀檢查套用
+
+兩個寫入路徑同時改同一個欄位時，先讀後寫會互相覆寫。用欄位 `revision`
+當條件，一次只讓一個成功：
+
+```java
+PlayerDataStore.ConditionalWriteResult result =
+    store.applyIfRevision(uuid, "balance", 130, expectedRevision);
+if (!result.applied()) {
+    // 別人先寫了：用回報的實際 revision 重讀、重算、重試（本方法不自動重試）
+    long actual = result.currentRevision();
+}
+```
+
+`applyIfRevision(uuid, field, value, expectedRevision)` 只有當該欄位目前的
+`revision` 等於期望值時才寫入，成功後 `revision` 遞增。不存在的欄位視為
+`0`，因此期望 `0` 即「不存在才建立」。條件不符不寫入，回傳 `applied=false`
+與實際 `revision`。條件相符即視為一次寫入（即使值相同也推進 `revision`，
+與 `applyChanges` 的同值跳過不同）。`value` 不可為 `null`；刪除欄位仍用
+`FieldChange.deletion` 搭配 `applyChanges`。
+
+```java
+PlayerDataStore.ReadCheckApplyResult done = store.readCheckApply(uuid,
+    present -> present.isPresent() && present.get().getInt("balance", 0) >= 10,
+    List.of(PlayerDataStore.FieldChange.upsert(uuid, "balance", 5)));
+// done.outcome() 為 APPLIED 或 CHECK_REJECTED
+```
+
+`readCheckApply(uuid, check, changes)` 把讀取、判定、套用放在同一個原子區段：
+以剛讀到的資料執行 `check`，通過才套用 `changes`。檢查不通過回傳
+`CHECK_REJECTED` 且不做任何修改；基礎設施失敗（`ACELIB-DATA-008`）整批回滾，
+同樣不留部分修改。`check` 在交易內執行，必須是純判定：不可呼叫 store 的任何
+方法，也不要有外部副作用；`check` 自己拋的例外在回滾後原樣傳遞。
+`changes` 必須全屬同一個 `uuid`（空批次只做檢查）。
+
+退回一覽：條件不符或檢查不通過是正常回傳（不是例外）；已關閉為
+`ACELIB-DATA-005`；交易失敗為 `ACELIB-DATA-008`；`null` 參數為
+`NullPointerException`，空白欄位名、負數期望值、跨玩家批次為
+`IllegalArgumentException`；不支援型別的值為 `ACELIB-DATA-006`。
+外部自備的 `PlayerDataStore` 實作可以不實作這兩個方法，未覆寫時預設拋
+`UnsupportedOperationException`（明確拒絕，不以先讀後寫假裝原子）。
+
+限制（各後端相同）：單一儲存行程內的單一交易，不保證跨伺服器或跨行程的原子
+性，也不做自動重試。保證的只是**單一呼叫內部**的讀寫一致與不留部分修改：
+條件檢查與寫入（或讀取、判定、套用）在同一交易／監視器內完成。**同一玩家上
+的併發呼叫不互斥**——兩個同時進行的呼叫可能基於同一個舊 `revision` 或同一份
+舊資料各自判定，呼叫端必須序列化所有操作（AceLib 內部由 `PlayerDataService`
+的 per-store serial executor 保證），或拿 `applied=false` 與實際 `revision`
+自行重試。併發測試通過（恰好一個成功）證明的是失敗側誠實回報、成功側完整寫
+入，不代表呼叫端可以省略序列化。JDBC／SQLite 的 `revision` 存在資料表裡，關閉重開後保留；
+轉接的 `revision` 只放在轉接實例的記憶體裡，重建即歸零，而且是 per-player
+粗粒計數（任一欄位寫入都會推進該玩家所有欄位可見的值），精度不如 JDBC／SQLite
+的 per-field 計數。呼叫端的執行緒序列化義務與 `applyChanges` 相同。
+
 ### 既有玩家資料的轉換
 
 `PlayerDataConverter` 把舊版 JSON 檔（`player-data.json`）或舊 `acelib_data_kv` 的

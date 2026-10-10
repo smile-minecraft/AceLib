@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * 逐玩家資料儲存介面（SPI）。
@@ -133,6 +134,109 @@ public interface PlayerDataStore extends AutoCloseable {
     void deletePlayer(UUID uuid);
 
     /**
+     * 以欄位 {@code revision} 為條件的單欄位 upsert。
+     *
+     * <p>只有當該欄位目前的 {@code revision} 等於 {@code expectedRevision}
+     * 時才寫入；成功後 {@code revision} 遞增（不存在的欄位視為 {@code 0}，
+     * 因此 {@code expectedRevision == 0} 即「欄位必須不存在才建立」）。
+     * 條件不符時不寫入，回傳 {@code applied=false} 與當下實際
+     * {@code revision}，呼叫端可用它重試（本方法不做自動重試）。</p>
+     *
+     * <p>與 {@link #applyChanges(List)} 的差異：條件相符即視為一次寫入並推進
+     * {@code revision}，即使值與現有內容相同（呼叫端明確要求寫入，不沿用
+     * {@code applyChanges} 的同值跳過優化）。刪除語意不在範圍：{@code value}
+     * 不可為 {@code null}，移除欄位請用
+     * {@link FieldChange#deletion(UUID, String)} 搭配 {@link #applyChanges}。</p>
+     *
+     * <p>原子性只在單一儲存行程內成立：JDBC／SQLite 以單一交易內的條件更新
+     * 達成，不保證跨伺服器或跨行程的原子性。呼叫端的執行緒序列化義務與
+     * {@link #applyChanges(List)} 相同（見類別 Javadoc 的執行緒模型）。</p>
+     *
+     * <p><strong>序列化前提</strong>：本方法保證的是<strong>單一呼叫內部</strong>的
+     * 原子性（條件檢查與寫入在同一交易內，不會留下部分修改），<strong>不</strong>保證
+     * 同一玩家上併發呼叫之間互斥。兩個同時進行的呼叫可能基於同一個舊
+     * {@code revision} 各自判定（普通讀取不加鎖），先提交者成功、後提交者收到
+     * {@code applied=false}——這正是呼叫端拿實際 {@code revision} 重試的設計，
+     * 不是互斥。呼叫端必須序列化所有操作（AceLib 內部由
+     * {@code PlayerDataService} 的 per-store serial executor 保證），或自行實作
+     * 重試迴圈。不得把「交易內一致」解讀為「可併發使用」；要跨呼叫互斥需另做
+     * 設計，本版本不提供。</p>
+     *
+     * <p>預設實作明確拒絕：外部 SPI 實作者可不實作本方法；未覆寫時拋
+     * {@link UnsupportedOperationException}，不以「先讀後寫」假裝原子，
+     * 呼叫端收到的是誠實的失敗而非假的成功。</p>
+     *
+     * @param uuid             玩家 UUID；不可為 null
+     * @param field            頂層欄位名；不可為 null 或空白
+     * @param value            欄位值；不可為 null（須符合 {@link JsonCodec} 白名單）
+     * @param expectedRevision 預期的目前 {@code revision}；必須 {@code >= 0}
+     * @return 寫入結果；不可為 null
+     * @throws NullPointerException          當 {@code uuid}／{@code field}／
+     *                                       {@code value} 為 null
+     * @throws IllegalArgumentException      當 {@code field} 為空白或
+     *                                       {@code expectedRevision} 為負數
+     * @throws IllegalStateException         當尚未 {@link #init()}
+     * @throws UnsupportedOperationException 當實作未支援條件寫入（預設）
+     * @throws DataStoreException            當已關閉（{@code ACELIB-DATA-005}）
+     *                                       或寫入失敗（{@code ACELIB-DATA-008}）
+     * @since 1.5.0
+     */
+    default ConditionalWriteResult applyIfRevision(UUID uuid, String field, Object value,
+            long expectedRevision) {
+        throw new UnsupportedOperationException(
+            "PlayerDataStore '" + getClass().getName()
+                + "' does not support applyIfRevision; refusing to fake it with read-then-write");
+    }
+
+    /**
+     * 在單一原子區段內讀取、檢查、套用。
+     *
+     * <p>流程：讀取該玩家的目前資料 → 在同一原子區段內以剛讀到的資料執行
+     * {@code check} → 通過才套用 {@code changes}。檢查不通過時回傳
+     * {@code CHECK_REJECTED} 且不留下任何修改；基礎設施失敗時整批回滾並拋
+     * {@link DataStoreException}（{@code ACELIB-DATA-008}），同樣不留部分修改。</p>
+     *
+     * <p>{@code check} 在交易內執行：必須是對給定 record 的純判定，不可呼叫
+     * 本 store 的任何方法（會死結或耗盡連線），也不應有外部副作用。
+     * {@code check} 本身拋出的例外在回滾後原樣傳遞，不包裝成
+     * {@link DataStoreException}。{@code changes} 必須全屬同一 {@code uuid}
+     *（含空批次：空批次只做檢查、不寫入），否則拋
+     * {@link IllegalArgumentException}。</p>
+     *
+     * <p>原子性與 {@link #applyIfRevision} 相同範圍：單一儲存行程內的單一交易，
+     * 不保證跨伺服器或跨行程；不做自動重試，呼叫端自行決定重試。</p>
+     *
+     * <p><strong>序列化前提</strong>：本方法保證的是<strong>單一呼叫內部</strong>的
+     * 原子性（讀取、判定、套用在同一交易／監視器內，判定不過或失敗都不留部分
+     * 修改），<strong>不</strong>保證同一玩家上併發呼叫之間互斥。兩個同時進行的
+     * {@code readCheckApply} 可能讀到同一份舊資料並各自通過檢查（普通讀取不加鎖，
+     * 也沒有版本驗證），呼叫端必須序列化所有操作，或把需要互斥的判斷改寫成
+     * {@link #applyIfRevision} 的 revision 條件。不得把「交易內一致」解讀為
+     * 「可併發使用」；要跨呼叫互斥需另做設計，本版本不提供。</p>
+     *
+     * <p>預設實作明確拒絕，理由同 {@link #applyIfRevision}。</p>
+     *
+     * @param uuid    玩家 UUID；不可為 null
+     * @param check   對剛讀到資料的判定；不可為 null
+     * @param changes 檢查通過後套用的變更；不可為 null，元素不可為 null，
+     *                且 {@code uuid} 必須全等於本參數的 {@code uuid}
+     * @return 套用結果；不可為 null
+     * @throws NullPointerException          當任一參數為 null
+     * @throws IllegalArgumentException      當 {@code changes} 含有其他玩家的變更
+     * @throws IllegalStateException         當尚未 {@link #init()}
+     * @throws UnsupportedOperationException 當實作未支援讀檢查套用（預設）
+     * @throws DataStoreException            當已關閉（{@code ACELIB-DATA-005}）
+     *                                       或套用失敗（{@code ACELIB-DATA-008}）
+     * @since 1.5.0
+     */
+    default ReadCheckApplyResult readCheckApply(UUID uuid, Predicate<Optional<Record>> check,
+            List<FieldChange> changes) {
+        throw new UnsupportedOperationException(
+            "PlayerDataStore '" + getClass().getName()
+                + "' does not support readCheckApply; refusing to fake it with read-then-write");
+    }
+
+    /**
      * 取得某位玩家某個欄位目前的 {@code revision}（每次實際寫入遞增）。
      *
      * <p>供測試與診斷觀察「哪些欄位真的被寫過」；非既有欄位回傳 0。</p>
@@ -164,6 +268,49 @@ public interface PlayerDataStore extends AutoCloseable {
      */
     @Override
     void close();
+
+    /**
+     * 條件寫入的結果。
+     *
+     * @param applied         條件相符且已寫入時為 true；不符時為 false（未寫入）
+     * @param currentRevision 回傳當下該欄位的實際 {@code revision}：
+     *                        成功時為寫入後的值，不符時為供重試用的實際值
+     */
+    record ConditionalWriteResult(boolean applied, long currentRevision) {
+        /**
+         * 檢查結果的不變條件。
+         */
+        public ConditionalWriteResult {
+            if (currentRevision < 0) {
+                throw new IllegalArgumentException(
+                    "currentRevision 不可為負數：" + currentRevision);
+            }
+        }
+    }
+
+    /**
+     * 讀檢查套用的結果狀態。
+     */
+    enum Outcome {
+        /** 檢查通過且變更已套用。 */
+        APPLIED,
+        /** 檢查不通過，未做任何修改。 */
+        CHECK_REJECTED
+    }
+
+    /**
+     * 讀檢查套用的結果。
+     *
+     * @param outcome 套用結果；不可為 null
+     */
+    record ReadCheckApplyResult(Outcome outcome) {
+        /**
+         * 檢查結果的不變條件。
+         */
+        public ReadCheckApplyResult {
+            Objects.requireNonNull(outcome, "outcome");
+        }
+    }
 
     /**
      * 一筆欄位變更。

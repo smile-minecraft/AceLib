@@ -75,6 +75,10 @@ final class PlayerStoreCompatSuite {
             () -> parallelPlayerChanges(fresh, log));
         failures += run(label, "transaction-failure-rollback", log,
             () -> transactionFailureRollback(fresh, log));
+        failures += run(label, "conditional-write-revision-race", log,
+            () -> conditionalWriteRevisionRace(fresh, log));
+        failures += run(label, "read-check-apply-atomic", log,
+            () -> readCheckApplyAtomic(fresh, log));
         failures += run(label, "legacy-jdbc-conversion-preserves-other-stores", log,
             () -> legacyJdbcConversion(legacy, workDir, log));
         failures += run(label, "connection-failure-stage", log,
@@ -422,6 +426,149 @@ final class PlayerStoreCompatSuite {
             "重跑不得覆寫轉換後新發生的資料");
         log.println("  rerun skipped via marker, live values win");
         target.close();
+    }
+
+    /**
+     * 欄位 revision 條件寫入：相符寫入、不符不寫、同一 revision 併發恰好一個成功。
+     *
+     * <p>條件更新走 {@code UPDATE ... WHERE revision = ?} 單一交易；併發雙方
+     * 更新同一列時由列鎖序列化，輸家看到 0 列而回報不符（不拋死結）。</p>
+     */
+    static void conditionalWriteRevisionRace(DataSource ds, PrintStream log) throws Exception {
+        PlayerDataStore store = PlayerDataStores.jdbc(ds, SchemaVersion.V1_0,
+            "compat-cond", TABLE);
+        store.init();
+        try {
+            UUID uuid = UUID.randomUUID();
+            store.applyChanges(List.of(PlayerDataStore.FieldChange.upsert(uuid, "k", "old")));
+
+            PlayerDataStore.ConditionalWriteResult won =
+                store.applyIfRevision(uuid, "k", "new", 1L);
+            check(won.applied() && won.currentRevision() == 2L, "相符寫入成功且 revision 為 2");
+
+            PlayerDataStore.ConditionalWriteResult lost =
+                store.applyIfRevision(uuid, "k", "stale", 1L);
+            check(!lost.applied() && lost.currentRevision() == 2L,
+                "過期期望不寫並回報實際 revision 2");
+            check("new".equals(store.load(uuid).orElseThrow().getString("k", null)),
+                "不符寫入不得改變值");
+
+            PlayerDataStore.ConditionalWriteResult created =
+                store.applyIfRevision(uuid, "fresh", "v", 0L);
+            check(created.applied() && created.currentRevision() == 1L,
+                "不存在欄位以期望 0 建立");
+            PlayerDataStore.ConditionalWriteResult refused =
+                store.applyIfRevision(uuid, "absent", "v", 7L);
+            check(!refused.applied() && refused.currentRevision() == 0L,
+                "不存在欄位以非 0 期望拒絕");
+
+            // 同一 revision 併發：恰好一個成功（列鎖序列化，無死結）。
+            CountDownLatch start = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(2);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            List<Boolean> applied = java.util.Collections.synchronizedList(new ArrayList<>());
+            List<Thread> threads = new ArrayList<>();
+            for (String value : List.of("racer-a", "racer-b")) {
+                Thread thread = new Thread(() -> {
+                    try {
+                        if (!start.await(10, TimeUnit.SECONDS)) {
+                            throw new AssertionError("起跑閘門逾時");
+                        }
+                        applied.add(store.applyIfRevision(uuid, "k", value, 2L).applied());
+                    } catch (Throwable t) {
+                        failure.compareAndSet(null, t);
+                    } finally {
+                        done.countDown();
+                    }
+                });
+                thread.setDaemon(true);
+                threads.add(thread);
+                thread.start();
+            }
+            start.countDown();
+            check(done.await(60, TimeUnit.SECONDS), "併發條件寫入必須在時限內完成");
+            for (Thread thread : threads) {
+                thread.join(5000L);
+            }
+            if (failure.get() != null) {
+                throw new AssertionError("併發條件寫入失敗: " + failure.get());
+            }
+            check(applied.size() == 2 && applied.stream().filter(b -> b).count() == 1,
+                "同一 revision 併發恰好一個成功，實際：" + applied);
+            check(store.revisionOf(uuid, "k") == 3L, "勝出者 revision 推進到 3");
+            log.println("  conditional write ok: match/mismatch/create-if-absent,"
+                + " race exactly-one-wins, applied=" + applied);
+        } finally {
+            store.close();
+        }
+    }
+
+    /**
+     * 原子讀檢查套用：檢查通過套用、拒絕不留修改、儲存失敗整批回滾。
+     *
+     * <p>失敗注入沿用 {@link #transactionFailureRollback} 的欄位長度限制
+     * 做法（不需要 trigger 權限），錯誤碼同為 {@code ACELIB-DATA-008}。</p>
+     */
+    static void readCheckApplyAtomic(DataSource ds, PrintStream log)
+            throws Exception {
+        PlayerDataStore store = PlayerDataStores.jdbc(ds, SchemaVersion.V1_0,
+            "compat-rca", TABLE);
+        store.init();
+        try {
+            UUID uuid = UUID.randomUUID();
+            store.applyChanges(List.of(
+                PlayerDataStore.FieldChange.upsert(uuid, "a", 1),
+                PlayerDataStore.FieldChange.upsert(uuid, "b", "keep")));
+
+            PlayerDataStore.ReadCheckApplyResult done = store.readCheckApply(uuid,
+                present -> present.isPresent() && present.get().getInt("a", -1) == 1,
+                List.of(PlayerDataStore.FieldChange.upsert(uuid, "a", 2)));
+            check(done.outcome() == PlayerDataStore.Outcome.APPLIED, "檢查通過應套用");
+            check(store.load(uuid).orElseThrow().getInt("a", -1) == 2, "套用後可讀到新值");
+
+            PlayerDataStore.ReadCheckApplyResult rejected = store.readCheckApply(uuid,
+                present -> false,
+                List.of(PlayerDataStore.FieldChange.upsert(uuid, "a", 999)));
+            check(rejected.outcome() == PlayerDataStore.Outcome.CHECK_REJECTED,
+                "檢查拒絕應回 CHECK_REJECTED");
+            check(store.load(uuid).orElseThrow().getInt("a", -1) == 2,
+                "檢查拒絕不得改變任何欄位");
+            check(store.revisionOf(uuid, "a") == 2L, "檢查拒絕不得推進 revision");
+            log.println("  read-check-apply ok: applied + rejected-no-change");
+        } finally {
+            store.close();
+        }
+
+        // 儲存失敗路徑：專用表 + 欄位長度限制，驗證整批回滾、無部分修改。
+        dropIfExists(ds, TX_TABLE);
+        PlayerDataStore txStore = PlayerDataStores.jdbc(ds, SchemaVersion.V1_0,
+            "compat-tx-rca", TX_TABLE);
+        UUID uuid = UUID.randomUUID();
+        try {
+            txStore.init();
+            txStore.applyChanges(List.of(PlayerDataStore.FieldChange.upsert(uuid, "k", "old")));
+            try (Connection conn = ds.getConnection(); Statement st = conn.createStatement()) {
+                st.executeUpdate("ALTER TABLE " + TX_TABLE
+                    + " MODIFY COLUMN payload VARCHAR(16) NOT NULL");
+            }
+            DataStoreException failure = expectDataStoreException(() -> txStore.readCheckApply(
+                uuid,
+                present -> true,
+                List.of(
+                    PlayerDataStore.FieldChange.upsert(uuid, "written_before_failure", "new"),
+                    PlayerDataStore.FieldChange.upsert(uuid, "too_long", "x".repeat(40)))),
+                "儲存失敗必須拋 DataStoreException");
+            check("ACELIB-DATA-008".equals(failure.getCode()),
+                "儲存失敗為 DATA-008，實際：" + failure.getCode());
+            Record loaded = txStore.load(uuid).orElseThrow();
+            check("old".equals(loaded.getString("k", null)), "失敗不得影響既有資料");
+            check(!loaded.has("written_before_failure"),
+                "失敗批次中先執行的語句必須一併 rollback");
+            log.println("  read-check-apply rollback ok, injected DB length failure");
+        } finally {
+            txStore.close();
+            dropIfExists(ds, TX_TABLE);
+        }
     }
 
     /** 連線失敗：ACELIB-DATA-008 且標示 [player-jdbc:init] 階段。 */

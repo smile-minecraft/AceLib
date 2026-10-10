@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import javax.sql.DataSource;
 
@@ -52,6 +53,14 @@ import javax.sql.DataSource;
  *
  * <p>{@link JdbcDataStore} 的 {@code TABLE_LOCKS} 只在 JVM 內序列化；跨行程同時寫同一張表
  * 仍需呼叫端自行序列化，本類不宣稱跨行程安全。</p>
+ *
+ * <h2>條件寫入與讀檢查套用</h2>
+ * <p>{@code applyIfRevision} 以 {@code UPDATE ... WHERE revision = ?}
+ * 做原子條件更新（一列即成功），列不存在且期望為 {@code 0} 時改走
+ * {@code INSERT}（撞主鍵代表併發新建輸掉，回報實際 {@code revision}）；
+ * 與 {@code applyChanges} 不同，條件相符即寫入（同值也推進
+ * {@code revision}）。{@code readCheckApply} 把讀取、判定與套用放在同一
+ * 交易內：判定不過或中途失敗都回滾，不留部分修改。</p>
  *
  * @see PlayerDataStore
  * @since 1.4.0
@@ -141,27 +150,8 @@ class JdbcPlayerDataStore implements PlayerDataStore {
     public Optional<Record> load(UUID uuid) {
         Objects.requireNonNull(uuid, "uuid");
         requireReady();
-        String sql = "SELECT field, payload FROM " + tableName
-            + " WHERE player_uuid = ? AND owner = ? ORDER BY field";
-        try (Connection conn = openConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, owner);
-            try (ResultSet rs = ps.executeQuery()) {
-                Map<String, Object> values = new LinkedHashMap<>();
-                while (rs.next()) {
-                    String field = rs.getString(1);
-                    String payload = rs.getString(2);
-                    if (field == null) {
-                        continue;
-                    }
-                    values.put(field, payload == null ? null : decodePayload(payload, field));
-                }
-                if (values.isEmpty()) {
-                    return Optional.empty();
-                }
-                return Optional.of(new MemoryRecord("", values));
-            }
+        try (Connection conn = openConnection()) {
+            return loadWithin(conn, uuid);
         } catch (SQLException ex) {
             throw sqlError("read", uuid, ex);
         }
@@ -202,6 +192,99 @@ class JdbcPlayerDataStore implements PlayerDataStore {
             throw new DataStoreException("ACELIB-DATA-008",
                 "[player-jdbc:save] failed to apply " + deduped.size()
                     + " change(s) on store '" + name + "': " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public ConditionalWriteResult applyIfRevision(UUID uuid, String field, Object value,
+            long expectedRevision) {
+        Objects.requireNonNull(uuid, "uuid");
+        Objects.requireNonNull(field, "field");
+        Objects.requireNonNull(value,
+            "value 不可為 null；移除欄位請使用 FieldChange.deletion 搭配 applyChanges");
+        if (field.isBlank()) {
+            throw new IllegalArgumentException("field 不可為空白");
+        }
+        if (expectedRevision < 0) {
+            throw new IllegalArgumentException(
+                "expectedRevision 不可為負數：" + expectedRevision);
+        }
+        requireReady();
+        // 型別檢查先於交易：不支援型別以 ACELIB-DATA-006 拒絕，不開交易。
+        String encoded = codec.encode(value);
+        try (Connection conn = openConnection()) {
+            boolean prevAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                ConditionalWriteResult result =
+                    applyIfRevisionTx(conn, uuid, field, encoded, expectedRevision);
+                conn.commit();
+                return result;
+            } catch (SQLException | RuntimeException ex) {
+                rollbackQuietly(conn);
+                throw ex;
+            } finally {
+                restoreAutoCommit(conn, prevAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new DataStoreException("ACELIB-DATA-008",
+                "[player-jdbc:conditional-write] failed on store '" + name + "' for uuid="
+                    + uuid + " field=" + field + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public ReadCheckApplyResult readCheckApply(UUID uuid, Predicate<Optional<Record>> check,
+            List<FieldChange> changes) {
+        Objects.requireNonNull(uuid, "uuid");
+        Objects.requireNonNull(check, "check");
+        Objects.requireNonNull(changes, "changes");
+        requireReady();
+        Map<FieldKey, FieldChange> deduped = new LinkedHashMap<>();
+        for (FieldChange change : changes) {
+            Objects.requireNonNull(change, "changes 的元素不可為 null");
+            if (!uuid.equals(change.uuid())) {
+                throw new IllegalArgumentException(
+                    "readCheckApply 的 changes 必須全屬 uuid=" + uuid
+                        + "，實際：" + change.uuid());
+            }
+            deduped.put(new FieldKey(change.uuid(), change.field()), change);
+        }
+        try (Connection conn = openConnection()) {
+            boolean prevAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                Optional<Record> current = loadWithin(conn, uuid);
+                boolean passed;
+                try {
+                    passed = check.test(current);
+                } catch (RuntimeException checkFailure) {
+                    rollbackQuietly(conn);
+                    throw checkFailure;
+                }
+                if (!passed) {
+                    rollbackQuietly(conn);
+                    return new ReadCheckApplyResult(Outcome.CHECK_REJECTED);
+                }
+                for (FieldChange change : deduped.values()) {
+                    if (change.deletion()) {
+                        deleteOne(conn, change.uuid(), change.field());
+                    } else {
+                        upsertOne(conn, change);
+                    }
+                }
+                conn.commit();
+                return new ReadCheckApplyResult(Outcome.APPLIED);
+            } catch (SQLException | RuntimeException ex) {
+                rollbackQuietly(conn);
+                throw ex;
+            } finally {
+                restoreAutoCommit(conn, prevAutoCommit);
+            }
+        } catch (SQLException ex) {
+            throw new DataStoreException("ACELIB-DATA-008",
+                "[player-jdbc:read-check-apply] failed on store '" + name + "' for uuid="
+                    + uuid + ": " + ex.getMessage(), ex);
         }
     }
 
@@ -273,6 +356,107 @@ class JdbcPlayerDataStore implements PlayerDataStore {
      *
      * <p>供 upsert 比較用；{@code null} 表示該欄位不存在，必須寫入。</p>
      */
+    /**
+     * 在既有交易內讀取一位玩家的全部頂層欄位（供 {@link #load} 與
+     * {@link #readCheckApply} 共用：後者必須在同一交易內讀到判定用的資料）。
+     */
+    private Optional<Record> loadWithin(Connection conn, UUID uuid) throws SQLException {
+        String sql = "SELECT field, payload FROM " + tableName
+            + " WHERE player_uuid = ? AND owner = ? ORDER BY field";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, owner);
+            try (ResultSet rs = ps.executeQuery()) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                while (rs.next()) {
+                    String field = rs.getString(1);
+                    String payload = rs.getString(2);
+                    if (field == null) {
+                        continue;
+                    }
+                    values.put(field, payload == null ? null : decodePayload(payload, field));
+                }
+                if (values.isEmpty()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new MemoryRecord("", values));
+            }
+        }
+    }
+
+    /**
+     * 在既有交易內執行條件寫入。
+     *
+     * <p>先以 {@code WHERE revision = ?} 做原子條件更新：恰好更新一列即成功。
+     * 零列時再區分「列不存在的新建」與「revision 不符」；併發新建輸掉時
+     * （主鍵衝突）回滾後重讀實際 {@code revision} 回報，呼叫端可用它重試。</p>
+     */
+    private ConditionalWriteResult applyIfRevisionTx(Connection conn, UUID uuid, String field,
+            String encoded, long expectedRevision) throws SQLException {
+        String updateSql = "UPDATE " + tableName
+            + " SET field = ?, payload = ?, schema_ver = ?, revision = revision + 1,"
+            + " updated_at = ? WHERE player_uuid = ? AND owner = ? AND field_hash = ?"
+            + " AND revision = ?";
+        try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+            ps.setString(1, field);
+            ps.setString(2, encoded);
+            ps.setString(3, codec.encodeVersion(currentVersion));
+            ps.setLong(4, System.currentTimeMillis());
+            ps.setString(5, uuid.toString());
+            ps.setString(6, owner);
+            ps.setString(7, JdbcDataStore.hashKey(field));
+            ps.setLong(8, expectedRevision);
+            if (ps.executeUpdate() == 1) {
+                return new ConditionalWriteResult(true, expectedRevision + 1);
+            }
+        }
+        String currentPayload = existingPayload(conn, uuid, field);
+        if (currentPayload == null) {
+            if (expectedRevision != 0) {
+                return new ConditionalWriteResult(false, 0L);
+            }
+            String insertSql = "INSERT INTO " + tableName
+                + " (player_uuid, owner, field_hash, field, payload, schema_ver,"
+                + " revision, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, owner);
+                ps.setString(3, JdbcDataStore.hashKey(field));
+                ps.setString(4, field);
+                ps.setString(5, encoded);
+                ps.setString(6, codec.encodeVersion(currentVersion));
+                ps.setLong(7, 1L);
+                ps.setLong(8, System.currentTimeMillis());
+                ps.executeUpdate();
+                return new ConditionalWriteResult(true, 1L);
+            } catch (SQLException duplicate) {
+                if (!isDuplicateKey(duplicate)) {
+                    throw duplicate;
+                }
+                // 併發新建輸了：回滾失敗的 INSERT 後重讀，呼叫端拿實際值重試。
+                conn.rollback();
+                return new ConditionalWriteResult(false, selectRevision(conn, uuid, field));
+            }
+        }
+        return new ConditionalWriteResult(false, selectRevision(conn, uuid, field));
+    }
+
+    /**
+     * 在既有交易內讀取單一欄位的 {@code revision}；列不存在回 {@code 0}。
+     */
+    private long selectRevision(Connection conn, UUID uuid, String field) throws SQLException {
+        String sql = "SELECT revision FROM " + tableName
+            + " WHERE player_uuid = ? AND owner = ? AND field_hash = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, owner);
+            ps.setString(3, JdbcDataStore.hashKey(field));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        }
+    }
+
     private String existingPayload(Connection conn, UUID uuid, String field)
             throws SQLException {
         String sql = "SELECT payload FROM " + tableName
