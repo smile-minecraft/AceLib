@@ -7,7 +7,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 ### 修補內容（第二階段 行為缺陷）
 
 - 設定繫結的 `double` 欄位一律拒絕 `NaN` 與正負無限大，不論有無 `@ConfigRange`；錯誤沿用 `ACELIB-CFG-007` 並帶完整欄位路徑，有範圍時訊息一併帶出允許範圍。有限值的範圍語意不變。
-- 行為變更：`MessageService` 純文字視圖（`RenderedMessage.text()`／`format()`，含字串發送多載）與富文字視圖共用安全替換，變數值裡的 `<...>` 會先跳脫（`MiniMessage.escapeTags`）再套用模板，模板本身的標記不受影響。玩家名稱或自訂文字帶 `<...>` 時純文字輸出與 1.4.0 不同（原文→跳脫字面）。
+- 行為變更（破壞性）：`MessageService` 純文字視圖（`RenderedMessage.text()`／`format()`，含字串發送多載）與富文字視圖共用安全替換，變數值裡的 `<...>` 會先跳脫（`MiniMessage.escapeTags`）再套用模板，模板本身的標記不受影響。玩家名稱或自訂文字帶 `<...>` 時純文字輸出與 1.4.0 不同（原文→跳脫字面）。
 - `render(key, vars, locale)` 的 `message.prefix` 改取指定語系（缺時退回預設語系），此前固定取全域目前語系。`formatConsole` 維持原文不跳脫。
 - 修正 `PlayerDataStores.fromDataStore(...)` 轉接的失敗回復：`applyChanges`／`deletePlayer` 在 `save()` 失敗時把記憶體樹、欄位存在性與 `revision` 還原為操作前並以 `ACELIB-DATA-008` 回報（還原失敗掛 `suppressed`）；缺席刪除改為不觸發 `save()` 的 no-op；寫入改以點分隔路徑存純值（原先存入 `Record` 節點會被 `ACELIB-DATA-006` 拒絕）。`revision` 僅對同一轉接實例有效，不持久化；不承諾跨行程原子性，亦不對 delegate 已部分落盤做逆轉。還原以整節點深拷貝寫回，保留頂層 null、空節點與字面點號鍵。
 
@@ -17,7 +17,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 新增 BigDecimal 精確數值引數（Arguments.bigDecimal）：以 BigDecimal 解析不經 double 中轉，範圍端點包含，小數位上限依輸入 scale 檢查，科學記號一律拒絕；非法值回 ACELIB-CMD-015。
 - 型別化指令支援省略引數與重複引數：尾段引數可宣告預設值（省略時依執行者計算一次），最後一個引數可重複（零個起，handler 以不可變 List 取值）；傳統與 Brigadier 兩條路徑行為一致。
 - 新增 Arguments.dynamic(name, optionsSupplier)：由供應函式提供選項的動態選項引數，每次解析與補全重新取值，執行期增刪立刻反映；大小寫不敏感、回傳宣告形式，非法值走 ACELIB-CMD-015。
-- CommandErrorKind.ASYNC_EXECUTION_FAILED 改名為 EXECUTION_FAILED，錯誤碼 ACELIB-CMD-008 不變。舊名已移除，參照舊名的程式需改名後重新編譯。
+- 破壞性變更：CommandErrorKind.ASYNC_EXECUTION_FAILED 改名為 EXECUTION_FAILED，錯誤碼 ACELIB-CMD-008 不變。舊名已移除，參照舊名的程式需改名後重新編譯。
 - 修正 CommandMessages.localize 缺少 INVALID_ARGUMENT 分支：型別化引數解析失敗（固定選項、列舉、數值、自訂、動態選項等）此前在 presentation 層落到預設分支回空字串、退回拋出點原文；現在依 kind + vars 以 invalidArgument(arg, value, reason) 重算，缺 key 才退回原文。
 - 子指令支援別名：TypedSubCommand.builder("ban").aliases("b")；別名在傳統路徑與 Brigadier 路徑都視為主名（同一 handler、同一冷卻 key；help 只列主名）。比較一律小寫；與主名或彼此衝突在建構時以 IllegalArgumentException 拒絕。
 
