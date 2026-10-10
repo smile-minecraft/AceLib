@@ -1,8 +1,10 @@
 package com.smile.acelib.gui;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * 作用域橋接（Internal）。
@@ -36,6 +38,25 @@ interface ScopedGuiOperations {
     OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
             GuiView.Kind kind, int size, Set<Integer> protectedSlots,
             boolean replaceExisting);
+
+    /**
+     * 帶擁有者標記開啟 session（含按鈕物品）。
+     *
+     * <p>與 {@link #openOwned(String, UUID, String, GuiView.Kind, int, Set, boolean)}
+     * 相同，另攜帶按鈕物品表（欄位 → 物品快照）：開啟時於玩家 region context 內
+     * 放入與按鈕相同的欄位；單一欄位放置失敗只記錄，不影響開啟結果與點擊語意。
+     * 表可為 null（視為無物品）。未覆寫本方法的實作等同無物品
+     * （預設委派給 {@link #openOwned(String, UUID, String, GuiView.Kind, int, Set, boolean)}）。</p>
+     *
+     * @param buttonIcons 按鈕物品表；可為 null
+     * @return 開啟結果＋被取代的舊 session（無取代時為 null）
+     */
+    default OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting, Map<Integer, ItemStack> buttonIcons) {
+        return openOwned(owner, playerUuid, title, kind, size, protectedSlots,
+            replaceExisting);
+    }
 
     /**
      * 擁有者檢查下關閉 session（擁有者不符回 {@code NOT_OWNER}）。

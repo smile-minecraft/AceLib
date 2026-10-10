@@ -36,6 +36,10 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - PlayerDataService 新增 getOfflineDataAsync(UUID)：離線玩家資料的非同步讀取入口，讀取在既有 serial store executor 上執行，呼叫端不阻塞；語意與同步版一致（在線玩家拿到的是已持久化內容，未保存的 session 變更不在內）；失敗以 future exceptional 表達（007／006／008／002）。
 - 排程診斷新增運維入口：SafeScheduler 可經 clearRecorderErrors 清空錯誤紀錄（不動診斷節流累計）、經 configureErrorCapacity 即時調整保留容量（縮小時依 FIFO 淘汰最舊）；ErrorThrottler 新增 evictIdleCode 惰性淘汰閒置 code（無背景執行緒，由呼叫端觸發）。
 
+### 新增內容（第五階段 介面版面）
+
+- GUI 版面：新增字元遮罩 GuiMask（列數 1～6、每列等長、總格須為合法箱子尺寸）與按鈕物品（宣告時複製，開啟時於玩家所在執行緒放入同欄；純回呼按鈕不變）。
+
 ## [1.4.0] - 2026-10-08
 
 v1.4.0 新增生命週期宿主、每玩家顯示、測試套件與測試 JAR、任務完成語意與作用域、事件處理完成後的操作、插件作用域訊息與在地化、插件隔離介面流程與元件、設定啟動快照與型別綁定、型別化指令框架、逐玩家儲存與玩家資料模型，以及外部整合門面；本版以 GitHub Release 發布，提供可下載的 `AceLib-1.4.0.jar` 與 `AceLib-1.4.0-test-fixtures.jar`，管理員可直接下載，或從 `v1.4.0` tag 以 `./gradlew clean build --no-daemon --console=plain` 建置取得。開發者可從 JitPack（`com.github.smile-minecraft:AceLib:v1.4.0`）取得。

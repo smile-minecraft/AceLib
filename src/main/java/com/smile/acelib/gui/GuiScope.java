@@ -157,7 +157,7 @@ public final class GuiScope {
             return closedResult();
         }
         OwnedOpenOutcome outcome = ops.openOwned(ownerName, playerUuid, view.title(),
-            view.kind(), view.size(), allSlots(view), true);
+            view.kind(), view.size(), allSlots(view), true, view.buttonIcons());
         if (!outcome.result().isSuccess()) {
             states.remove(playerUuid);
             return outcome.result();
@@ -823,7 +823,7 @@ public final class GuiScope {
     private GuiResult navigateFresh(ScopedGuiOperations ops, UUID playerUuid,
             ScopePlayerState state, GuiView view, String stepId, FormSpec form) {
         OwnedOpenOutcome outcome = ops.openOwned(ownerName, playerUuid, view.title(),
-            view.kind(), view.size(), allSlots(view), true);
+            view.kind(), view.size(), allSlots(view), true, view.buttonIcons());
         if (!outcome.result().isSuccess()) {
             states.remove(playerUuid);
             return outcome.result();
@@ -842,7 +842,7 @@ public final class GuiScope {
             ScopePlayerState state, GuiView view, String stepId, FormSpec form,
             NavMode mode) {
         OwnedOpenOutcome outcome = ops.openOwned(ownerName, playerUuid, view.title(),
-            view.kind(), view.size(), allSlots(view), true);
+            view.kind(), view.size(), allSlots(view), true, view.buttonIcons());
         if (!outcome.result().isSuccess()) {
             states.remove(playerUuid);
             return outcome.result();
@@ -869,7 +869,7 @@ public final class GuiScope {
         }
         OwnedOpenOutcome outcome = ops.openOwned(ownerName, playerUuid,
             entry.view().title(), entry.view().kind(), entry.view().size(),
-            allSlots(entry.view()), true);
+            allSlots(entry.view()), true, entry.view().buttonIcons());
         if (!outcome.result().isSuccess()) {
             return outcome.result();
         }

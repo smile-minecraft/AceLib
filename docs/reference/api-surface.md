@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：227 個 public 頂層型別
-- Supported：176
+- 總數：228 個 public 頂層型別
+- Supported：177
 - SPI：25
 - Internal：26
 
@@ -234,6 +234,7 @@
 | `com.smile.acelib.gui.GuiInputPrompt` | record | Supported | 輸入提示描述值型別（種類／標題／提示／長度上限／逾時）；v1 穩定。 |  | GuiScope.promptChat／promptAnvil。 |
 | `com.smile.acelib.gui.GuiInputResult` | record | Supported | 玩家輸入結果值型別（玩家／世代／種類／文字；region 內恰好一次交付）；v1 穩定。 |  | GuiScope 輸入 consumer。 |
 | `com.smile.acelib.gui.GuiInputTicket` | record | Supported | 輸入票券值型別（不透明一次性票券，綁定玩家與世代）；v1 穩定。 |  | GuiScope.promptChat／submitInput。 |
+| `com.smile.acelib.gui.GuiMask` | class | Supported | 箱子視圖字元遮罩值型別（幾行等長字串描述箱子，符號換算成欄位清單；列數 1～6、每列等長、總格須為合法箱子尺寸；1.5.0 新增）。 |  | GuiView.chest(String, GuiMask)；GuiMask.slots 換算欄位供 allow／button 宣告；消費者組裝視圖。 |
 | `com.smile.acelib.gui.GuiPage` | class | Supported | GUI 分頁結果值型別；v1 穩定。 |  | GuiService；GuiResult。 |
 | `com.smile.acelib.gui.GuiReplacementListener` | interface | Supported | GUI 被取代通知回呼（原擁有者接 listener；v1 穩定）。 |  | GuiScope.onReplaced。 |
 | `com.smile.acelib.gui.GuiResult` | class | Supported | GUI 操作結果值型別（accepted/success/rejected/failed）；v1 穩定。 |  | GuiService；GuiSession。 |

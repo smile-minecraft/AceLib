@@ -1357,6 +1357,14 @@
       "method toString() : java.lang.String",
       "method token() : java.util.UUID"
     ],
+    "com.smile.acelib.gui.GuiMask": [
+      "method of(java.lang.String[]) : com.smile.acelib.gui.GuiMask",
+      "method rowCount() : int",
+      "method size() : int",
+      "method slots(char) : java.util.List<java.lang.Integer>",
+      "method toString() : java.lang.String",
+      "method width() : int"
+    ],
     "com.smile.acelib.gui.GuiPage": [
       "method content(int,int,java.util.List<T>) : com.smile.acelib.gui.GuiPage<T>",
       "method detail() : java.lang.String",
@@ -1481,7 +1489,9 @@
     "com.smile.acelib.gui.GuiView": [
       "method allowedSlots() : java.util.Set<java.lang.Integer>",
       "method anvil(java.lang.String) : com.smile.acelib.gui.GuiView$Builder",
+      "method buttonIcons() : java.util.Map<java.lang.Integer, org.bukkit.inventory.ItemStack>",
       "method buttons() : java.util.Map<java.lang.Integer, com.smile.acelib.gui.GuiButton>",
+      "method chest(java.lang.String,com.smile.acelib.gui.GuiMask) : com.smile.acelib.gui.GuiView$Builder",
       "method chest(java.lang.String,int) : com.smile.acelib.gui.GuiView$Builder",
       "method handlers() : java.util.Map<java.lang.String, java.util.function.Consumer<com.smile.acelib.gui.GuiButtonClick>>",
       "method kind() : com.smile.acelib.gui.GuiView$Kind",

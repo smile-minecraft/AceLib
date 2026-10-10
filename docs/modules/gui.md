@@ -79,6 +79,51 @@ session 不會被舊代誤刪。
 .button(13, "buy", 5_000L, click -> { /* 5 秒內只執行一次 */ })
 ```
 
+## 用字元遮罩描述版面
+
+幾行等長字串描述一個箱子，每個字元代表一群欄位：
+
+```java
+GuiMask mask = GuiMask.of(
+    "#########",
+    "#..BBB..#",
+    "#########");
+
+GuiView shop = GuiView.chest("商店", mask)
+    .allow(mask.slots('.'))
+    .button(mask.slots('B').get(0), "buy", click -> { /* ... */ })
+    .build();
+```
+
+- `GuiMask.of(...)` 在建立時檢查形狀：列數 1～6、每列等長、
+  列數 × 列寬為合法箱子尺寸（9／18／27／36／45／54），不符擲
+  `IllegalArgumentException`（訊息攜帶 `ACELIB-GUI-007` 與實際數值）。
+- `mask.slots('#')` 回該符號的欄位清單（列優先、有序、不可變；
+  未出現的符號回空清單），可同時用於 `allow` 與 `button`。
+- 遮罩只換算固定欄位，不做自動版面配置，資料更新由呼叫端
+  以 `replaceView` 給新頁（不做資料綁定）。
+
+## 按鈕物品
+
+按鈕宣告時可一併給物品，開啟時 AceLib 把它放進與按鈕相同的欄位：
+
+```java
+GuiView shop = GuiView.chest("商店", mask)
+    .button(13, "buy", new ItemStack(Material.DIAMOND_SWORD),
+        click -> { /* ... */ })
+    .build();
+```
+
+- 宣告時**不**複製：開啟前修改該 `ItemStack`，會反映到開啟時放置的物品。
+- 物品在開啟時、於玩家所在執行緒（Paper 主執行緒／Folia 該玩家 region）、
+  放入欄位之前即時複製；同一宣告給多位玩家開啟時各自獨立，
+  修改某位玩家的箱內物品不影響其他人，也不回寫宣告物品。
+- 單一欄位放置失敗記 `WARNING`（`ACELIB-GUI-012`，攜帶完整例外）並跳過該欄，
+  不影響開啟結果與點擊語意。
+- 既有純回呼按鈕（不帶物品）行為完全不變。
+- 純單元測試用到物品相關 API 時，classpath 需要 Bukkit／Paper API
+ （`ItemStack` 為 Bukkit 型別）；遮罩與純回呼按鈕無此依賴。
+
 分頁用 `GuiPage` 計算某一頁的內容（與 session 獨立，不污染 generation）：
 
 ```java

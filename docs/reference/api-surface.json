@@ -1301,6 +1301,15 @@
       "mainCallers": "GuiScope.promptChat／submitInput。"
     },
     {
+      "fqcn": "com.smile.acelib.gui.GuiMask",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiMask",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "箱子視圖字元遮罩值型別（幾行等長字串描述箱子，符號換算成欄位清單；列數 1～6、每列等長、總格須為合法箱子尺寸；1.5.0 新增）。",
+      "mainCallers": "GuiView.chest(String, GuiMask)；GuiMask.slots 換算欄位供 allow／button 宣告；消費者組裝視圖。"
+    },
+    {
       "fqcn": "com.smile.acelib.gui.GuiPage",
       "package": "com.smile.acelib.gui",
       "simpleName": "GuiPage",

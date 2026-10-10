@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * GUI 視圖描述（Supported API）。
@@ -28,6 +29,10 @@ import java.util.function.Consumer;
  * <p>{@link Kind#ANVIL} 視圖開啟鐵砧 inventory（固定 3 欄：0、1 輸入，2 結果）。
  * 輸入文字經聊天／鐵砧輸入流程（見 {@link GuiScope#promptAnvil}）送出；
  * 結果欄位點擊會攜帶當下更名文字（見 {@link GuiButtonClick#anvilText()}）。</p>
+ *
+ * <h2>按鈕物品的 classpath 依賴</h2>
+ * <p>帶物品的按鈕多載使用 Bukkit {@code ItemStack}：純單元測試引用本型別的
+ * 物品相關方法時，classpath 需要 Bukkit／Paper API。遮罩與純回呼按鈕無此依賴。</p>
  *
  * @see GuiScope
  * @see GuiButton
@@ -51,6 +56,7 @@ public final class GuiView {
     private final Set<Integer> allowedSlots;
     private final Map<Integer, GuiButton> buttons;
     private final Map<String, Consumer<GuiButtonClick>> handlers;
+    private final Map<Integer, ItemStack> buttonIcons;
 
     private GuiView(Builder builder) {
         this.kind = builder.kind;
@@ -59,14 +65,19 @@ public final class GuiView {
         this.allowedSlots = Set.copyOf(builder.allowed);
         Map<Integer, GuiButton> buttonEntries = new LinkedHashMap<>();
         Map<String, Consumer<GuiButtonClick>> handlerEntries = new LinkedHashMap<>();
+        Map<Integer, ItemStack> iconEntries = new LinkedHashMap<>();
         for (Map.Entry<Integer, ButtonSpec> entry : builder.buttons.entrySet()) {
             ButtonSpec spec = entry.getValue();
             buttonEntries.put(entry.getKey(),
                 new GuiButton(spec.id, spec.cooldownMillis));
             handlerEntries.put(spec.id, spec.handler);
+            if (spec.icon != null) {
+                iconEntries.put(entry.getKey(), spec.icon);
+            }
         }
         this.buttons = Map.copyOf(buttonEntries);
         this.handlers = Map.copyOf(handlerEntries);
+        this.buttonIcons = Map.copyOf(iconEntries);
     }
 
     /**
@@ -78,6 +89,22 @@ public final class GuiView {
      */
     public static Builder chest(String title, int size) {
         return new Builder(Kind.CHEST, title, size);
+    }
+
+    /**
+     * 以字元遮罩開始建立箱子視圖。
+     *
+     * <p>視圖格數取自 {@link GuiMask#size()}；遮罩符號換算的欄位清單
+     * （{@link GuiMask#slots(char)}）可同時用於 {@code allow} 與
+     * {@code button} 宣告。本方法只決定形狀，不做自動版面配置。</p>
+     *
+     * @param title 視圖標題；不可為 null
+     * @param mask 字元遮罩；不可為 null
+     * @return 新的 builder
+     */
+    public static Builder chest(String title, GuiMask mask) {
+        Objects.requireNonNull(mask, "mask");
+        return new Builder(Kind.CHEST, title, mask.size());
     }
 
     /**
@@ -124,6 +151,15 @@ public final class GuiView {
      */
     public Map<String, Consumer<GuiButtonClick>> handlers() {
         return handlers;
+    }
+
+    /**
+     * @return 按鈕物品表（欄位 → 宣告時傳入的物品 reference，不可變表；
+     *     內容為 live reference：宣告後、開啟前修改該物品會反映到放置結果；
+     *     放置時於玩家 region 內即時複製，互不影響。純回呼按鈕視圖回空表）
+     */
+    public Map<Integer, ItemStack> buttonIcons() {
+        return buttonIcons;
     }
 
     @Override
@@ -222,6 +258,55 @@ public final class GuiView {
          */
         public Builder button(int slot, String id, long cooldownMillis,
                 Consumer<GuiButtonClick> handler) {
+            return register(slot, id, null, cooldownMillis, handler);
+        }
+
+        /**
+         * 註冊帶物品的按鈕（無冷卻）。
+         *
+         * <p>宣告時<strong>不</strong>複製 {@code icon}：開啟前修改該物品，
+         * 會反映到開啟時放置的物品。開啟視圖時，AceLib 於玩家所在執行緒、
+         * 放入欄位之前即時複製（同一宣告給多位玩家開啟時各自獨立）；
+         * 放置失敗（例如欄位異常）只記錄，不影響點擊語意。</p>
+         *
+         * <p>純單元測試引用本方法時，classpath 需要 Bukkit／Paper API
+         * （{@code ItemStack} 為 Bukkit 型別）。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param icon 按鈕物品；不可為 null（只存參照，不複製）
+         * @param handler 點擊回呼；不可為 null
+         * @return this
+         */
+        public Builder button(int slot, String id, ItemStack icon,
+                Consumer<GuiButtonClick> handler) {
+            Objects.requireNonNull(icon, "icon");
+            return register(slot, id, icon, 0L, handler);
+        }
+
+        /**
+         * 註冊帶物品的按鈕（含點擊冷卻）。
+         *
+         * <p>複製語意與 {@link #button(int, String, ItemStack, Consumer)}
+         * 相同：宣告時不複製，放置前於玩家 region 內即時複製。</p>
+         *
+         * <p>純單元測試引用本方法時，classpath 需要 Bukkit／Paper API。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param icon 按鈕物品；不可為 null（只存參照，不複製）
+         * @param cooldownMillis 同一玩家重複點擊冷卻毫秒數；不可為負
+         * @param handler 點擊回呼；不可為 null
+         * @return this
+         */
+        public Builder button(int slot, String id, ItemStack icon, long cooldownMillis,
+                Consumer<GuiButtonClick> handler) {
+            Objects.requireNonNull(icon, "icon");
+            return register(slot, id, icon, cooldownMillis, handler);
+        }
+
+        private Builder register(int slot, String id, ItemStack icon,
+                long cooldownMillis, Consumer<GuiButtonClick> handler) {
             checkSlot(slot);
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(handler, "handler");
@@ -244,7 +329,7 @@ public final class GuiView {
                         "[" + GuiErrorCode.INVALID_INPUT + "] button id 重複: " + id);
                 }
             }
-            buttons.put(slot, new ButtonSpec(id, cooldownMillis, handler));
+            buttons.put(slot, new ButtonSpec(id, icon, cooldownMillis, handler));
             return this;
         }
 
@@ -260,11 +345,14 @@ public final class GuiView {
 
     private static final class ButtonSpec {
         final String id;
+        final ItemStack icon;
         final long cooldownMillis;
         final Consumer<GuiButtonClick> handler;
 
-        ButtonSpec(String id, long cooldownMillis, Consumer<GuiButtonClick> handler) {
+        ButtonSpec(String id, ItemStack icon, long cooldownMillis,
+                Consumer<GuiButtonClick> handler) {
             this.id = id;
+            this.icon = icon;
             this.cooldownMillis = cooldownMillis;
             this.handler = handler;
         }

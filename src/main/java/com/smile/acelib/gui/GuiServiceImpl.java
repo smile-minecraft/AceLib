@@ -1,5 +1,6 @@
 package com.smile.acelib.gui;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -22,6 +23,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.AnvilInventory;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * 預設 {@link GuiService} 實作（Internal）。
@@ -203,6 +205,21 @@ final class GuiServiceImpl
     private OwnedOpenOutcome openInternal(String owner, UUID playerUuid, String title,
             GuiView.Kind kind, int size, Set<Integer> protectedSlots,
             boolean replaceExisting) {
+        return openInternal(owner, playerUuid, title, kind, size, protectedSlots,
+            replaceExisting, null);
+    }
+
+    /**
+     * 統一開啟入口（含按鈕物品）。
+     *
+     * @param buttonIcons 按鈕物品表（欄位 → 物品快照）；可為 null（視為無物品）。
+     *     開啟時於玩家 region context 內放入與按鈕相同的欄位；
+     *     單一欄位放置失敗只記錄，不影響開啟結果與點擊語意
+     */
+    private OwnedOpenOutcome openInternal(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting,
+            Map<Integer, ItemStack> buttonIcons) {
         if (!running.get()) {
             return new OwnedOpenOutcome(GuiResult.rejected(GuiErrorCode.SHUTDOWN,
                 "gui service is shutdown"), null);
@@ -241,7 +258,11 @@ final class GuiServiceImpl
         }
         final long generation = session.generation();
         final int openSize = slots;
-        // 透過 player context 開 inventory + link + 實際開啟視窗；
+        final Map<Integer, ItemStack> icons =
+            buttonIcons == null || buttonIcons.isEmpty()
+                ? Map.of()
+                : Map.copyOf(buttonIcons);
+        // 透過 player context 開 inventory + 放按鈕物品 + link + 實際開啟視窗；
         // Folia 下由 entity scheduler 派送，Paper 下走 main thread。
         boolean dispatched;
         try {
@@ -250,6 +271,7 @@ final class GuiServiceImpl
                     Inventory inv = kind == GuiView.Kind.ANVIL
                         ? Bukkit.createInventory(null, InventoryType.ANVIL, title)
                         : Bukkit.createInventory(null, openSize, title);
+                    placeButtonIcons(inv, icons);
                     GuiInventoryLink.link(inv, generation);
                     player.openInventory(inv);
                 } catch (Throwable t) {
@@ -297,6 +319,57 @@ final class GuiServiceImpl
         Objects.requireNonNull(kind, "kind");
         return openInternal(owner, playerUuid, title, kind, size,
             protectedSlots, replaceExisting);
+    }
+
+    @Override
+    public OwnedOpenOutcome openOwned(String owner, UUID playerUuid, String title,
+            GuiView.Kind kind, int size, Set<Integer> protectedSlots,
+            boolean replaceExisting,
+            Map<Integer, ItemStack> buttonIcons) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(playerUuid, "playerUuid");
+        Objects.requireNonNull(title, "title");
+        Objects.requireNonNull(kind, "kind");
+        return openInternal(owner, playerUuid, title, kind, size,
+            protectedSlots, replaceExisting, buttonIcons);
+    }
+
+    /**
+     * 於玩家 region context 內把按鈕物品放入與按鈕相同的欄位。
+     *
+     * <p>呼叫端保證已在 region context 內（見 {@link #openInternal} 的派送 lambda）。
+     * 本方法是唯一的複製點：每次放置前即時 {@code clone}，inventory 持有的物品
+     * 與宣告物品互不共享（同一宣告給多位玩家開啟時各自獨立）。
+     * 每欄獨立 try/catch：單一欄位失敗（越界、物品異常）只記錄
+     * （{@link GuiErrorCode#OPERATION_FAILED}），不影響開啟結果與後續點擊語意。</p>
+     */
+    private static void placeButtonIcons(Inventory inventory,
+            Map<Integer, ItemStack> icons) {
+        if (icons.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Integer, ItemStack> entry
+                : icons.entrySet()) {
+            int slot = entry.getKey();
+            if (slot < 0 || slot >= inventory.getSize()) {
+                LOGGER.log(Level.FINE,
+                    "GuiService: button icon slot out of range (skipped): slot={0}",
+                    slot);
+                continue;
+            }
+            try {
+                ItemStack icon = entry.getValue();
+                if (icon != null) {
+                    inventory.setItem(slot, icon.clone());
+                }
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING,
+                    "[" + GuiErrorCode.OPERATION_FAILED
+                        + "] GuiService: button icon placement failed (ignored): slot="
+                        + slot,
+                    t);
+            }
+        }
     }
 
     @Override
