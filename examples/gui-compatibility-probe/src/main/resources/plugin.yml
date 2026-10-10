@@ -4,7 +4,7 @@ main: com.example.acelibguiprobe.GuiCompatibilityProbePlugin
 version: 1.0.0-SNAPSHOT
 api-version: '26.1.2'
 folia-supported: true
-description: AceLib GUI 相容性探針：經隔離 GuiScope 執行導航／票券／輸入／冷卻／表單派送探針案例
+description: AceLib GUI 相容性探針：經隔離 GuiScope 執行導航／票券／輸入／冷卻／表單派送／流程／遮罩／分頁／標籤表單探針案例
 authors:
   - Smile
 load: POSTWORLD

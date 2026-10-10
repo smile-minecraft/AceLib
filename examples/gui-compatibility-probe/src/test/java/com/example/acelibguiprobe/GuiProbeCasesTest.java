@@ -44,6 +44,36 @@ class GuiProbeCasesTest {
     }
 
     @Test
+    void catalogCoversPhaseFiveProbeCases() {
+        List<GuiProbeCase> catalog = GuiProbeCases.buildCatalog();
+        Set<String> ids = catalog.stream()
+            .map(GuiProbeCase::id)
+            .collect(Collectors.toSet());
+        assertTrue(ids.contains("mask-icons"), "缺遮罩物品位置案例（字元遮罩＋物品按鈕）");
+        assertTrue(ids.contains("pager"), "缺分頁翻頁案例（多頁導覽按鈕與頁碼標題）");
+        assertTrue(ids.contains("label-form"), "缺標籤表單案例（共用流程標籤步驟雙呈現）");
+        assertTrue(catalog.size() >= 9, "目錄至少覆蓋九個驗收面向（既有六案＋新增三案）");
+    }
+
+    @Test
+    void newCasesDocumentLogPrefixAndHumanObservation() {
+        java.util.Map<String, String> expectedPrefix = java.util.Map.of(
+            "mask-icons", "[gprobe-mask-icons]",
+            "pager", "[gprobe-pager]",
+            "label-form", "[gprobe-label-form]");
+        java.util.Map<String, GuiProbeCase> byId = GuiProbeCases.buildCatalog().stream()
+            .collect(Collectors.toMap(GuiProbeCase::id, c -> c));
+        for (java.util.Map.Entry<String, String> entry : expectedPrefix.entrySet()) {
+            GuiProbeCase c = byId.get(entry.getKey());
+            assertTrue(c != null, "缺案例：" + entry.getKey());
+            assertTrue(c.description().contains(entry.getValue()),
+                "案例 " + entry.getKey() + " 說明須含 log 前綴 " + entry.getValue());
+            assertTrue(c.description().contains("真人觀察"),
+                "案例 " + entry.getKey() + " 說明須標註哪些觀察點屬真人客戶端");
+        }
+    }
+
+    @Test
     void catalogIsRebuildableAndOrderStable() {
         List<String> first = GuiProbeCases.buildCatalog().stream()
             .map(GuiProbeCase::id)

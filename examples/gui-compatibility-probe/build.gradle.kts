@@ -37,17 +37,17 @@ repositories {
 }
 
 dependencies {
-    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0-SNAPSHOT，
+    // AceLib 以 mavenLocal 解析本地 publish 產物（com.smile:acelib:1.4.0，
     // GUI 隔離作用域等新 API 只存在於 1.4.0；先在根目錄執行
     // `./gradlew publishToMavenLocal` 再建置本探針）。
     // compileOnly：運行期由伺服器上的 AceLib plugin 提供（plugin.yml 另以
     // depend: [AceLib] 保證載入順序）。
-    compileOnly("com.smile:acelib:1.4.0-SNAPSHOT")
+    compileOnly("com.smile:acelib:1.4.0")
     // Paper/Folia API 由伺服器 runtime 提供，編譯期只需要 API 面。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 
     // 測試需要 GuiScope 相關型別進入 runtime classpath。
-    testImplementation("com.smile:acelib:1.4.0-SNAPSHOT")
+    testImplementation("com.smile:acelib:1.4.0")
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.72-stable")
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

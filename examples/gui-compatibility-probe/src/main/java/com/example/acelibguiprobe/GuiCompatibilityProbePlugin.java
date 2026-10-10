@@ -8,10 +8,14 @@ import com.smile.acelib.form.FormSpec;
 import com.smile.acelib.gui.GuiFlow;
 import com.smile.acelib.gui.GuiFlowStep;
 import com.smile.acelib.gui.GuiInputPrompt;
+import com.smile.acelib.gui.GuiMask;
+import com.smile.acelib.gui.GuiPage;
+import com.smile.acelib.gui.GuiPager;
 import com.smile.acelib.gui.GuiResult;
 import com.smile.acelib.gui.GuiScope;
 import com.smile.acelib.gui.GuiScopes;
 import com.smile.acelib.gui.GuiView;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -19,15 +23,17 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * GUI 相容性探針：部署到 Folia 測試服後，用 {@code /gprobe} 指令把固定探針案例
- * 經 AceLib {@code GuiScope}（插件隔離 handle）開啟給玩家，供真人驗證五項行為。
+ * 經 AceLib {@code GuiScope}（插件隔離 handle）開啟給玩家，供真人驗證九項行為。
  *
  * <p>指令：</p>
  * <ul>
@@ -46,6 +52,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>{@code [gprobe-input]}：聊天輸入的接收結果。</li>
  *   <li>{@code [gprobe-cooldown]}：冷卻按鈕的回呼次數與拒絕。</li>
  *   <li>{@code [gprobe-form]}：基岩表單的發送結果。</li>
+ *   <li>{@code [gprobe-flow]}：共用流程每步與完成的結果。</li>
+ *   <li>{@code [gprobe-mask-icons]}：遮罩各符號的預期欄位與物品按鈕點擊。</li>
+ *   <li>{@code [gprobe-pager]}：每頁標題與上一頁／下一頁按鈕存在性。</li>
+ *   <li>{@code [gprobe-label-form]}：標籤流程的開啟結果與轉移索引。</li>
  * </ul>
  *
  * <p>安全約束：</p>
@@ -182,6 +192,9 @@ public final class GuiCompatibilityProbePlugin extends JavaPlugin implements Com
             case "cooldown" -> runCooldownCase(active, target);
             case "form" -> runFormCase(sender, target);
             case "flow" -> runFlowCase(active, target);
+            case "mask-icons" -> runMaskIconsCase(active, target);
+            case "pager" -> runPagerCase(active, target);
+            case "label-form" -> runLabelFormCase(active, target);
             default -> report(sender, "未實作的案例：" + caseId);
         }
     }
@@ -343,6 +356,155 @@ public final class GuiCompatibilityProbePlugin extends JavaPlugin implements Com
             return;
         }
         target.sendMessage("流程探針已開啟：Java 點中央按鈕推進；基岩看原生表單按鈕推進。");
+    }
+
+    /**
+     * 遮罩物品案例：固定字元遮罩開 27 格箱型畫面，三個符號區各放帶物品按鈕。
+     *
+     * <p>版面固定：A 區（左 3x3）放鑽石、B 區（中 3x3）放金蘋果、C 區（右 3x3）
+     * 放終界珍珠。開啟時 log 記每符號的預期欄位與物品（已執行）；物品是否確在
+     * 預期欄位、點擊是否觸發同一按鈕，需真人用客戶端觀察，不以 log 宣稱。</p>
+     */
+    private void runMaskIconsCase(GuiScope active, Player target) {
+        UUID uuid = target.getUniqueId();
+        GuiMask mask = GuiMask.of("AAABBBCCC", "AAABBBCCC", "AAABBBCCC");
+        List<Integer> aSlots = mask.slots('A');
+        List<Integer> bSlots = mask.slots('B');
+        List<Integer> cSlots = mask.slots('C');
+        GuiView.Builder builder =
+            GuiView.chest("探針遮罩物品（A=鑽石／B=金蘋果／C=終界珍珠）", mask);
+        for (int slot : aSlots) {
+            int at = slot;
+            builder.button(at, "mask-a-" + at, new ItemStack(Material.DIAMOND),
+                click -> getLogger().info("[gprobe-mask-icons] click zone=A slot=" + at
+                    + " button=mask-a-" + at + " player=" + target.getName()));
+        }
+        for (int slot : bSlots) {
+            int at = slot;
+            builder.button(at, "mask-b-" + at, new ItemStack(Material.GOLDEN_APPLE),
+                click -> getLogger().info("[gprobe-mask-icons] click zone=B slot=" + at
+                    + " button=mask-b-" + at + " player=" + target.getName()));
+        }
+        for (int slot : cSlots) {
+            int at = slot;
+            builder.button(at, "mask-c-" + at, new ItemStack(Material.ENDER_PEARL),
+                click -> getLogger().info("[gprobe-mask-icons] click zone=C slot=" + at
+                    + " button=mask-c-" + at + " player=" + target.getName()));
+        }
+        getLogger().info("[gprobe-mask-icons] expect zone=A slots=" + aSlots
+            + " icon=DIAMOND");
+        getLogger().info("[gprobe-mask-icons] expect zone=B slots=" + bSlots
+            + " icon=GOLDEN_APPLE");
+        getLogger().info("[gprobe-mask-icons] expect zone=C slots=" + cSlots
+            + " icon=ENDER_PEARL");
+        GuiResult opened = active.openView(uuid, builder.build());
+        getLogger().info("[gprobe-mask-icons] open state=" + opened.state()
+            + " detail=" + opened.detail() + " player=" + target.getName());
+        target.sendMessage("遮罩探針已開啟：檢查鑽石／金蘋果／終界珍珠是否在預期欄位，"
+            + "逐欄點擊（結果見 log [gprobe-mask-icons]）。");
+    }
+
+    /**
+     * 分頁案例：固定 23 筆資料、每頁 10 欄，共 3 頁；導覽按鈕只在有目標頁時出現。
+     *
+     * <p>每頁開啟時 log 記標題（探針分頁 — 頁 i/3）與上一頁／下一頁按鈕存在性
+     * （已執行）；翻頁後標題是否切換、各頁按鈕有無是否符合預期，需真人用
+     * 客戶端觀察，不以 log 宣稱。</p>
+     */
+    private void runPagerCase(GuiScope active, Player target) {
+        GuiMask mask = GuiMask.of("IIIII....", "IIIII....", "P.......N");
+        List<String> allItems = new ArrayList<>();
+        for (int i = 1; i <= 23; i++) {
+            allItems.add(String.format("探針項目-%02d", i));
+        }
+        GuiPager<String> pager = GuiPager.of(mask, 'I', 'P', 'N', "探針分頁",
+            (builder, slot, item) -> {
+                int at = slot;
+                String name = item;
+                builder.button(at, "pager-item-" + name,
+                    click -> getLogger().info("[gprobe-pager] item-click item=" + name
+                        + " slot=" + at + " player=" + target.getName()));
+            });
+        openPagerPage(active, target, pager, allItems, 0, true);
+        target.sendMessage("分頁探針已開啟：點下一頁到第 2／3 頁再逐頁返回，"
+            + "觀察標題與導覽按鈕（結果見 log [gprobe-pager]）。");
+    }
+
+    /** 開啟分頁指定頁：首頁用 open，翻頁用 replace（維持同一個 session）。 */
+    private void openPagerPage(GuiScope active, Player target, GuiPager<String> pager,
+            List<String> allItems, int pageIndex, boolean first) {
+        UUID uuid = target.getUniqueId();
+        GuiPage<String> page = GuiPage.page(allItems, pager.itemCapacity(), pageIndex);
+        GuiPage<String> current = page;
+        GuiPager.Actions actions = new GuiPager.Actions(
+            next -> openPagerPage(active, target, pager, allItems,
+                current.pageIndex() + 1, false),
+            prev -> openPagerPage(active, target, pager, allItems,
+                current.pageIndex() - 1, false));
+        GuiView view = pager.viewFor(page, actions);
+        GuiResult result = first
+            ? active.openView(uuid, view)
+            : active.replaceView(uuid, view);
+        boolean hasPrev = page.pageIndex() > 0;
+        boolean hasNext = page.pageIndex() + 1 < page.totalPages();
+        getLogger().info("[gprobe-pager] page=" + (page.pageIndex() + 1)
+            + "/" + page.totalPages() + " title=" + view.title()
+            + " hasPrev=" + hasPrev + " hasNext=" + hasNext
+            + " state=" + result.state() + " player=" + target.getName());
+    }
+
+    /**
+     * 標籤表單案例：同一份標籤宣告雙呈現；Java 看箱型步驟、基岩看原生表單。
+     *
+     * <p>第一步三顆標籤按鈕依欄升序對應表單索引 0／1／2（蘋果／香蕉／橘子），
+     * 全轉往第二步。開啟時 log 記 Java 開啟結果與轉移索引（已送出／已執行）；
+     * 基岩端表單按鈕順序與索引對應，需真人觀察，探針只記錄派送結果，
+     * 不以 log 宣稱客戶端所見。</p>
+     */
+    private void runLabelFormCase(GuiScope active, Player target) {
+        UUID uuid = target.getUniqueId();
+        GuiView secondView = GuiView.chest("探針標籤表單·第二步", 27)
+            .button(13, "finish-btn", "完成", click -> {
+                GuiResult result = active.close(uuid);
+                getLogger().info("[gprobe-label-form] done state=" + result.state()
+                    + " player=" + target.getName());
+            })
+            .build();
+        GuiView firstView = GuiView.chest("探針標籤表單·第一步", 27)
+            .button(10, "pick-a", "蘋果", click -> {
+                GuiResult result = active.goTo(uuid, "confirm");
+                getLogger().info("[gprobe-label-form] goTo index=0 step=confirm state="
+                    + result.state() + " detail=" + result.detail());
+            })
+            .button(13, "pick-b", "香蕉", click -> {
+                GuiResult result = active.goTo(uuid, "confirm");
+                getLogger().info("[gprobe-label-form] goTo index=1 step=confirm state="
+                    + result.state() + " detail=" + result.detail());
+            })
+            .button(16, "pick-c", "橘子", click -> {
+                GuiResult result = active.goTo(uuid, "confirm");
+                getLogger().info("[gprobe-label-form] goTo index=2 step=confirm state="
+                    + result.state() + " detail=" + result.detail());
+            })
+            .build();
+        GuiFlowStep intro = GuiFlowStep.labeled("intro", firstView,
+            Map.of(0, "confirm", 1, "confirm", 2, "confirm"));
+        GuiFlowStep confirm = GuiFlowStep.labeled("confirm", secondView, Map.of());
+        GuiFlow flow = GuiFlow.of(List.of(intro, confirm),
+            "intro",
+            done -> getLogger().info("[gprobe-label-form] complete player="
+                + target.getName()));
+        GuiResult opened = active.openFlow(uuid, flow);
+        getLogger().info("[gprobe-label-form] open state=" + opened.state()
+            + " detail=" + opened.detail()
+            + " labels=[蘋果,香蕉,橘子] transitions={0=confirm,1=confirm,2=confirm}"
+            + " player=" + target.getName());
+        if (!opened.isSuccess() && !opened.isAccepted()) {
+            target.sendMessage("標籤表單開啟失敗：" + opened.state());
+            return;
+        }
+        target.sendMessage("標籤表單已開啟：Java 點箱型按鈕推進；基岩看原生表單按鈕推進"
+            + "（順序應為蘋果／香蕉／橘子）。");
     }
 
     /** 表單案例：經共用流程發送固定 simple 表單（Bedrock 觀察用）。 */
