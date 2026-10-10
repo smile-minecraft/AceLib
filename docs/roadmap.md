@@ -340,9 +340,9 @@ AceLib 負責把下游給的物品放到對的欄位，以及分頁清單的翻�
 
 基岩表單驗證：
 
-- [ ] 表單探針加入 Modal 表單的案例：兩個按鈕各自的回傳索引、直接關閉。
-- [ ] 表單探針加入 Custom 表單的案例：input、dropdown、slider、stepSlider、toggle 的預設值、回傳值和元件順序。
-- [ ] 以真人基岩客戶端觀察上面兩組案例，結果記進[表單相容矩陣](reference/bedrock-form-compatibility-matrix.md)。沒有觀察到的環境標為未驗證。
+- [x] 表單探針加入 Modal 表單的案例：兩個按鈕各自的回傳索引、直接關閉。
+- [x] 表單探針加入 Custom 表單的案例：input、dropdown、slider、stepSlider、toggle 的預設值、回傳值和元件順序。
+- [x] 以真人基岩客戶端觀察上面兩組案例，結果記進[表單相容矩陣](reference/bedrock-form-compatibility-matrix.md)。沒有觀察到的環境標為未驗證。
 
 ### 發布前要確認的事
 
