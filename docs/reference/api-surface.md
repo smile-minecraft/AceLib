@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：226 個 public 頂層型別
-- Supported：175
+- 總數：227 個 public 頂層型別
+- Supported：176
 - SPI：25
 - Internal：26
 
@@ -87,6 +87,7 @@
 | `com.smile.acelib.config.ConfigException` | class | Supported | 配置載入/遷移例外；v1 契約。 |  | ConfigManager；ConfigMigration。 |
 | `com.smile.acelib.config.ConfigManager` | class | Supported | 配置管理服務（載入/遷移/儲存）；v1 穩定。 |  | AceLibConfig；AceLibPlugin。 |
 | `com.smile.acelib.config.ConfigMigration` | interface | SPI | 消費者實作的配置遷移介面（extension point）；寫明冪等與相容性責任。 |  | ConfigManager.registerMigration；消費者實作。 |
+| `com.smile.acelib.config.ConfigMissingFileHandler` | interface | Supported | 消費者實作的缺檔攔截規則（函式介面）；只在使用後缺檔、還原最後成功副本之前執行，拋 ConfigException 即拒絕還原；1.5.0 新增。 |  | ConfigManager.registerMissingFileHandler；消費者實作。 |
 | `com.smile.acelib.config.ConfigSchema` | record | Supported | 配置結構描述值型別；v1 穩定。 |  | AceLibConfig.withConfigSchema；ConfigManager。 |
 | `com.smile.acelib.config.ConfigSnapshot` | class | Supported | 設定不可變快照值型別（深層凍結，同輪一致）；v1 穩定。 |  | ConfigManager.snapshot；ConfigBinder；ConfigChangeListener。 |
 | `com.smile.acelib.config.ConfigVersion` | record | Supported | 配置版本值型別（major.minor），可比較；v1 凍結結構。 |  | ConfigSchema；ConfigManager；ConfigMigration。 |

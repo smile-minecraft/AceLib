@@ -455,6 +455,15 @@
       "mainCallers": "ConfigManager.registerMigration；消費者實作。"
     },
     {
+      "fqcn": "com.smile.acelib.config.ConfigMissingFileHandler",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigMissingFileHandler",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "消費者實作的缺檔攔截規則（函式介面）；只在使用後缺檔、還原最後成功副本之前執行，拋 ConfigException 即拒絕還原；1.5.0 新增。",
+      "mainCallers": "ConfigManager.registerMissingFileHandler；消費者實作。"
+    },
+    {
       "fqcn": "com.smile.acelib.config.ConfigSchema",
       "package": "com.smile.acelib.config",
       "simpleName": "ConfigSchema",

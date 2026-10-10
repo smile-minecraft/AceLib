@@ -36,6 +36,17 @@ StartupResult result = config.startup(fallback);
 
 使用後缺檔的重建同樣受版本政策約束：最後成功副本比當前版本新時拒絕還原（`ACELIB-CFG-006`），副本不動，改用預設值重建。
 
+缺檔還原前可由下游攔截：`registerMissingFileHandler` 登記的規則只在使用後缺檔（檔案不存在、且曾經成功載入過）時，於還原最後成功副本之前依序執行。規則正常回傳即照現行流程還原，未登記時行為不變：
+
+```java
+config.registerMissingFileHandler(missing -> {
+    throw new ConfigException("ACELIB-EXT-001",
+        "設定檔遺失，拒絕以舊副本啟動：" + missing.getAbsolutePath());
+});
+```
+
+規則拋 `ConfigException` 即拒絕還原：不寫入目標檔、不產生預設檔、不發布新快照、不推進世代、不動最後成功副本。`startup()` 回傳 `MISSING_AFTER_USE`（快照取記憶體舊快照 → 呼叫端後備 → null，診斷帶該例外的錯誤碼與訊息），`load()` 原樣拋出。首次安裝不觸發；最後成功副本版本較新時的 `ACELIB-CFG-006` 拒絕與其他啟動路徑不受影響。拒絕用的錯誤碼由下游自行決定，AceLib 不新增錯誤碼。
+
 `load()` 保留舊語意（損壞時直接拋 `ConfigException`）；需要分類或損壞時繼續跑請用 `startup()`。`load()` 可重複呼叫，每次都會重新驗證並寫回。
 
 ## 讀寫與重載

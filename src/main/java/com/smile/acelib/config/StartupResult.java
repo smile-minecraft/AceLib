@@ -13,7 +13,8 @@ import java.util.Objects;
  *   <li>{@link Status#CORRUPT}：磁碟設定損壞（格式、版本、遷移任一失敗），
  *       原檔逐位元不動；快照為最後成功副本、呼叫端後備或 null</li>
  *   <li>{@link Status#MISSING_AFTER_USE}：曾經成功載入，之後檔案被刪；
- *       已重建預設檔讓伺服器繼續跑，快照為最後成功副本</li>
+ *       已還原（最後成功副本、或經下游攔截拒絕而未動磁碟），
+ *       快照為還原內容、記憶體舊快照、呼叫端後備或 null</li>
  * </ul>
  *
  * <p>設定損壞時禁止哪些操作，由下游依 {@link #status()} 與
@@ -37,7 +38,7 @@ public record StartupResult(Status status, ConfigSnapshot snapshot, String detai
         LOADED,
         /** 損壞設定：原檔未動，快照為副本／後備或 null。 */
         CORRUPT,
-        /** 使用後缺檔：曾成功載入、之後檔案被刪，已重建預設檔。 */
+        /** 使用後缺檔：曾成功載入、之後檔案被刪，已還原或經攔截拒絕（未動磁碟）。 */
         MISSING_AFTER_USE
     }
 

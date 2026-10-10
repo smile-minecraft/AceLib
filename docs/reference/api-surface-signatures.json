@@ -438,6 +438,7 @@
       "method load() : void",
       "method registerCrossFieldValidator(com.smile.acelib.config.ConfigCrossFieldValidator) : com.smile.acelib.config.ConfigManager",
       "method registerMigration(com.smile.acelib.config.ConfigMigration) : com.smile.acelib.config.ConfigManager",
+      "method registerMissingFileHandler(com.smile.acelib.config.ConfigMissingFileHandler) : com.smile.acelib.config.ConfigManager",
       "method reload() : boolean",
       "method save() : void",
       "method set(java.lang.String,java.lang.Object) : void",
@@ -453,6 +454,9 @@
       "method fromVersion() : com.smile.acelib.config.ConfigVersion",
       "method migrate(org.bukkit.configuration.file.YamlConfiguration,org.bukkit.configuration.file.YamlConfiguration) : void",
       "method toVersion() : com.smile.acelib.config.ConfigVersion"
+    ],
+    "com.smile.acelib.config.ConfigMissingFileHandler": [
+      "method onMissingFile(java.io.File) : void"
     ],
     "com.smile.acelib.config.ConfigSchema": [
       "ctor(com.smile.acelib.config.ConfigVersion,java.util.List<com.smile.acelib.config.FieldSpec>)",

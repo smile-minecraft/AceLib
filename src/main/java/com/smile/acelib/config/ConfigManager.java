@@ -22,7 +22,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <ul>
  *   <li>啟動四分類（{@link #startup()}）：首次安裝／有效設定／損壞設定／使用後缺檔；
  *       識別依據是安裝狀態 sidecar，不是檔案是否存在</li>
- *   <li>預設設定檔生成（首次啟動無檔案時自動建立；使用後缺檔時以最後成功副本重建）</li>
+ *   <li>預設設定檔生成（首次啟動無檔案時自動建立；使用後缺檔時以最後成功副本重建，
+ *       下游可經 {@link #registerMissingFileHandler} 攔截改為拒絕還原）</li>
  *   <li>設定檔版本欄位存在；版本過舊自動觸發遷移</li>
  *   <li>缺失欄位可被補齊（不破壞既有值）</li>
  *   <li>磁碟版本比當前版本新時拒絕載入，不降版覆寫既有檔案（拒絕發生在任何寫盤之前）</li>
@@ -79,6 +80,11 @@ public final class ConfigManager {
      * 跨欄位驗證規則（依登記順序執行；寫入只在註冊時發生，驗證管線只讀）。
      */
     private final List<ConfigCrossFieldValidator> crossFieldValidators =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
+    /**
+     * 缺檔還原前攔截（依登記順序執行；只在使用後缺檔、還原最後成功副本之前觸發）。
+     */
+    private final List<ConfigMissingFileHandler> missingFileHandlers =
         new java.util.concurrent.CopyOnWriteArrayList<>();
     /** 欄位說明（路徑→註解）：寫回補缺 key 時附在旁邊；監看執行緒只讀。 */
     private final Map<String, String> descriptions = new ConcurrentHashMap<>();
@@ -156,6 +162,30 @@ public final class ConfigManager {
      */
     public ConfigManager registerCrossFieldValidator(ConfigCrossFieldValidator validator) {
         crossFieldValidators.add(Objects.requireNonNull(validator, "validator"));
+        return this;
+    }
+
+    /**
+     * 登記一條缺檔還原前攔截規則。
+     *
+     * <p>規則只在「使用後缺檔」（設定檔不存在、且安裝狀態 sidecar 證明曾經成功載入過）時，
+     * 於還原最後成功副本之前依登記順序執行；多條規則依序執行，前一條拒絕就停住，
+     * 後面的不再執行。規則正常回傳即照現行流程還原（未登記時行為不變）；
+     * 拋 {@link ConfigException} 即拒絕——不還原、不寫入目標檔、不產生預設檔、
+     * 不發布新快照、不推進世代、不動最後成功副本；{@code load()} 原樣拋出、
+     * {@code startup()} 回傳 {@code MISSING_AFTER_USE}
+     *（快照取記憶體舊快照 → 呼叫端後備 → null，診斷帶該例外的錯誤碼與訊息）。
+     * 首次安裝（從未成功載入過）不觸發；最後成功副本版本較新時的
+     * {@code ACELIB-CFG-006} 拒絕與其他啟動路徑不受影響。
+     * 規則本身拋出的非設定例外原樣傳播，不包裝。</p>
+     *
+     * @param handler 缺檔攔截規則；不可為 null
+     * @return this（鏈式 API）
+     * @throws NullPointerException 當 {@code handler} 為 null
+     * @since 1.5.0
+     */
+    public ConfigManager registerMissingFileHandler(ConfigMissingFileHandler handler) {
+        missingFileHandlers.add(Objects.requireNonNull(handler, "handler"));
         return this;
     }
 
@@ -312,7 +342,12 @@ public final class ConfigManager {
         if (!file.exists()) {
             boolean everInstalled = InstallStateStore.wasEverInstalled(path);
             if (everInstalled) {
-                // 使用後缺檔：優先以最後成功副本重建，讓伺服器回到上次能跑的狀態
+                // 使用後缺檔：先讓下游攔截（拒絕即失敗，不還原也不寫盤）；
+                // 無人拒絕才以最後成功副本重建，讓伺服器回到上次能跑的狀態
+                StartupResult refused = runMissingFileHandlers(file, path, fallback, lenient);
+                if (refused != null) {
+                    return refused;
+                }
                 StartupResult restored = tryRestoreLastGood(file, path);
                 if (restored != null) {
                     return restored;
@@ -361,6 +396,53 @@ public final class ConfigManager {
         recordReloadFailure(ex.getCode(), "啟動時設定損壞：" + ex.getMessage()
             + "（檔案：" + file.getAbsolutePath() + "）");
         return new StartupResult(StartupResult.Status.CORRUPT, resolution.snapshot(), detail);
+    }
+
+    /**
+     * 執行缺檔還原前攔截（使用後缺檔、還原最後成功副本之前）。
+     *
+     * <p>無人登記時直接回傳 null（呼叫端繼續現行還原流程，行為不變）。
+     * 任一規則拋 {@link ConfigException} 即拒絕：不還原、不寫入目標檔、
+     * 不產生預設檔、不發布新快照、不推進世代、不動最後成功副本；
+     * 非 lenient（{@link #load()}）原樣拋出，lenient（{@link #startup()}）
+     * 回傳 {@code MISSING_AFTER_USE}，快照取記憶體舊快照 → 呼叫端後備 → null，
+     * 診斷帶該例外的錯誤碼與訊息。規則本身拋出的非設定例外原樣傳播。</p>
+     *
+     * @return 拒絕且 lenient 時回傳 MISSING_AFTER_USE 結果；否則回傳 null（繼續還原）
+     */
+    private StartupResult runMissingFileHandlers(File file, Path path,
+                                                 YamlConfiguration fallback, boolean lenient) {
+        if (missingFileHandlers.isEmpty()) {
+            return null;
+        }
+        try {
+            for (ConfigMissingFileHandler handler : missingFileHandlers) {
+                handler.onMissingFile(file);
+            }
+        } catch (ConfigException ex) {
+            if (!lenient) {
+                throw ex;
+            }
+            ConfigSnapshot snapshot = snapshotRef;
+            String source;
+            if (snapshot != null) {
+                source = "記憶體中的舊快照";
+            } else if (fallback != null) {
+                snapshot = new ConfigSnapshot(fallback.getValues(false));
+                source = "呼叫端指定的後備設定";
+            } else {
+                source = "";
+            }
+            String detail = "[" + ex.getCode() + "] " + ex.getMessage()
+                + "；使用後缺檔已拒絕還原，未寫入目標檔、未發布新快照"
+                + (snapshot != null ? "，已沿用" + source + "。" : "，且無可用快照。")
+                + "（檔案：" + file.getAbsolutePath() + "）";
+            recordReloadFailure(ex.getCode(),
+                "使用後缺檔已拒絕還原：" + ex.getMessage()
+                    + "（檔案：" + file.getAbsolutePath() + "）");
+            return new StartupResult(StartupResult.Status.MISSING_AFTER_USE, snapshot, detail);
+        }
+        return null;
     }
 
     /**

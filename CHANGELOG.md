@@ -31,6 +31,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - `ConfigSnapshot` 新增 `getLong(path, default)`／`getDouble(path, default)`：`getLong` 對小數與溢位拋 `ACELIB-CFG-007`；`getDouble` 拒絕 NaN 與正負無限大（例如 YAML 的 `.nan`／`.inf`）；缺值、null 與非數字值回傳預設值。與 `ConfigBinder.bind` 的數值轉換同規則。
 - `ConfigSnapshot` 新增世代與內容相等：`generation()` 為獨立 metadata，`ConfigManager` 每次成功發布（`load`／`reload`／`startup`）世代 +1（同內容也 +1），失敗不發布新世代；`equals`／`hashCode` 只比較深層內容，世代不參與。
 - 設定繫結支援 Map<String, T>、Set<T> 與物件清單（元素依宣告型別驗證，錯誤帶完整元素路徑）；新增跨欄位驗證入口 registerCrossFieldValidator，規則失敗時不發布新快照、不推進世代。
+- 使用後缺檔可在還原前攔截：新增 `ConfigManager#registerMissingFileHandler`，規則只在檔案不存在且曾經成功載入過時、於還原最後成功副本之前執行；正常回傳即照現行流程還原，拋 `ConfigException` 即拒絕（不寫入目標檔、不產生預設檔、不發布新快照、不推進世代）。`startup()` 回傳 `MISSING_AFTER_USE`（快照取記憶體舊快照 → 呼叫端後備 → null，診斷帶該例外的錯誤碼與訊息），`load()` 原樣拋出。首次安裝不觸發；最後成功副本版本較新時的 `ACELIB-CFG-006` 拒絕不受影響。拒絕用的錯誤碼由下游自行決定，不新增錯誤碼。
 
 ## [1.4.0] - 2026-10-08
 
