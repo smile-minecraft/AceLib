@@ -187,7 +187,6 @@ class TaskErrorRecorderTest {
     @Nested
     @DisplayName("clear")
     class Clear {
-
         @Test
         @DisplayName("clear 後 getErrorCount 為 0，contains 為 false")
         void clear_resetsAll() {
@@ -198,6 +197,52 @@ class TaskErrorRecorderTest {
             r.clear();
             assertEquals(0, r.getErrorCount());
             assertFalse(r.contains("X"));
+        }
+
+        @Test
+        @DisplayName("並行 record＋clear＋configureCapacity 不拋例外，結束後仍可正常記錄")
+        void concurrentRecordClearConfigure_noException() throws Exception {
+            TaskErrorRecorder r = new TaskErrorRecorder(50);
+            int threads = 6;
+            java.util.concurrent.CountDownLatch start =
+                new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(threads);
+            java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                final int id = i;
+                futures.add(pool.submit(() -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("test start gate interrupted", e);
+                    }
+                    for (int n = 0; n < 200; n++) {
+                        int op = (n + id) % 3;
+                        if (op == 0) {
+                            r.record(TaskErrorRecord.cancelled(
+                                TaskType.GLOBAL, "K" + (n % 10), "d"));
+                        } else if (op == 1) {
+                            r.clear();
+                        } else {
+                            r.configureCapacity(10 + (n % 40));
+                        }
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (java.util.concurrent.Future<?> f : futures) {
+                f.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            pool.shutdownNow();
+            // 結束後 recorder 仍可正常運作，不留下損毀狀態
+            r.configureCapacity(TaskErrorRecorder.DEFAULT_CAPACITY);
+            r.clear();
+            r.record(TaskErrorRecord.cancelled(TaskType.GLOBAL, "AFTER", "d"));
+            assertEquals(1, r.getErrorCount());
+            assertTrue(r.contains("AFTER"));
         }
     }
 
@@ -263,5 +308,51 @@ class TaskErrorRecorderTest {
     void contentEquals_null_false() {
         TaskErrorRecorder a = new TaskErrorRecorder();
         assertFalse(a.contentEquals(null));
+    }
+
+    @Nested
+    @DisplayName("configureCapacity 即時容量調整")
+    class ConfigureCapacity {
+
+        @Test
+        @DisplayName("縮小容量時依 FIFO 淘汰最舊，只留最新 N 筆並回傳生效容量")
+        void shrink_evictsOldestFifo() {
+            TaskErrorRecorder r = new TaskErrorRecorder(5);
+            for (int i = 0; i < 5; i++) {
+                r.record(TaskErrorRecord.cancelled(TaskType.GLOBAL, "C" + i, "d" + i));
+            }
+            int effective = r.configureCapacity(2);
+            assertEquals(2, effective, "必須回傳生效容量");
+            assertEquals(2, r.getCapacity());
+            assertEquals(2, r.getErrorCount());
+            assertFalse(r.contains("C0"), "C0（最舊）必須被淘汰");
+            assertFalse(r.contains("C1"));
+            assertFalse(r.contains("C2"));
+            assertTrue(r.contains("C3"));
+            assertTrue(r.contains("C4"), "最新兩筆必須保留");
+        }
+
+        @Test
+        @DisplayName("放大容量不憑空產生紀錄")
+        void grow_doesNotInventRecords() {
+            TaskErrorRecorder r = new TaskErrorRecorder(3);
+            r.record(TaskErrorRecord.cancelled(TaskType.GLOBAL, "A", "a"));
+            r.record(TaskErrorRecord.cancelled(TaskType.GLOBAL, "B", "b"));
+            int effective = r.configureCapacity(10);
+            assertEquals(10, effective);
+            assertEquals(10, r.getCapacity());
+            assertEquals(2, r.getErrorCount(), "放大容量不得憑空產生紀錄");
+            assertTrue(r.contains("A"));
+            assertTrue(r.contains("B"));
+        }
+
+        @Test
+        @DisplayName("容量 0 與負數拋 IllegalArgumentException，且原容量不變")
+        void nonPositive_throwsAndKeepsCapacity() {
+            TaskErrorRecorder r = new TaskErrorRecorder(5);
+            assertThrows(IllegalArgumentException.class, () -> r.configureCapacity(0));
+            assertThrows(IllegalArgumentException.class, () -> r.configureCapacity(-1));
+            assertEquals(5, r.getCapacity(), "非法容量必須被拒絕，原容量不變");
+        }
     }
 }

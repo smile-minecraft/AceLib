@@ -131,7 +131,7 @@ public final class ErrorThrottler {
                 int prevTotalAllowed = existing != null ? existing.totalAllowed : 0;
                 int prevTotalSuppressed = existing != null ? existing.totalSuppressed : 0;
                 return new Window(now, 1, 0, safeDetail,
-                    prevTotalAllowed + 1, prevTotalSuppressed);
+                    prevTotalAllowed + 1, prevTotalSuppressed, now);
             }
             // 視窗內：依 maxPerWindow 判斷本次是否仍允許
             if (existing.allowedCount < maxPerWindow) {
@@ -141,7 +141,8 @@ public final class ErrorThrottler {
                     existing.suppressedCount,
                     safeDetail,
                     existing.totalAllowed + 1,
-                    existing.totalSuppressed);
+                    existing.totalSuppressed,
+                    now);
             }
             // 視窗內已達上限：本次 SUPPRESSED；detail 保留最近一次 ALLOWED 的 detail
             kindRef.set(ThrottleDecision.Kind.SUPPRESSED);
@@ -150,7 +151,8 @@ public final class ErrorThrottler {
                 existing.suppressedCount + 1,
                 existing.lastDetail,
                 existing.totalAllowed,
-                existing.totalSuppressed + 1);
+                existing.totalSuppressed + 1,
+                now);
         });
 
         ThrottleDecision.Kind kind = kindRef.get();
@@ -218,6 +220,48 @@ public final class ErrorThrottler {
     }
 
     /**
+     * 惰性淘汰「長時間沒有再出現」的 code 視窗。
+     *
+     * <p>閒置判定：某 code 距上次 {@link #tryRecord(String, String)}
+     * 已超過 {@code idleMillis}（{@code now - lastSeenMillis >= idleMillis}，
+     * {@code now} 取自建構時注入的 {@link Clock}），即視為閒置並移除其視窗。
+     * 仍活躍的視窗不受影響，其當前視窗統計與跨視窗累計完整保留。</p>
+     *
+     * <p>本方法為<strong>惰性清理</strong>：內部不啟動任何背景執行緒，
+     * 由呼叫端在適當時機呼叫（例如 {@code /acelib status} 前、
+     * reload 流程、或定期的運維任務內）。執行緒安全：與
+     * {@link #tryRecord(String, String)} 並行呼叫不拋例外；
+     * 淘汰與記錄同一 code 競爭時，以其中一方原子地獲勝為準，
+     * 不留下損毀狀態。</p>
+     *
+     * @param idleMillis 閒置門檻（毫秒）；必須 &gt; 0
+     * @return 本次移除的 code 數量（&gt;= 0）
+     * @throws IllegalArgumentException 當 {@code idleMillis <= 0}
+     * @since 1.5.0
+     */
+    public int evictIdleCode(long idleMillis) {
+        if (idleMillis <= 0L) {
+            throw new IllegalArgumentException(
+                "idleMillis must be > 0, got: " + idleMillis);
+        }
+        long now = clock.currentTimeMillis();
+        int removed = 0;
+        var iterator = windows.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            Window w = entry.getValue();
+            if (w != null && (now - w.lastSeenMs) >= idleMillis) {
+                // remove(key, value) 保證只在值未被並行 tryRecord 換掉時移除，
+                // 避免误删剛恢復活躍的視窗
+                if (windows.remove(entry.getKey(), w)) {
+                    removed++;
+                }
+            }
+        }
+        return removed;
+    }
+
+    /**
      * 取得所有曾被記錄過的錯誤代碼（不可變視圖）。
      *
      * <p>回傳 {@link Set#copyOf} 結果，呼叫端修改不會影響本物件狀態。</p>
@@ -282,15 +326,25 @@ public final class ErrorThrottler {
         final String lastDetail;
         final int totalAllowed;
         final int totalSuppressed;
+        /**
+         * 該 code 上次出現的時間（每次 {@code tryRecord} 更新）。
+         *
+         * <p>與 {@code startMs} 不同：視窗內重複出現不會推進
+         * {@code startMs}（維持視窗邊界語意），但會推進
+         * {@code lastSeenMs}（供 {@link ErrorThrottler#evictIdleCode(long)} 判定閒置，
+         * 避免误删「視窗內持續活躍」的 code）。</p>
+         */
+        final long lastSeenMs;
 
         Window(long startMs, int allowedCount, int suppressedCount, String lastDetail,
-               int totalAllowed, int totalSuppressed) {
+               int totalAllowed, int totalSuppressed, long lastSeenMs) {
             this.startMs = startMs;
             this.allowedCount = allowedCount;
             this.suppressedCount = suppressedCount;
             this.lastDetail = lastDetail != null ? lastDetail : "";
             this.totalAllowed = totalAllowed;
             this.totalSuppressed = totalSuppressed;
+            this.lastSeenMs = lastSeenMs;
         }
     }
 }

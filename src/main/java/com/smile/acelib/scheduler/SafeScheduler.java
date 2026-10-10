@@ -131,6 +131,47 @@ public interface SafeScheduler {
     List<TaskErrorRecord> getRecorderErrors(int max);
 
     /**
+     * 清空內部錯誤紀錄。
+     *
+     * <p>只清除 recorder 保留的錯誤紀錄；已送往
+     * {@link com.smile.acelib.diagnostics.DiagnosticsService DiagnosticsService}
+     * 的節流累計統計不受影響（不會被暗自重設）。reload 或運維清理時使用。</p>
+     *
+     * <p>外部實作若沒有內建 recorder，不假裝支援：
+     * 預設實作拋 {@link UnsupportedOperationException}。</p>
+     *
+     * @throws UnsupportedOperationException 預設實作（外部實作未覆寫時）
+     * @since 1.5.0
+     */
+    default void clearRecorderErrors() {
+        throw new UnsupportedOperationException(
+            "clearRecorderErrors is not supported by this SafeScheduler implementation "
+            + "(no error recorder)");
+    }
+
+    /**
+     * 即時調整內部錯誤紀錄的保留容量。
+     *
+     * <p>容量縮小時，超過新容量的最舊紀錄依 FIFO 淘汰；
+     * 容量放大時不憑空產生紀錄。預設容量為
+     * {@link TaskErrorRecorder#DEFAULT_CAPACITY} 筆。</p>
+     *
+     * <p>外部實作若沒有內建 recorder，不假裝支援：
+     * 預設實作拋 {@link UnsupportedOperationException}。</p>
+     *
+     * @param capacity 新的保留上限；必須 &gt; 0
+     * @return 生效後的新容量
+     * @throws IllegalArgumentException 當 {@code capacity <= 0}（內建實作）
+     * @throws UnsupportedOperationException 預設實作（外部實作未覆寫時）
+     * @since 1.5.0
+     */
+    default int configureErrorCapacity(int capacity) {
+        throw new UnsupportedOperationException(
+            "configureErrorCapacity is not supported by this SafeScheduler implementation "
+            + "(no error recorder)");
+    }
+
+    /**
      * 以指定玩家為作用域建立任務群組。
      *
      * <p>群組內的任務共享生命週期：玩家退服或 plugin 停用時自動取消，

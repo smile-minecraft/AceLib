@@ -46,6 +46,16 @@ String report = diagnostics.buildReport().format(false);
 
 未知或大小寫不符的錯誤碼會歸類為 `UNKNOWN`，不會拋出例外。
 
+## 清理長時間沒再出現的節流紀錄
+
+`ErrorThrottler` 會為每個出現過的錯誤代碼保留一個視窗。長時間沒再出現的代碼，可由呼叫端在適當時機清理（例如輸出狀態報告前或 reload 流程內）：
+
+```java
+int removed = throttler.evictIdleCode(60_000L); // 移除閒置超過 60 秒的代碼
+```
+
+閒置指「距上次出現已超過 `idleMillis`」，以建立時注入的時鐘判定。清理是惰性的，內部沒有背景執行緒；只移除閒置視窗，仍活躍視窗的統計不受影響。`idleMillis` 必須大於 0，否則拋 `IllegalArgumentException`。回傳值為本次移除的代碼數量。
+
 ## 相關頁面
 
 - [錯誤碼](../reference/error-codes.md)

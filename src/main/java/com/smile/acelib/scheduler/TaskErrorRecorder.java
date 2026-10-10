@@ -36,7 +36,8 @@ import java.util.logging.Logger;
  * <h2>容量策略</h2>
  * <p>預設容量為 {@value #DEFAULT_CAPACITY} 筆。當 {@link #record(TaskErrorRecord)}
  * 寫入第 101 筆時，最舊的 1 筆會被淘汰。容量可在建構時指定，
- * 但不可 ≤ 0。</p>
+ * 但不可 ≤ 0；執行期可經由 {@link #configureCapacity(int)} 即時調整
+ * （縮小時依 FIFO 淘汰最舊）。</p>
  *
  * <h2>查詢語意</h2>
  * <ul>
@@ -57,7 +58,7 @@ public final class TaskErrorRecorder {
     /** Plugin logger name（sink 失敗時輸出 FINE-level 訊息）。 */
     private static final Logger LOGGER = Logger.getLogger("AceLib");
 
-    private final int capacity;
+    private volatile int capacity;
     private final Deque<TaskErrorRecord> deque = new ConcurrentLinkedDeque<>();
     /**
      * Recorder-level sink。
@@ -190,6 +191,32 @@ public final class TaskErrorRecorder {
         return Collections.unmodifiableList(
             new ArrayList<>(snapshot.subList(size - max, size))
         );
+    }
+
+    /**
+     * 即時調整保留容量。
+     *
+     * <p>容量縮小時，超過新容量的最舊紀錄依 FIFO 淘汰（與
+     * {@link #record(TaskErrorRecord)} 超量時的淘汰順序一致）；
+     * 容量放大時不憑空產生紀錄。寫入 {@code volatile}，多執行緒下
+     * 與 {@link #record(TaskErrorRecord)} 並行安全（淘汰條件以寫入當下
+     * 可見的容量為準）。</p>
+     *
+     * @param capacity 新的保留上限；必須 &gt; 0
+     * @return 生效後的新容量（等於傳入的 {@code capacity}）
+     * @throws IllegalArgumentException 當 {@code capacity <= 0}
+     * @since 1.5.0
+     */
+    public int configureCapacity(int capacity) {
+        if (capacity <= 0) {
+            throw new IllegalArgumentException(
+                "capacity must be > 0, got: " + capacity);
+        }
+        this.capacity = capacity;
+        while (deque.size() > capacity) {
+            deque.pollFirst();
+        }
+        return this.capacity;
     }
 
     /**

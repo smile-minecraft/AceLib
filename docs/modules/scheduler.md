@@ -80,6 +80,17 @@ ticket.whenComplete(outcome -> {
 
 錯誤代碼與觸發原因見[錯誤碼](../reference/error-codes.md)。需要先判斷目前執行緒是否允許操作時，請看[上下文安全](context.md)。
 
+## 清理錯誤紀錄與調整保留容量
+
+錯誤紀錄預設保留最近 100 筆，超過時淘汰最舊。運維或 reload 時可以清理與調整：
+
+```java
+scheduler.clearRecorderErrors();          // 清空錯誤紀錄
+int effective = scheduler.configureErrorCapacity(50); // 改留最近 50 筆
+```
+
+`clearRecorderErrors()` 只清除 recorder 的紀錄，不會重設診斷服務的節流累計統計。`configureErrorCapacity()` 縮小時依 FIFO 淘汰最舊、放大時不憑空產生紀錄；容量必須大於 0，否則拋 `IllegalArgumentException`，並回傳生效後的容量。
+
 ## 相關頁面
 
 - [上下文安全](context.md)

@@ -1,20 +1,31 @@
 package com.smile.acelib.scheduler;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.AceLibPlugin;
+import com.smile.acelib.AceLibVersion;
+import com.smile.acelib.diagnostics.Clock;
+import com.smile.acelib.diagnostics.DiagnosticsService;
+import com.smile.acelib.diagnostics.ThrottleStats;
 import com.smile.acelib.platform.Platform;
 import com.smile.acelib.platform.PlatformCapability;
 import com.smile.acelib.platform.PlatformDetector;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
@@ -328,5 +339,160 @@ class SafeSchedulerErrorTest {
 
         assertTrue(scheduler.getRecorder().contains("ACELIB-SCHED-001"),
             "sink 拋例外不應阻擋 recorder 記錄錯誤");
+    }
+
+    // -----------------------------------------------------------------
+    // 錯誤清除與容量設定（公開運維入口）
+    // -----------------------------------------------------------------
+
+    @Nested
+    @DisplayName("clearRecorderErrors 與 configureErrorCapacity")
+    class RecorderMaintenance {
+
+        private DiagnosticsService diagnosticsOf(SafeSchedulerImpl sched) {
+            AtomicLong millis = new AtomicLong(1_700_000_000_000L);
+            Clock clock = millis::get;
+            DiagnosticsService service = new DiagnosticsService(clock);
+            service.bindPlugin(AceLibVersion.VERSION, Platform.PAPER,
+                PlatformCapability.forPlatform(Platform.PAPER));
+            service.bindScheduler(sched);
+            return service;
+        }
+
+        @Test
+        @DisplayName("clearRecorderErrors 只清 recorder，不動診斷累計統計")
+        void clear_onlyClearsRecorder_cumulativeDiagnosticsIntact() {
+            DiagnosticsService diagnostics = diagnosticsOf(scheduler);
+            scheduler.getRecorder().record(
+                TaskErrorRecord.cancelled(TaskType.GLOBAL, "ACELIB-SCHED-002", "offline"));
+            scheduler.getRecorder().record(
+                TaskErrorRecord.cancelled(TaskType.GLOBAL, "ACELIB-SCHED-004", "chunk"));
+            assertEquals(2, scheduler.getRecorderErrors(Integer.MAX_VALUE).size());
+            Map<String, ThrottleStats> before =
+                diagnostics.buildSnapshot().throttleSnapshot();
+            assertTrue(before.containsKey("ACELIB-SCHED-002"));
+            assertTrue(before.containsKey("ACELIB-SCHED-004"));
+
+            // 經由公開介面型別呼叫，證明入口在 SafeScheduler 上
+            SafeScheduler api = scheduler;
+            api.clearRecorderErrors();
+
+            assertTrue(api.getRecorderErrors(Integer.MAX_VALUE).isEmpty(),
+                "清除後錯誤紀錄必須為空");
+            Map<String, ThrottleStats> after =
+                diagnostics.buildSnapshot().throttleSnapshot();
+            assertEquals(before, after,
+                "清除只清 recorder，不得暗自重設診斷節流累計");
+        }
+
+        @Test
+        @DisplayName("清除後 scheduler 仍可正常記錄新錯誤")
+        void clear_schedulerStillRecords() {
+            SafeScheduler api = scheduler;
+            scheduler.getRecorder().record(
+                TaskErrorRecord.cancelled(TaskType.GLOBAL, "ACELIB-SCHED-002", "x"));
+            api.clearRecorderErrors();
+            scheduler.getRecorder().record(
+                TaskErrorRecord.cancelled(TaskType.GLOBAL, "ACELIB-SCHED-004", "y"));
+            List<TaskErrorRecord> errors = api.getRecorderErrors(Integer.MAX_VALUE);
+            assertEquals(1, errors.size());
+            assertEquals("ACELIB-SCHED-004", errors.get(0).code());
+        }
+
+        @Test
+        @DisplayName("configureErrorCapacity 縮小依 FIFO 只留最新 3 筆並回傳生效容量")
+        void configure_shrinkKeepsNewestFifo() {
+            SafeScheduler api = scheduler;
+            for (int i = 0; i < 5; i++) {
+                scheduler.getRecorder().record(
+                    TaskErrorRecord.cancelled(TaskType.GLOBAL, "K" + i, "d" + i));
+            }
+            int effective = api.configureErrorCapacity(3);
+            assertEquals(3, effective, "必須回傳生效容量");
+            List<TaskErrorRecord> kept = api.getRecorderErrors(Integer.MAX_VALUE);
+            assertEquals(3, kept.size());
+            assertEquals("K2", kept.get(0).code(), "最舊的 K0、K1 必須被淘汰");
+            assertEquals("K3", kept.get(1).code());
+            assertEquals("K4", kept.get(2).code());
+            // 還原預設容量，避免污染其他測試（同例項 recorder）
+            api.configureErrorCapacity(TaskErrorRecorder.DEFAULT_CAPACITY);
+        }
+
+        @Test
+        @DisplayName("configureErrorCapacity 非法容量拒絕（0 與負數拋 IAE）")
+        void configure_illegalCapacity_rejected() {
+            SafeScheduler api = scheduler;
+            assertThrows(IllegalArgumentException.class, () -> api.configureErrorCapacity(0));
+            assertThrows(IllegalArgumentException.class, () -> api.configureErrorCapacity(-1));
+        }
+
+        @Test
+        @DisplayName("外部實作未覆寫時，default 方法拋 UnsupportedOperationException")
+        void externalImpl_defaultRejects() {
+            SafeScheduler external = new SafeScheduler() {
+                @Override
+                public ScheduledTask runGlobal(Runnable runnable) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runAsync(Runnable runnable) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runLater(Runnable runnable, long delayTicks) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runTimer(Runnable runnable, long delayTicks, long periodTicks) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runForPlayer(Player player, Runnable runnable) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runForPlayerLater(Player player, Runnable runnable,
+                        long delayTicks) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runForEntity(Entity entity, Runnable runnable) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public ScheduledTask runAtLocation(Location location, Runnable runnable) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public List<TaskErrorRecord> getRecorderErrors(int max) {
+                    return List.of();
+                }
+
+                @Override
+                public TaskScope scopeFor(Player player) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public TaskScope scopeFor(Entity entity) {
+                    throw new UnsupportedOperationException("x");
+                }
+
+                @Override
+                public void cancelAll() {
+                }
+            };
+            assertThrows(UnsupportedOperationException.class, external::clearRecorderErrors);
+            assertThrows(UnsupportedOperationException.class,
+                () -> external.configureErrorCapacity(10));
+        }
     }
 }

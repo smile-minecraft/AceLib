@@ -347,6 +347,16 @@ public final class SafeSchedulerImpl implements SafeScheduler {
         return recorder.getRecentErrors(max);
     }
 
+    @Override
+    public void clearRecorderErrors() {
+        recorder.clear();
+    }
+
+    @Override
+    public int configureErrorCapacity(int capacity) {
+        return recorder.configureCapacity(capacity);
+    }
+
     // -----------------------------------------------------------------
     // 生命週期與診斷輔助（介面外額外提供）
     // -----------------------------------------------------------------

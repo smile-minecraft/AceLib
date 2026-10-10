@@ -34,6 +34,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 使用後缺檔可在還原前攔截：新增 `ConfigManager#registerMissingFileHandler`，規則只在檔案不存在且曾經成功載入過時、於還原最後成功副本之前執行；正常回傳即照現行流程還原，拋 `ConfigException` 即拒絕（不寫入目標檔、不產生預設檔、不發布新快照、不推進世代）。`startup()` 回傳 `MISSING_AFTER_USE`（快照取記憶體舊快照 → 呼叫端後備 → null，診斷帶該例外的錯誤碼與訊息），`load()` 原樣拋出。首次安裝不觸發；最後成功副本版本較新時的 `ACELIB-CFG-006` 拒絕不受影響。拒絕用的錯誤碼由下游自行決定，不新增錯誤碼。
 - 逐玩家儲存新增條件寫入與讀檢查套用：`PlayerDataStore#applyIfRevision` 以欄位 revision 為條件做單欄位 upsert，條件不符不寫並回傳實際 revision 供重試（不存在的欄位視為 0）；`PlayerDataStore#readCheckApply` 把讀取、檢查、套用放在同一原子區段，檢查不通過回 `CHECK_REJECTED` 且不留修改，基礎設施失敗整批回滾並以 `ACELIB-DATA-008` 回報。JDBC／SQLite 以單一交易內的條件更新達成（條件相符即寫入，同值也推進 revision）；DataStore 轉接以記憶體 revision 達成，只對同一轉接實例有效、重建歸零，且為 per-player 粗粒計數。單一儲存行程內的交易保證，不承諾跨伺服器或跨行程原子性，亦不自動重試。外部自備的 `PlayerDataStore` 實作可不實作，未覆寫時預設拋 `UnsupportedOperationException`。
 - PlayerDataService 新增 getOfflineDataAsync(UUID)：離線玩家資料的非同步讀取入口，讀取在既有 serial store executor 上執行，呼叫端不阻塞；語意與同步版一致（在線玩家拿到的是已持久化內容，未保存的 session 變更不在內）；失敗以 future exceptional 表達（007／006／008／002）。
+- 排程診斷新增運維入口：SafeScheduler 可經 clearRecorderErrors 清空錯誤紀錄（不動診斷節流累計）、經 configureErrorCapacity 即時調整保留容量（縮小時依 FIFO 淘汰最舊）；ErrorThrottler 新增 evictIdleCode 惰性淘汰閒置 code（無背景執行緒，由呼叫端觸發）。
 
 ## [1.4.0] - 2026-10-08
 
