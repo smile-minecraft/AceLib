@@ -303,6 +303,8 @@ if (result.fallbackApplied()) {
 - 四個入口都有不帶與帶風格兩種：`sendChatWithFallbackResult`、`sendActionBarWithFallbackResult`、`sendTitleWithFallbackResult`、`broadcastWithFallbackResult`。
 - 預設風格是提示（`BedrockFallbackStyle.HINTS`），與 AceLib 1.4.0 的 `*WithFallback` 行為一致；舊的 void 入口維持不變。明確傳入 `BedrockFallbackStyle.PLAIN_TEXT` 時，基岩玩家的訊息會整體攤成純文字（無 click、無顏色與裝飾）。
 
+分辨渲染失敗原因、拿發送結果、選攤平風格與輸出純文字的完整可編譯寫法見 [`MessageV150Example`](../../examples/consumer-plugin/src/main/java/com/example/MessageV150Example.java)。
+
 ## 表單文字轉換（FormText）
 
 `FormText`（`com.smile.acelib.message`）把 Adventure Component 轉為基岩表單可安全顯示的字串，讓同一份 MiniMessage 語系同時餵 Java 聊天與基岩表單。靜態入口可在任意執行緒呼叫，不依賴插件啟用狀態：

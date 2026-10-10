@@ -193,6 +193,8 @@ PlayerDataStore.ReadCheckApplyResult done = store.readCheckApply(uuid,
 // done.outcome() 為 APPLIED 或 CHECK_REJECTED
 ```
 
+條件寫入、讀檢查套用與離線讀取的完整可編譯寫法見 [`PlayerStoreV150Example`](../../examples/consumer-plugin/src/main/java/com/example/PlayerStoreV150Example.java)（可照抄的路徑是 sqlite 後端；檔案轉接只作教材，限制見該檔 Javadoc）。
+
 `readCheckApply(uuid, check, changes)` 把讀取、判定、套用放在同一個原子區段：
 以剛讀到的資料執行 `check`，通過才套用 `changes`。檢查不通過回傳
 `CHECK_REJECTED` 且不做任何修改；基礎設施失敗（`ACELIB-DATA-008`）整批回滾，

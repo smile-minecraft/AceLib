@@ -383,6 +383,8 @@ public final class CatalogReader {
 
 `api.getCommandCatalog()` 永不為 null；disable 後的目錄為已停用的同一實例（發布一律回 `REJECTED`，快照為空），呼叫端無需 null 判斷，只需處理空快照。
 
+自訂引數型別的完整可編譯寫法見 [`CommandV150Example`](../../examples/consumer-plugin/src/main/java/com/example/CommandV150Example.java)（外部 `com.example` 套件：裸數字百分比引數，註冊的指令在傳統與 Brigadier 兩條路徑都能執行）。
+
 ## 相關頁面
 
 - [事件註冊](event.md)

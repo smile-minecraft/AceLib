@@ -170,6 +170,8 @@ gui.openView(playerId, view);
   項目數與欄位數），不靜默截斷；取頁時以 `pager.itemCapacity()` 為 `pageSize`
   即可避免。
 
+字元遮罩、按鈕物品、翻頁清單與標籤步驟的完整可編譯寫法見 [`GuiV150Example`](../../examples/consumer-plugin/src/main/java/com/example/GuiV150Example.java)。
+
 ## 確認票券與送出前重新驗證
 
 確認票券一次性：`confirm`／`cancel` 競爭只解決一次，後到回 `ACTION_ALREADY_RESOLVED`；

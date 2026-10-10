@@ -39,3 +39,13 @@ examples/consumer-plugin/build/libs/acelib-consumer-quickstart-1.0.0-SNAPSHOT.ja
 - [`QuickStartPlugin.java`](src/main/java/com/example/acelibconsumer/QuickStartPlugin.java)
 - [`plugin.yml`](src/main/resources/plugin.yml)
 - [`build.gradle.kts`](build.gradle.kts)
+
+## 開發中的新 API 範例
+
+以下五個範例示範尚未發布的新 API，只用公開 API，對應的模組頁各有一句入口說明：
+
+- [`CommandV150Example.java`](src/main/java/com/example/CommandV150Example.java)：以解析函式與補全函式建立自訂百分比引數。
+- [`GuiV150Example.java`](src/main/java/com/example/GuiV150Example.java)：以字元遮罩組商店視圖，購買按鈕一併給物品。
+- [`MessageV150Example.java`](src/main/java/com/example/MessageV150Example.java)：分辨渲染失敗原因、拿發送結果、選攤平風格與輸出純文字。
+- [`ConfigV150Example.java`](src/main/java/com/example/ConfigV150Example.java)：世代判斷、數值讀取、跨欄位規則與缺檔攔截。
+- [`PlayerStoreV150Example.java`](src/main/java/com/example/PlayerStoreV150Example.java)：條件寫入、讀檢查套用與離線讀取；可照抄的路徑是 sqlite 後端。
