@@ -15,6 +15,10 @@ import java.util.function.Supplier;
  * docs/reference/bedrock-form-compatibility-matrix.md 矩陣的縱軸；
  * 新增案例時必須同步更新矩陣文件與 {@code FormProbeCasesTest} 的完整性斷言。</p>
  *
+ * <p>每個案例另帶 {@link #expectation()}：真人在基岩客戶端要觀察的重點
+ * （例如按鈕回傳索引、關閉行為、各元件預設值與回傳順序）。期望觀察點只描述
+ * 「要看什麼」，不斷言客戶端實際呈現；實際結果由真人回填矩陣。</p>
+ *
  * <p>規格以 factory（{@link Supplier}）承載而非預建實例：每次呼叫
  * {@link #buildSpec()} 都重新走一次建構路徑（含 {@code FormText.render}），
  * 因此單元測試能驗證「案例可重複建構」而不只是「某次建構成功」。</p>
@@ -23,16 +27,21 @@ public final class FormProbeCase {
 
     private final String id;
     private final String description;
+    private final String expectation;
     private final Supplier<FormSpec> specFactory;
 
     /**
      * @param id          穩定識別碼（矩陣縱軸鍵）
      * @param description 人類可讀說明，描述此案例要觀察的表單特性
+     * @param expectation 期望觀察點：真人在基岩客戶端要看的重點；只描述要看什麼，
+     *                    不斷言客戶端實際呈現
      * @param specFactory 表單規格工廠；每次呼叫回傳一個合法、可發送的 {@link FormSpec}
      */
-    public FormProbeCase(String id, String description, Supplier<FormSpec> specFactory) {
+    public FormProbeCase(String id, String description, String expectation,
+            Supplier<FormSpec> specFactory) {
         this.id = id;
         this.description = description;
+        this.expectation = expectation;
         this.specFactory = specFactory;
     }
 
@@ -44,6 +53,11 @@ public final class FormProbeCase {
     /** 人類可讀說明。 */
     public String description() {
         return description;
+    }
+
+    /** 期望觀察點：真人在基岩客戶端要看的重點；只描述要看什麼，不斷言實際呈現。 */
+    public String expectation() {
+        return expectation;
     }
 
     /**

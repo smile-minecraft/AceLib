@@ -15,7 +15,7 @@
 `FormService` 發送的固定 `FormSpec` 案例，在 **Bedrock 客戶端（經 Geyser
 轉換）** 上的實際呈現與互動結果。
 
-涵蓋案例（共 11 項，對應 `FormProbeCases.buildCatalog()` 的目錄順序）：
+涵蓋案例（共 15 項，對應 `FormProbeCases.buildCatalog()` 的目錄順序）：
 
 | # | 案例 ID | 特性 |
 | - | ------- | ---- |
@@ -30,11 +30,15 @@
 | 9 | `translatable-key-only` | translatable 無 fallback（未註冊鍵保留 key） |
 | 10 | `multiline` | 多行文字（換行保留、每行補 `§r`、跨行樣式延續） |
 | 11 | `overlong-truncation` | 超長文字（完整可見字元計數截斷並補省略號，上限 60） |
+| 12 | `modal-confirm` | Modal 確認對話框（兩顆按鈕「確定」／「取消」；回傳索引 0／1、關閉為 CLOSED） |
+| 13 | `modal-default-buttons` | Modal 預設按鈕（兩顆按鈕文字省略，由基岩端預設文案呈現；回傳索引仍為 0／1） |
+| 14 | `custom-all-components` | Custom 全部元件（label 與五種產值元件交錯共 8 個元件；預設值與 values 順序） |
+| 15 | `custom-defaults` | Custom 預設值對照（同種類元件、不同預設值；values 順序應與前案一致） |
 
-**非目標**：本探針不實作正式表單業務邏輯、Modal／Custom 表單種類、
-`CommandCatalog` 的表單顯示（本版不含），也不把任何 Component 攤平成文字。
-它只負責「發送固定案例」與「記錄觀察」。Modal 與 Custom 種類的相容性
-不在本輪範圍；若後續需要，新增案例時同步擴充本矩陣。
+**非目標**：本探針不實作正式表單業務邏輯、`CommandCatalog` 的表單顯示
+（本版不含），也不把任何 Component 攤平成文字。它只負責「發送固定案例」
+與「記錄觀察」。Modal 與 Custom 種類已納入本輪案例（上表 12–15），
+觀察結果待真人驗證；若後續需要更多種類，新增案例時同步擴充本矩陣。
 
 ## 2. 狀態標記定義
 
@@ -74,6 +78,10 @@
 | `translatable-key-only` | 保留 | 真人基岩客戶端觀察：顯示鍵名；依本矩陣定義，fallback 與 key 皆為允許結果。 |
 | `multiline` | 保留 | 真人基岩客戶端觀察：三行顯示與換行正確。 |
 | `overlong-truncation` | 保留 | 真人基岩客戶端觀察：截斷並補省略號、表單正常開啟。 |
+| `modal-confirm` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需分三次送出並記錄：點第一顆（`[fprobe-response]` 的 `clickedButton` 為 0）、點第二顆（為 1）、直接關閉（CLOSED 且無索引）；三項全滿足且按鈕文字為「確定」／「取消」記 `保留`，任一不符記 `忽略` 並說明。 |
+| `modal-default-buttons` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄兩顆按鈕的基岩端預設文案（截圖）、點擊回傳索引仍為 0／1、關閉為 CLOSED；三項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-all-components` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄 8 個元件的顯示順序（截圖，label 與產值元件交錯）、各元件預設值（預設名稱／第二項／5／第三步／開）；送出後 `[fprobe-response]` 的 `values` 依序為 Text／Option／Number／Option／Switch（label 不佔位）。順序與預設值全對記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-defaults` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄各元件預設值與前案不同（空輸入／首選項／最小值／末步階／關）；送出後 `values` 順序與前案一致。兩項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
 
 > Geyser 版本註記：本次驗收期間 Geyser 由 2.11.2-b1232 更新為 2.11.3-b1247。
 > 原因：客戶端 26.51 超出舊版支援範圍，舊版直接拒絕連線；新版經官方公布
@@ -100,6 +108,13 @@
 | `translatable-key-only` | 未驗證 | 需真人基岩客戶端截圖或文字記錄證明顯示 key；fallback 與 key 皆視為允許結果，記錄實際顯示者。 |
 | `multiline` | 未驗證 | 需真人基岩客戶端截圖證明三行皆顯示、換行正確、無樣式污染；截圖即證據。 |
 | `overlong-truncation` | 未驗證 | 需真人基岩客戶端截圖證明超長文字被截斷並補省略號、表單可正常開啟；截圖即證據。 |
+| `modal-confirm` | 未驗證 | 需真人分三次送出並記錄：點第一顆（`clickedButton` 為 0）、點第二顆（為 1）、直接關閉（CLOSED 且無索引）；三項全滿足且按鈕文字為「確定」／「取消」記 `保留`，任一不符記 `忽略` 並說明。 |
+| `modal-default-buttons` | 未驗證 | 需真人記錄兩顆按鈕的基岩端預設文案（截圖）、點擊回傳索引仍為 0／1、關閉為 CLOSED；三項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-all-components` | 未驗證 | 需真人記錄 8 個元件的顯示順序（截圖，label 與產值元件交錯）、各元件預設值；送出後 `values` 依序為 Text／Option／Number／Option／Switch（label 不佔位）。順序與預設值全對記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-defaults` | 未驗證 | 需真人記錄各元件預設值與前案不同（空輸入／首選項／最小值／末步階／關）；送出後 `values` 順序與前案一致。兩項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
+
+> 本表新增的 12–15 列與既有列適用同一政策：全部為 `未驗證` 且不會再補做；
+> 解除條件僅說明「若要補做需要什麼」，不表示將會執行。
 
 ### 3.3 Folia 26.1.2（已驗證）
 
@@ -126,6 +141,10 @@ Geyser 啟動時對 ViaVersion 版本發出過「版本過舊」的警告，但�
 | `translatable-key-only` | 保留 | 真人基岩客戶端觀察：顯示鍵名；依本矩陣定義，fallback 與 key 皆為允許結果。 |
 | `multiline` | 保留 | 真人基岩客戶端觀察：三行顯示與換行正確（使用者回報全部正常）。 |
 | `overlong-truncation` | 保留 | 真人基岩客戶端觀察：截斷並補省略號、表單正常開啟（使用者回報全部正常）。 |
+| `modal-confirm` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需分三次送出並記錄：點第一顆（`[fprobe-response]` 的 `clickedButton` 為 0）、點第二顆（為 1）、直接關閉（CLOSED 且無索引）；三項全滿足且按鈕文字為「確定」／「取消」記 `保留`，任一不符記 `忽略` 並說明。 |
+| `modal-default-buttons` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄兩顆按鈕的基岩端預設文案（截圖）、點擊回傳索引仍為 0／1、關閉為 CLOSED；三項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-all-components` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄 8 個元件的顯示順序（截圖，label 與產值元件交錯）、各元件預設值（預設名稱／第二項／5／第三步／開）；送出後 `[fprobe-response]` 的 `values` 依序為 Text／Option／Number／Option／Switch（label 不佔位）。順序與預設值全對記 `保留`，任一不符記 `忽略` 並說明。 |
+| `custom-defaults` | 未驗證 | 待真人觀察：本案例在既有觀察之後新增，尚未送出驗證。需記錄各元件預設值與前案不同（空輸入／首選項／最小值／末步階／關）；送出後 `values` 順序與前案一致。兩項全滿足記 `保留`，任一不符記 `忽略` 並說明。 |
 
 > **關於「預期」的說明（非觀察結果）**：PATH 圖示依賴客戶端資源包內容，
 > 不存在的路徑預期顯示空白；URL 圖示依賴客戶端網路；FormText 的降級規則
@@ -145,8 +164,8 @@ Geyser 啟動時對 ViaVersion 版本發出過「版本過舊」的警告，但�
 ./gradlew -p examples/form-compatibility-probe build
 ```
 
-僅跑案例目錄完整性測試（TDD 錨點，驗證 11 個案例不遺漏、識別碼唯一穩定、
-每個案例可建構合法規格、按鈕順序與索引對應）：
+僅跑案例目錄完整性測試（TDD 錨點，驗證 15 個案例不遺漏、識別碼唯一穩定、
+每個案例可建構合法規格、按鈕順序與索引對應、Custom 元件順序與預設值）：
 
 ```bash
 ./gradlew -p examples/form-compatibility-probe test
@@ -161,7 +180,7 @@ Geyser 啟動時對 ViaVersion 版本發出過「版本過舊」的警告，但�
 ### 4.3 發送與觀察
 
 ```
-/fprobe list                     # 列出 11 個案例 id 與說明（不發送）
+/fprobe list                     # 列出 15 個案例 id、說明與預期觀察點（不發送）
 /fprobe send                     # 把全部案例依序發送給執令者本人
 /fprobe send <player>            # 改發送給指定線上玩家（可對準基岩玩家觀察 Geyser）
 /fprobe send <player> <caseId>   # 只發送指定識別碼的那一個案例（識別碼不分大小寫）
@@ -175,13 +194,20 @@ Geyser 啟動時對 ViaVersion 版本發出過「版本過舊」的警告，但�
   `/fprobe list`），且不會發送任何表單。
 
 - 每個案例發送後，伺服器 log 會寫入
-  `[fprobe-send] case=<id> target=<name> buttons=<n> result=<SENT|REJECTED>`，
+  `[fprobe-send] case=<id> target=<name> kind=<SIMPLE|MODAL|CUSTOM>
+  buttons=<n> result=<SENT|REJECTED>`（custom 表單以 `components=<n>`
+  代替 `buttons`，記錄元件總數），
   作為「已送出」的伺服器端證據（不等同客戶端渲染觀察；`REJECTED` 表示
   未產生任何遞送，例如目標不是基岩玩家）。
 - 玩家每次回應，伺服器 log 會寫入
   `[fprobe-response] case=<id> player=<name> <response>`；
   simple 表單的 `clickedButton` 可直接對照案例的按鈕順序，
-  是「點擊索引與按鈕順序對應」的人工驗證依據。
+  modal 表單的 `clickedButton` 為 0（第一顆）或 1（第二顆），
+  custom 表單的 `values` 依產值元件順序排列（label 不產值、不佔位），
+  是「點擊索引與按鈕順序對應」與「元件答案順序」的人工驗證依據。
+- Modal 案例需分三次送出觀察（點第一顆、重送後點第二顆、重送後直接關閉），
+  因為一次送出只能產生一種回應；Custom 案例送出前先逐一確認各元件預設值，
+  送出後再對照 `values` 順序。
 - 觀察者以 **Bedrock 客戶端** 對每個案例記錄實際呈現（截圖）與點擊結果，
   再回填第 3 節對應格。表單為 Bedrock 原生 UI，無 Java 客戶端對照欄。
 
@@ -236,6 +262,9 @@ Geyser 曾警告 ViaVersion 版本過舊，但連線成功，不影響結果。
 
 - Paper 26.1.2 經使用者決定不做；若日後要補，需另建伺服器並重走第 4 節流程。
 - translatable 兩案的 fallback／key 皆視為允許結果，記錄實際顯示者即可。
+- Modal 與 Custom 新增的 4 個案例（`modal-confirm`、`modal-default-buttons`、
+  `custom-all-components`、`custom-defaults`）尚未送出驗證，需另排真人觀察時段；
+  在取得第 5 節解除條件所述的觀察證據之前，對應格維持 `未驗證`。
 
 ## 6. 伺服器端生命週期驗證結果（非客戶端顯示證據）
 
@@ -326,6 +355,14 @@ Folia 26.2 觀察結果記錄（2026-09-28）：本文件第 3 節重構為三�
 Folia 26.1.2 觀察結果記錄（2026-09-28）：第 3.3 節填入 11 格實際觀察與環境欄位
 （含 ViaVersion／全新世界／備份註記）；第 3.2 節標示使用者決定不做；
 第 5 節 blocker 同步；第 3 節引言與第 6／6.1 節的未驗證敘述同步為僅第 3.2 節。
+
+Modal／Custom 案例擴充：`FormProbeCase` 新增期望觀察點欄位（只描述要看什麼，
+不斷言實際呈現），既有 11 個 simple 案例補上期望觀察點（內容不變），新增
+`modal-confirm`、`modal-default-buttons`、`custom-all-components`、
+`custom-defaults` 共 4 案；`[fprobe-send]` 新增 `kind`（custom 以 `components`
+代替 `buttons`），`/fprobe list` 同步顯示預期觀察點；第 1 節案例表擴充為
+15 項、第 3 節三張表各新增 4 列（皆 `未驗證`，待真人觀察）、第 4 節操作說明
+與第 5 節下一步同步；探針座標對齊根版本（AceLib 1.4.0）。
 
 未觸及：`src/main/java/**`、既有的
 `docs/reference/bedrock-message-compatibility-matrix.md`、

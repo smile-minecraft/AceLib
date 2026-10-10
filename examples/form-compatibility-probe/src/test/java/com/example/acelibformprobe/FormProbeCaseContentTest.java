@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.smile.acelib.form.FormImage;
 import com.smile.acelib.form.FormSpec;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,51 @@ class FormProbeCaseContentTest {
             "key-only 案例的渲染輸出應包含鍵名，實際：" + content);
         assertFalse(content.contains("Fallback"),
             "key-only 案例的渲染輸出不應含任何 fallback 文字，實際：" + content);
+    }
+
+    @Test
+    void modalConfirmCarriesTwoFixedButtons() {
+        FormProbeCase c = index().get("modal-confirm");
+        assertTrue(c != null, "找不到案例：modal-confirm");
+        FormSpec spec = c.buildSpec();
+        assertInstanceOf(FormSpec.Modal.class, spec, "案例 modal-confirm 應為 modal 表單");
+        FormSpec.Modal modal = (FormSpec.Modal) spec;
+        assertEquals("確定", modal.button1(), "第一顆按鈕必須是固定的「確定」");
+        assertEquals("取消", modal.button2(), "第二顆按鈕必須是固定的「取消」");
+        assertTrue(!modal.content().isBlank(), "modal-confirm 的說明不得為空白");
+    }
+
+    @Test
+    void modalDefaultButtonsCarriesEmptyLabels() {
+        FormProbeCase c = index().get("modal-default-buttons");
+        assertTrue(c != null, "找不到案例：modal-default-buttons");
+        FormSpec spec = c.buildSpec();
+        assertInstanceOf(FormSpec.Modal.class, spec,
+            "案例 modal-default-buttons 應為 modal 表單");
+        FormSpec.Modal modal = (FormSpec.Modal) spec;
+        assertTrue(modal.button1().isEmpty() && modal.button2().isEmpty(),
+            "modal-default-buttons 的兩顆按鈕文字必須為空（由基岩端預設文案呈現）");
+        assertTrue(!modal.content().isBlank(), "modal-default-buttons 的說明不得為空白");
+    }
+
+    @Test
+    void customAllComponentsKeepsFixedOrderAndDefaults() {
+        FormProbeCase c = index().get("custom-all-components");
+        assertTrue(c != null, "找不到案例：custom-all-components");
+        FormSpec spec = c.buildSpec();
+        assertInstanceOf(FormSpec.Custom.class, spec,
+            "案例 custom-all-components 應為 custom 表單");
+        List<FormSpec.Custom.Component> components =
+            ((FormSpec.Custom) spec).components();
+        assertEquals(8, components.size(), "custom-all-components 應恰有 8 個元件");
+        assertInstanceOf(FormSpec.Custom.Label.class, components.get(0));
+        assertInstanceOf(FormSpec.Custom.Input.class, components.get(1));
+        assertInstanceOf(FormSpec.Custom.Label.class, components.get(2));
+        assertInstanceOf(FormSpec.Custom.Dropdown.class, components.get(3));
+        assertInstanceOf(FormSpec.Custom.Slider.class, components.get(4));
+        assertInstanceOf(FormSpec.Custom.StepSlider.class, components.get(5));
+        assertInstanceOf(FormSpec.Custom.Toggle.class, components.get(6));
+        assertInstanceOf(FormSpec.Custom.Label.class, components.get(7));
     }
 
     @Test

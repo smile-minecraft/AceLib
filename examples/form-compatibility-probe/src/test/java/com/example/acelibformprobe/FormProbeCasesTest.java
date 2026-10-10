@@ -39,7 +39,11 @@ class FormProbeCasesTest {
         "translatable-with-fallback",
         "translatable-key-only",
         "multiline",
-        "overlong-truncation");
+        "overlong-truncation",
+        "modal-confirm",
+        "modal-default-buttons",
+        "custom-all-components",
+        "custom-defaults");
 
     private Map<String, FormProbeCase> index() {
         List<FormProbeCase> catalog = FormProbeCases.buildCatalog();
@@ -151,11 +155,25 @@ class FormProbeCasesTest {
             FormSpec second = c.buildSpec();
             assertEquals(first.title(), second.title(),
                 "案例 " + c.id() + " 重複建構的標題應一致");
+            assertEquals(first.kind(), second.kind(),
+                "案例 " + c.id() + " 重複建構的表單種類應一致");
             if (first instanceof FormSpec.Simple s1 && second instanceof FormSpec.Simple s2) {
                 assertEquals(s1.content(), s2.content(),
                     "案例 " + c.id() + " 重複建構的說明應一致");
                 assertEquals(s1.buttons(), s2.buttons(),
                     "案例 " + c.id() + " 重複建構的按鈕順序應一致");
+            }
+            if (first instanceof FormSpec.Modal m1 && second instanceof FormSpec.Modal m2) {
+                assertEquals(m1.content(), m2.content(),
+                    "案例 " + c.id() + " 重複建構的說明應一致");
+                assertEquals(m1.button1(), m2.button1(),
+                    "案例 " + c.id() + " 重複建構的第一顆按鈕應一致");
+                assertEquals(m1.button2(), m2.button2(),
+                    "案例 " + c.id() + " 重複建構的第二顆按鈕應一致");
+            }
+            if (first instanceof FormSpec.Custom cu1 && second instanceof FormSpec.Custom cu2) {
+                assertEquals(cu1.components(), cu2.components(),
+                    "案例 " + c.id() + " 重複建構的元件順序應一致");
             }
         }
     }
@@ -168,7 +186,11 @@ class FormProbeCasesTest {
             "icon-path-item", "icon-path-block", "icon-url", "icon-broken-fallback"));
         assertTrue(!textIds.isEmpty(), "文字案例清單不得為空");
         for (String id : textIds) {
-            FormSpec.Simple simple = (FormSpec.Simple) byId.get(id).buildSpec();
+            FormSpec spec = byId.get(id).buildSpec();
+            // 文字渲染斷言只適用 simple 表單；modal／custom 案例由各自的內容測試覆蓋。
+            if (!(spec instanceof FormSpec.Simple simple)) {
+                continue;
+            }
             assertTrue(!simple.content().isBlank(),
                 "文字案例 " + id + " 渲染後的說明不得為空白");
         }

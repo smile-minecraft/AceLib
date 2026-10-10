@@ -44,6 +44,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "icon-path-item",
             "PATH 圖示（物品貼圖）：按鈕帶 textures/items/diamond_sword。",
+            "基岩客戶端顯示物品貼圖圖示；按鈕可點，回傳 clickedButton=0。",
             () -> FormSpec.simple("探針：圖示 PATH（物品）")
                 .content("此表單測試物品貼圖圖示是否顯示。")
                 .button("鑽石劍", FormImage.path("textures/items/diamond_sword"))
@@ -51,6 +52,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "icon-path-block",
             "PATH 圖示（方塊貼圖）：按鈕帶 textures/blocks/diamond_block。",
+            "基岩客戶端顯示方塊貼圖圖示；按鈕可點，回傳 clickedButton=0。",
             () -> FormSpec.simple("探針：圖示 PATH（方塊）")
                 .content("此表單測試方塊貼圖圖示是否顯示。")
                 .button("鑽石方塊", FormImage.path("textures/blocks/diamond_block"))
@@ -61,6 +63,7 @@ public final class FormProbeCases {
             // image/png）：客戶端自行下載，載入有延遲，圖小適合表單按鈕；
             // 下載失敗（例如離線）不是伺服器端錯誤。
             "URL 圖示（https 圖片）：按鈕帶公開 Wikimedia 範例 PNG；客戶端自行下載，載入有延遲，失敗不是伺服器錯誤。",
+            "基岩客戶端顯示 https 圖片（載入有延遲屬正常）；按鈕可點，回傳 clickedButton=0。",
             () -> FormSpec.simple("探針：圖示 URL")
                 .content("此表單測試 https 網址圖示是否顯示。")
                 .button("網址圖示", FormImage.url(
@@ -69,6 +72,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "icon-broken-fallback",
             "錯誤路徑：第二顆按鈕的圖示路徑不存在；圖示應空白但三顆按鈕仍可點且索引正確。",
+            "第二顆按鈕圖示空白，但三顆按鈕皆可點；[fprobe-response] 的 clickedButton 依序為 0／1／2。",
             () -> FormSpec.simple("探針：圖示遺失退回")
                 .content("第二顆按鈕的圖示不存在；請依序點擊三顆按鈕，確認索引 0／1／2 正確。")
                 .button("第一顆")
@@ -78,6 +82,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "text-hex-downgrade",
             "FormText hex 降級：#ff8800 橘色應降為最接近的 16 色顯示。",
+            "文字以近似 16 色顯示且可讀、無亂碼。",
             () -> {
                 Component input = Component.text("hex #ff8800 橘色文字")
                     .color(TextColor.fromHexString("#ff8800"));
@@ -89,6 +94,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "text-gradient-downgrade",
             "FormText gradient 降級：紅→藍漸層應降為 16 色顯示。",
+            "漸層以降級後的 16 色顯示且文字可讀、無亂碼。",
             () -> {
                 Component input = MiniMessage.miniMessage()
                     .deserialize("<gradient:#ff0000:#0000ff>漸層文字 gradient text</gradient>");
@@ -100,6 +106,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "text-decoration-stripped",
             "FormText 裝飾清理：底線與刪除線應移除，粗體與斜體保留。",
+            "底線與刪除線消失，粗體與斜體保留。",
             () -> {
                 Component input = Component.text("粗體＋底線＋刪除線＋斜體")
                     .decorate(TextDecoration.BOLD)
@@ -114,6 +121,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "translatable-with-fallback",
             "translatable 有 fallback：未註冊的鍵應顯示 fallback 文字。",
+            "顯示 Fallback 備援文字（非鍵名）；fallback 與 key 皆為允許結果，記錄實際顯示者。",
             () -> {
                 // 注意：fallback 必須以 .fallback(...) 設定；translatable(key, args)
                 // 的後續參數是 translation 參數，不是備援（曾因此誤設而顯示鍵名）。
@@ -129,6 +137,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "translatable-key-only",
             "translatable 無 fallback：未註冊的鍵應保留 key 顯示。",
+            "顯示鍵名；fallback 與 key 皆為允許結果，記錄實際顯示者。",
             () -> {
                 Component input = Component.translatable("acelib.probe.case.key.only");
                 return FormSpec.simple("探針：translatable 無 fallback")
@@ -139,6 +148,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "multiline",
             "多行文字：換行保留，每行結尾補 §r，跨行樣式延續。",
+            "三行皆顯示、換行正確、無樣式污染。",
             () -> {
                 Component input = Component.text("第一行純文字\n")
                     .append(Component.text("第二行紅色粗體\n")
@@ -153,6 +163,7 @@ public final class FormProbeCases {
         cases.add(new FormProbeCase(
             "overlong-truncation",
             "超長文字：以完整可見字元計數截斷並補省略號。",
+            "超長文字被截斷並補省略號、表單可正常開啟。",
             () -> {
                 String longText = "超長文字測試："
                     + "AceLib 表單探針相容性驗證樣本。"
@@ -165,6 +176,56 @@ public final class FormProbeCases {
                     .button("確定")
                     .build();
             }));
+        cases.add(new FormProbeCase(
+            "modal-confirm",
+            "Modal 確認對話框：兩顆按鈕「確定」／「取消」。",
+            "點第一顆 → [fprobe-response] clickedButton=0；點第二顆 → clickedButton=1；"
+                + "直接關閉 → CLOSED 且無 clickedButton；三種回應都要出現在日誌。",
+            () -> FormSpec.modal("探針：Modal 確認")
+                .content("此表單測試確認對話框的兩顆按鈕回傳索引。請分三次觀察："
+                    + "點第一顆、重送後點第二顆、重送後直接關閉。")
+                .button1("確定")
+                .button2("取消")
+                .build()));
+        cases.add(new FormProbeCase(
+            "modal-default-buttons",
+            "Modal 預設按鈕：兩顆按鈕文字省略，由基岩端預設文案呈現。",
+            "兩顆按鈕顯示基岩端預設文案；點擊回傳索引仍為 0／1；直接關閉為 CLOSED。",
+            () -> FormSpec.modal("探針：Modal 預設按鈕")
+                .content("此表單測試省略按鈕文字時基岩端的預設呈現。請點兩顆按鈕各一次，"
+                    + "再重送後直接關閉。")
+                .build()));
+        cases.add(new FormProbeCase(
+            "custom-all-components",
+            "Custom 全部元件：label 與 input／dropdown／slider／stepSlider／toggle 交錯共 8 個元件。",
+            "8 個元件依固定順序顯示（label 與產值元件交錯）；各元件顯示其預設值；"
+                + "送出後 values 依產值元件順序為 Text／Option／Number／Option／Switch"
+                + "（label 不產值、不佔位）。",
+            () -> FormSpec.custom("探針：Custom 全部元件")
+                .label("以下依序為五種元件，請逐一確認預設值。")
+                .input("名稱", "請輸入名稱", "預設名稱")
+                .label("下拉選單在輸入框之後，預設選第二項。")
+                .dropdown("顏色", List.of("紅", "綠", "藍"), 1)
+                .slider("音量", 0f, 10f, 1f, 5f)
+                .stepSlider("難度", List.of("簡單", "普通", "困難"), 2)
+                .toggle("啟用通知", true)
+                .label("以上為全部元件，送出後請對照 values 順序。")
+                .build()));
+        cases.add(new FormProbeCase(
+            "custom-defaults",
+            "Custom 預設值對照：與前案同種類元件、不同預設值（空輸入／首選項／最小值／末步階／關）。",
+            "各元件顯示與前案不同的預設值（空輸入文字、首選項、滑桿最小值、末步階、關閉中開關）；"
+                + "送出後 values 順序與前案一致（label 不佔位）。",
+            () -> FormSpec.custom("探針：Custom 預設值對照")
+                .label("本案元件種類與前案相同，預設值不同。")
+                .input("暱稱", "請輸入暱稱", "")
+                .label("下拉選單預設選第一項。")
+                .dropdown("尺寸", List.of("小", "中", "大"), 0)
+                .slider("亮度", 0f, 100f, 5f, 0f)
+                .stepSlider("速度", List.of("慢", "快"), 1)
+                .toggle("靜音", false)
+                .label("送出後請對照 values 順序與前案是否一致。")
+                .build()));
         return List.copyOf(cases);
     }
 }

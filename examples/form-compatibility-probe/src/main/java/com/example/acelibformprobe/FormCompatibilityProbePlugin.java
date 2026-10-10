@@ -29,12 +29,16 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <p>可觀察性：</p>
  * <ul>
  *   <li>每個案例發送前，伺服器 log 會寫入
- *       {@code [fprobe-send] case=<id> target=<name> buttons=<n> result=<SENT|REJECTED>}，
+ *       {@code [fprobe-send] case=<id> target=<name> kind=<SIMPLE|MODAL|CUSTOM>
+ *       buttons=<n> result=<SENT|REJECTED>}（custom 表單以
+ *       {@code components=<n>} 代替 {@code buttons}，記錄元件總數），
  *       作為「已送出」的伺服器端證據（不等同客戶端渲染觀察）。</li>
- *   <li>玩家每次回應（點擊／關閉），伺服器 log 會寫入
+ *   <li>玩家每次回應（點擊／送出／關閉），伺服器 log 會寫入
  *       {@code [fprobe-response] case=<id> player=<name> <response>}，
  *       其中 simple 表單的被點按鈕索引可直接對照案例的按鈕順序，
- *       供真人驗證「點擊索引與按鈕順序的對應」。</li>
+ *       modal 表單的被點按鈕索引為 0（第一顆）或 1（第二顆），
+ *       custom 表單的各元件答案依產值元件順序排列（label 不產值、不佔位），
+ *       供真人驗證「點擊索引與按鈕順序的對應」與「元件答案順序」。</li>
  *   <li>{@code SENT} 只代表 Floodgate 已接受遞送，不代表玩家已開啟或已回應；
  *       回應以 {@code [fprobe-response]} 為準，關閉／無效回應不解讀為玩家意圖。</li>
  * </ul>
@@ -83,6 +87,7 @@ public final class FormCompatibilityProbePlugin extends JavaPlugin implements Co
         report(sender, "== /fprobe list（共 " + catalog.size() + " 個案例）==");
         for (FormProbeCase c : catalog) {
             report(sender, "[" + c.id() + "] " + c.description());
+            report(sender, "    預期觀察：" + c.expectation());
         }
     }
 
@@ -144,14 +149,23 @@ public final class FormCompatibilityProbePlugin extends JavaPlugin implements Co
                 continue;
             }
             int buttons = spec instanceof FormSpec.Simple simple ? simple.buttons().size() : 0;
+            int components = spec instanceof FormSpec.Custom custom ? custom.components().size() : 0;
+            if (spec instanceof FormSpec.Modal) {
+                buttons = 2;
+            }
             try {
                 FormSendResult result = api.getBedrockService().forms().sendForm(
                     target.getUniqueId(), spec,
                     response -> getLogger().info("[fprobe-response] case=" + c.id()
                         + " player=" + target.getName() + " " + response));
-                // 伺服器端證據：記錄 case id、目標、按鈕數與發送結果，確認已送出。
+                // 伺服器端證據：記錄 case id、目標、表單種類與發送結果，確認已送出。
+                // simple／modal 記按鈕數，custom 記元件總數（label 含在內，順序觀察用）。
+                String sizeEvidence = spec instanceof FormSpec.Custom
+                    ? "components=" + components
+                    : "buttons=" + buttons;
                 getLogger().info("[fprobe-send] case=" + c.id()
-                    + " target=" + target.getName() + " buttons=" + buttons
+                    + " target=" + target.getName() + " kind=" + spec.kind()
+                    + " " + sizeEvidence
                     + " result=" + result);
             } catch (RuntimeException ex) {
                 // 不吞錯：如實回報發送失敗（含例外訊息），由觀察者判斷。
