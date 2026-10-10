@@ -1314,6 +1314,7 @@
       "method form() : com.smile.acelib.form.FormSpec",
       "method hashCode() : int",
       "method id() : java.lang.String",
+      "method labeled(java.lang.String,com.smile.acelib.gui.GuiView,java.util.Map<java.lang.Integer, java.lang.String>) : com.smile.acelib.gui.GuiFlowStep",
       "method toString() : java.lang.String",
       "method transitions() : java.util.Map<java.lang.Integer, java.lang.String>",
       "method view() : com.smile.acelib.gui.GuiView"
@@ -1382,6 +1383,19 @@
       "method pageIndex() : int",
       "method toString() : java.lang.String",
       "method totalPages() : int"
+    ],
+    "com.smile.acelib.gui.GuiPager": [
+      "field NEXT_BUTTON_ID : java.lang.String",
+      "field PREV_BUTTON_ID : java.lang.String",
+      "method itemCapacity() : int",
+      "method itemSymbol() : char",
+      "method mask() : com.smile.acelib.gui.GuiMask",
+      "method nextSymbol() : char",
+      "method of(com.smile.acelib.gui.GuiMask,char,char,char,java.lang.String,com.smile.acelib.gui.GuiPager$ItemRenderer<T>) : com.smile.acelib.gui.GuiPager<T>",
+      "method prevSymbol() : char",
+      "method titlePrefix() : java.lang.String",
+      "method toString() : java.lang.String",
+      "method viewFor(com.smile.acelib.gui.GuiPage<T>,com.smile.acelib.gui.GuiPager$Actions) : com.smile.acelib.gui.GuiView"
     ],
     "com.smile.acelib.gui.GuiReplacementListener": [
       "method onReplaced(java.util.UUID,com.smile.acelib.gui.GuiSession,com.smile.acelib.gui.GuiSession) : void"
@@ -1490,6 +1504,7 @@
       "method allowedSlots() : java.util.Set<java.lang.Integer>",
       "method anvil(java.lang.String) : com.smile.acelib.gui.GuiView$Builder",
       "method buttonIcons() : java.util.Map<java.lang.Integer, org.bukkit.inventory.ItemStack>",
+      "method buttonLabels() : java.util.Map<java.lang.Integer, java.lang.String>",
       "method buttons() : java.util.Map<java.lang.Integer, com.smile.acelib.gui.GuiButton>",
       "method chest(java.lang.String,com.smile.acelib.gui.GuiMask) : com.smile.acelib.gui.GuiView$Builder",
       "method chest(java.lang.String,int) : com.smile.acelib.gui.GuiView$Builder",

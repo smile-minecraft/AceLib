@@ -51,7 +51,7 @@ class ApiBoundaryRegressionTest {
     }
 
     @Test
-     void canonicalTopLevelInventoryIs228() throws IOException {
+     void canonicalTopLevelInventoryIs229() throws IOException {
         Path root = projectRoot();
         List<Map<String, String>> types = ApiSurfaceContractTestHelpers.parseTypes(
             Files.readString(root.resolve("docs/reference/api-surface.json")));
@@ -274,17 +274,21 @@ class ApiBoundaryRegressionTest {
         //   - com.smile.acelib.gui.GuiMask（class, Supported）—
         //     箱子視圖字元遮罩值型別（of／rowCount／width／size／slots(char)；
         //     列數 1～6、每列等長、總格須為合法箱子尺寸，不符帶 GuiErrorCode.INVALID_INPUT 拒絕）
+        // GUI 分頁清單任務再 +1 Supported（→ 229）：
+        //   - com.smile.acelib.gui.GuiPager（class, Supported）—
+        //     分頁清單元件值型別（遮罩三符號＋標題前綴＋項目渲染器的不可變描述子；
+        //     以 GuiPage 資料組分頁畫面；翻頁由呼叫端在回呼內取新頁再開）
         // 此為公開契約；收斂 Internal 為非 public 會靜默縮減 inventory，屬於未授權
         // breaking change。
-        assertTrue(supported == 177,
-            "Supported 數量偏離 canonical 177，實際=" + supported);
+        assertTrue(supported == 178,
+            "Supported 數量偏離 canonical 178，實際=" + supported);
         assertTrue(spi == 25,
             "SPI 數量偏離 canonical 25，實際=" + spi);
         assertTrue(internal == 26,
             "Internal 數量偏離 canonical 26，實際=" + internal
                 + "（Internal 收斂為非 public 前必須先經 review 並同步 canonical 契約）");
-        assertTrue(types.size() == 228,
-            "top-level inventory 偏離 canonical 228，實際=" + types.size());
+        assertTrue(types.size() == 229,
+            "top-level inventory 偏離 canonical 229，實際=" + types.size());
     }
 
     @Test

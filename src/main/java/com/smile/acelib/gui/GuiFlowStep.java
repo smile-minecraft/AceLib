@@ -78,4 +78,61 @@ public record GuiFlowStep(String id, GuiView view, FormSpec form,
     public GuiFlowStep(String id, GuiView view) {
         this(id, view, null, Map.of());
     }
+
+    /**
+     * 以同一份按鈕宣告產生基岩表單的步驟。
+     *
+     * <p>有標籤的按鈕依欄位升序排成簡單表單的按鈕（與宣告順序無關）；
+     * {@code transitions} 的按鈕索引對應該順序（第 0 顆是欄位最小的有標籤按鈕，
+     * 依此類推）。無標籤（null）的按鈕不進表單。表單標題與說明皆取自視圖標題。</p>
+     *
+     * <p>視圖完全無標籤按鈕時退回純 Java 步驟（{@code form} 為 null）；
+     * 此時 {@code transitions} 必須為空，否則索引無對應按鈕而被拒。</p>
+     *
+     * @param id 步驟識別字；不可為 null／空白
+     * @param view Java GUI 視圖；不可為 null（其標籤按鈕即表單按鈕來源）
+     * @param transitions 按鈕索引 → 下一步驟識別字（索引對應欄位升序的標籤順序；
+     *     不可變；null 視為空表＝全線性）
+     * @return 新的步驟；有標籤時攜帶產生的表單，無標籤時 {@code form} 為 null
+     * @throws NullPointerException 當 {@code id} 或 {@code view} 為 null
+     * @throws IllegalArgumentException 當 {@code id} 空白、視圖標題空白（無法作為
+     *     表單標題與說明）、轉移鍵超出標籤按鈕範圍，或轉移目標空白
+     */
+    public static GuiFlowStep labeled(String id, GuiView view,
+            Map<Integer, String> transitions) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(view, "view");
+        Map<Integer, String> moves = transitions == null ? Map.of() : transitions;
+        List<String> labels = view.buttonLabels().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(Map.Entry::getValue)
+            .toList();
+        if (labels.isEmpty()) {
+            if (!moves.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "[" + GuiErrorCode.INVALID_INPUT + "] 轉移按鈕索引無對應標籤按鈕："
+                        + "視圖沒有標籤按鈕，轉移表必須為空");
+            }
+            return new GuiFlowStep(id, view);
+        }
+        if (view.title().isBlank()) {
+            throw new IllegalArgumentException(
+                "[" + GuiErrorCode.INVALID_INPUT + "] 標籤表單需要非空白視圖標題"
+                    + "（表單標題與說明皆取自視圖標題）");
+        }
+        for (Map.Entry<Integer, String> entry : moves.entrySet()) {
+            if (entry.getKey() == null || entry.getKey() < 0
+                    || entry.getKey() >= labels.size()) {
+                throw new IllegalArgumentException(
+                    "[" + GuiErrorCode.INVALID_INPUT + "] 轉移按鈕索引超出標籤按鈕範圍: "
+                        + entry.getKey() + "（標籤按鈕數=" + labels.size() + "）");
+            }
+        }
+        FormSpec.Simple.Builder builder =
+            FormSpec.simple(view.title()).content(view.title());
+        for (String label : labels) {
+            builder.button(label);
+        }
+        return new GuiFlowStep(id, view, builder.build(), moves);
+    }
 }

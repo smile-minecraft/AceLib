@@ -1319,6 +1319,15 @@
       "mainCallers": "GuiService；GuiResult。"
     },
     {
+      "fqcn": "com.smile.acelib.gui.GuiPager",
+      "package": "com.smile.acelib.gui",
+      "simpleName": "GuiPager",
+      "kind": "class",
+      "classification": "Supported",
+      "reason": "分頁清單元件值型別（遮罩三符號＋標題前綴＋項目渲染器的不可變描述子；以 GuiPage 資料組分頁畫面；1.5.0 新增）。",
+      "mainCallers": "GuiPage 資料組畫面；GuiView 建視圖；消費者翻頁回呼取新頁再開。"
+    },
+    {
       "fqcn": "com.smile.acelib.gui.GuiReplacementListener",
       "package": "com.smile.acelib.gui",
       "simpleName": "GuiReplacementListener",

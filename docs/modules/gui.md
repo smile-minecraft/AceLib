@@ -133,6 +133,43 @@ GuiPage<String> loading = GuiPage.loading();
 GuiPage<String> error = GuiPage.error(GuiErrorCode.OPERATION_FAILED, "載入失敗");
 ```
 
+## 做翻頁清單
+
+`GuiPager` 把遮罩與頁面資料組成上一頁／下一頁／頁碼畫面。
+先留三種符號：項目區、上一頁、下一頁，再給標題前綴與項目渲染器：
+
+```java
+GuiMask mask = GuiMask.of(
+    "#########",
+    "#IIIIIII#",
+    "PPP###NNN");
+
+GuiPager<String> pager = GuiPager.of(mask, 'I', 'P', 'N', "名單",
+    (builder, slot, name) -> builder.button(slot, "roster-" + slot,
+        click -> { /* 點到 name */ }));
+
+GuiPage<String> page = GuiPage.page(allNames, pager.itemCapacity(), pageIndex);
+GuiView view = pager.viewFor(page, new GuiPager.Actions(
+    click -> showPage(page.pageIndex() + 1), // 下一頁：呼叫端自己取新頁再開
+    click -> showPage(page.pageIndex() - 1)));
+gui.openView(playerId, view);
+```
+
+- 上一頁按鈕只在 `pageIndex > 0` 時出現，下一頁按鈕只在還有後續頁時出現，
+  分別放在該符號的第一個欄位；最後一頁沒有下一頁按鈕。
+- 標題自動帶頁碼（`名單 — 頁 1/4`）；空資料、載入中、錯誤各有無導覽按鈕的
+  替代畫面（錯誤標題帶 `ACELIB-GUI-*` 代碼，說明文字不渲染進標題）。
+- 翻頁由呼叫端驅動，不做自動資料綁定：回呼內自行取新頁，
+  再以 `viewFor` 重組視圖並開啟（建議用 `replaceView`，避免歷史堆疊）。
+  取頁時以 `pager.itemCapacity()` 為 `pageSize`，項目就不會超出欄位。
+- 每次 `viewFor` 都是全新視圖，不記頁碼、不建快取：舊畫面的按鈕在開新畫面後
+  自然失效（回 `GENERATION_MISMATCH`），載入中退服沿既有 session 清理，不殘留。
+- 項目渲染器內不得使用保留識別字 `pager-prev`／`pager-next`（建視圖時由
+  `GuiView` 的按鈕識別字重複檢查擲 `IllegalArgumentException` 拒絕）。
+- 本頁項目數超過項目欄位數時建視圖直接被拒（`ACELIB-GUI-007`，訊息帶實際
+  項目數與欄位數），不靜默截斷；取頁時以 `pager.itemCapacity()` 為 `pageSize`
+  即可避免。
+
 ## 確認票券與送出前重新驗證
 
 確認票券一次性：`confirm`／`cancel` 競爭只解決一次，後到回 `ACTION_ALREADY_RESOLVED`；
@@ -205,6 +242,31 @@ gui.back(playerId);         // 兩種呈現共用返回歷史
 - 表單 `CLOSED` 結束流程（正常關閉）；`INVALID` 停留；過時回應（推進後才回來）忽略。
 - 需要讀 custom 表單元件答案的場景請直接用 `FormService`；流程只負責導航，不做資料綁定。
 - 步驟沒有表單時，基岩玩家退回開啟 Java inventory（Geyser 轉譯顯示）。
+
+## 用同一份宣告產生基岩表單
+
+按鈕宣告可順手給基岩可見文字（label），同一個視圖就能長出流程表單，
+不用再手寫一份按鈕清單：
+
+```java
+GuiView menuView = GuiView.chest("選單", 9)
+    .button(2, "shop", "商店", click -> gui.goTo(click.playerUuid(), "shop"))
+    .button(6, "settings", "設定", click -> gui.goTo(click.playerUuid(), "settings"))
+    .button(8, "deco", click -> { /* 純裝飾：無標籤，不進表單 */ })
+    .build();
+
+GuiFlowStep menu = GuiFlowStep.labeled("menu", menuView,
+    Map.of(0, "shop", 1, "settings"));
+```
+
+- 有標籤的按鈕依欄位升序排成簡單表單的按鈕（與宣告順序無關）；
+  轉移表的按鈕索引對應該順序（第 0 顆是欄位最小的有標籤按鈕）。
+- 無標籤（`null`）的按鈕不進表單；視圖完全無標籤時退回純 Java 步驟
+  （`form` 為 `null`），此時轉移表必須為空。
+- 標籤非 `null` 即不可空白；轉移索引超出標籤按鈕範圍會被拒。
+  傳 `null` 標籤時請轉型為 `(String) null`，否則編譯器無法在標籤多載
+  與物品多載之間選擇。
+- 既有的兩份宣告模式（純 Java 建構子、自備表單建構子）維持不變。
 
 ## 非同步更新
 

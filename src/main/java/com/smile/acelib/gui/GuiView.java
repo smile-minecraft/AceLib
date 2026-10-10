@@ -57,6 +57,7 @@ public final class GuiView {
     private final Map<Integer, GuiButton> buttons;
     private final Map<String, Consumer<GuiButtonClick>> handlers;
     private final Map<Integer, ItemStack> buttonIcons;
+    private final Map<Integer, String> buttonLabels;
 
     private GuiView(Builder builder) {
         this.kind = builder.kind;
@@ -66,6 +67,7 @@ public final class GuiView {
         Map<Integer, GuiButton> buttonEntries = new LinkedHashMap<>();
         Map<String, Consumer<GuiButtonClick>> handlerEntries = new LinkedHashMap<>();
         Map<Integer, ItemStack> iconEntries = new LinkedHashMap<>();
+        Map<Integer, String> labelEntries = new LinkedHashMap<>();
         for (Map.Entry<Integer, ButtonSpec> entry : builder.buttons.entrySet()) {
             ButtonSpec spec = entry.getValue();
             buttonEntries.put(entry.getKey(),
@@ -74,10 +76,14 @@ public final class GuiView {
             if (spec.icon != null) {
                 iconEntries.put(entry.getKey(), spec.icon);
             }
+            if (spec.label != null) {
+                labelEntries.put(entry.getKey(), spec.label);
+            }
         }
         this.buttons = Map.copyOf(buttonEntries);
         this.handlers = Map.copyOf(handlerEntries);
         this.buttonIcons = Map.copyOf(iconEntries);
+        this.buttonLabels = Map.copyOf(labelEntries);
     }
 
     /**
@@ -160,6 +166,15 @@ public final class GuiView {
      */
     public Map<Integer, ItemStack> buttonIcons() {
         return buttonIcons;
+    }
+
+    /**
+     * @return 按鈕標籤表（欄位 → 基岩可見文字，不可變；只有宣告時給了
+     *     非 null 標籤的按鈕才會出現在此表，無標籤按鈕不在表內。
+     *     本表為無序快照：迭代順序不代表欄位順序，需要欄位順序時請自行排序）
+     */
+    public Map<Integer, String> buttonLabels() {
+        return buttonLabels;
     }
 
     @Override
@@ -258,7 +273,49 @@ public final class GuiView {
          */
         public Builder button(int slot, String id, long cooldownMillis,
                 Consumer<GuiButtonClick> handler) {
-            return register(slot, id, null, cooldownMillis, handler);
+            return register(slot, id, null, null, cooldownMillis, handler);
+        }
+
+        /**
+         * 註冊帶標籤的按鈕（無冷卻）。
+         *
+         * <p>標籤是基岩可見文字：同一份宣告經
+         * {@link GuiFlowStep#labeled(String, GuiView, java.util.Map)}
+         * 產生基岩簡單表單時，有標籤的按鈕依欄位升序排成表單按鈕；
+         * 無標籤（null）的按鈕不進表單。Java 呈現不受標籤影響。</p>
+         *
+         * <p>傳 null 標籤時請轉型為 {@code (String) null}，否則編譯器無法在
+         * 本多載與帶物品多載之間選擇。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param label 基岩可見文字；可為 null（不進表單），非 null 時不可空白
+         * @param handler 點擊回呼；不可為 null（執行於玩家 region context，
+         *     不得在其中做長時間工作或跨 region 操作）
+         * @return this
+         */
+        public Builder button(int slot, String id, String label,
+                Consumer<GuiButtonClick> handler) {
+            return register(slot, id, label, null, 0L, handler);
+        }
+
+        /**
+         * 註冊帶標籤的按鈕（含點擊冷卻）。
+         *
+         * <p>標籤語意與 {@link #button(int, String, String, Consumer)} 相同。</p>
+         *
+         * <p>傳 null 標籤時請轉型為 {@code (String) null}。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param label 基岩可見文字；可為 null（不進表單），非 null 時不可空白
+         * @param cooldownMillis 同一玩家重複點擊冷卻毫秒數；不可為負
+         * @param handler 點擊回呼；不可為 null
+         * @return this
+         */
+        public Builder button(int slot, String id, String label, long cooldownMillis,
+                Consumer<GuiButtonClick> handler) {
+            return register(slot, id, label, null, cooldownMillis, handler);
         }
 
         /**
@@ -281,7 +338,28 @@ public final class GuiView {
         public Builder button(int slot, String id, ItemStack icon,
                 Consumer<GuiButtonClick> handler) {
             Objects.requireNonNull(icon, "icon");
-            return register(slot, id, icon, 0L, handler);
+            return register(slot, id, null, icon, 0L, handler);
+        }
+
+        /**
+         * 註冊帶物品與標籤的按鈕（無冷卻）。
+         *
+         * <p>物品語意與 {@link #button(int, String, ItemStack, Consumer)} 相同；
+         * 標籤語意與 {@link #button(int, String, String, Consumer)} 相同。</p>
+         *
+         * <p>純單元測試引用本方法時，classpath 需要 Bukkit／Paper API。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param icon 按鈕物品；不可為 null（只存參照，不複製）
+         * @param label 基岩可見文字；可為 null（不進表單），非 null 時不可空白
+         * @param handler 點擊回呼；不可為 null
+         * @return this
+         */
+        public Builder button(int slot, String id, ItemStack icon, String label,
+                Consumer<GuiButtonClick> handler) {
+            Objects.requireNonNull(icon, "icon");
+            return register(slot, id, label, icon, 0L, handler);
         }
 
         /**
@@ -302,10 +380,32 @@ public final class GuiView {
         public Builder button(int slot, String id, ItemStack icon, long cooldownMillis,
                 Consumer<GuiButtonClick> handler) {
             Objects.requireNonNull(icon, "icon");
-            return register(slot, id, icon, cooldownMillis, handler);
+            return register(slot, id, null, icon, cooldownMillis, handler);
         }
 
-        private Builder register(int slot, String id, ItemStack icon,
+        /**
+         * 註冊帶物品與標籤的按鈕（含點擊冷卻）。
+         *
+         * <p>物品語意與 {@link #button(int, String, ItemStack, Consumer)} 相同；
+         * 標籤語意與 {@link #button(int, String, String, Consumer)} 相同。</p>
+         *
+         * <p>純單元測試引用本方法時，classpath 需要 Bukkit／Paper API。</p>
+         *
+         * @param slot 欄位編號
+         * @param id 按鈕識別字；不可為 null／空白，且視圖內唯一
+         * @param icon 按鈕物品；不可為 null（只存參照，不複製）
+         * @param label 基岩可見文字；可為 null（不進表單），非 null 時不可空白
+         * @param cooldownMillis 同一玩家重複點擊冷卻毫秒數；不可為負
+         * @param handler 點擊回呼；不可為 null
+         * @return this
+         */
+        public Builder button(int slot, String id, ItemStack icon, String label,
+                long cooldownMillis, Consumer<GuiButtonClick> handler) {
+            Objects.requireNonNull(icon, "icon");
+            return register(slot, id, label, icon, cooldownMillis, handler);
+        }
+
+        private Builder register(int slot, String id, String label, ItemStack icon,
                 long cooldownMillis, Consumer<GuiButtonClick> handler) {
             checkSlot(slot);
             Objects.requireNonNull(id, "id");
@@ -313,6 +413,11 @@ public final class GuiView {
             if (id.isBlank()) {
                 throw new IllegalArgumentException(
                     "[" + GuiErrorCode.INVALID_INPUT + "] button id 不可為空白");
+            }
+            if (label != null && label.isBlank()) {
+                throw new IllegalArgumentException(
+                    "[" + GuiErrorCode.INVALID_INPUT + "] button label 不可為空白"
+                        + "（不用標籤請傳 null）");
             }
             if (cooldownMillis < 0L) {
                 throw new IllegalArgumentException(
@@ -329,7 +434,7 @@ public final class GuiView {
                         "[" + GuiErrorCode.INVALID_INPUT + "] button id 重複: " + id);
                 }
             }
-            buttons.put(slot, new ButtonSpec(id, icon, cooldownMillis, handler));
+            buttons.put(slot, new ButtonSpec(id, label, icon, cooldownMillis, handler));
             return this;
         }
 
@@ -345,13 +450,15 @@ public final class GuiView {
 
     private static final class ButtonSpec {
         final String id;
+        final String label;
         final ItemStack icon;
         final long cooldownMillis;
         final Consumer<GuiButtonClick> handler;
 
-        ButtonSpec(String id, ItemStack icon, long cooldownMillis,
+        ButtonSpec(String id, String label, ItemStack icon, long cooldownMillis,
                 Consumer<GuiButtonClick> handler) {
             this.id = id;
+            this.label = label;
             this.icon = icon;
             this.cooldownMillis = cooldownMillis;
             this.handler = handler;
