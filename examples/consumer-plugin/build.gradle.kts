@@ -40,6 +40,9 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // 逐玩家 sqlite 後端的 consumer 實測（PlayerStoreV150Example.sqliteStore）：
+    // 只取 driver jar 本體（isTransitive=false），與主專案同版本。
+    testImplementation("org.xerial:sqlite-jdbc:3.50.3.0") { isTransitive = false }
     // consumer plugin 依賴 Paper/Folia API（runtime 由伺服器提供，compileOnly）。
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.72-stable")
 }

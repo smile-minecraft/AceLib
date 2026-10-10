@@ -92,7 +92,8 @@ class V150ExamplesTest {
     }
 
     @Test
-    void playerStore_conditionalWriteAndOfflineRead(@TempDir Path dir) throws Exception {        PlayerDataStore store = PlayerStoreV150Example.fileBackedStore(dir, "player-data.json");
+    void playerStore_conditionalWriteAndOfflineRead(@TempDir Path dir) throws Exception {
+        PlayerDataStore store = PlayerStoreV150Example.sqliteStore(dir, "player-data.db");
         PlayerDataService service = PlayerStoreV150Example.openService(store);
         try {
             UUID player = UUID.randomUUID();
@@ -151,6 +152,33 @@ class V150ExamplesTest {
         assertTrue(reloaded.isPresent());
         assertEquals(500, ((Number) reloaded.orElseThrow().get("coins")).intValue());
         second.close();
+    }
+
+    /**
+     * sqlite 後端跨重開不誤判：關閉再開同一個 sqlite 檔，
+     * 同一欄位以舊 {@code expectedRevision=0} 的第二次條件寫入不會套用，
+     * 目前 revision 已持久化前進，磁碟值維持第一次的寫入。
+     */
+    @Test
+    void playerStore_sqliteRevisionSurvivesReopen(@TempDir Path dir) {
+        UUID player = UUID.randomUUID();
+        PlayerDataStore first = PlayerStoreV150Example.sqliteStore(dir, "player-data.db");
+        PlayerDataStore.ConditionalWriteResult written =
+            PlayerStoreV150Example.grantCoinsIfExpected(first, player, 100, 0L);
+        assertTrue(written.applied());
+        assertEquals(1L, written.currentRevision());
+        first.close();
+
+        PlayerDataStore reopened = PlayerStoreV150Example.sqliteStore(dir, "player-data.db");
+        assertEquals(1L, reopened.revisionOf(player, "coins"));
+        PlayerDataStore.ConditionalWriteResult replayed =
+            PlayerStoreV150Example.grantCoinsIfExpected(reopened, player, 500, 0L);
+        assertTrue(!replayed.applied());
+        assertEquals(1L, replayed.currentRevision());
+        Optional<Record> reloaded = reopened.load(player);
+        assertTrue(reloaded.isPresent());
+        assertEquals(100, ((Number) reloaded.orElseThrow().get("coins")).intValue());
+        reopened.close();
     }
 
     @Test

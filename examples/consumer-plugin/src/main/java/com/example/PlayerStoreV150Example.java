@@ -32,14 +32,13 @@ import java.util.concurrent.Executor;
  *
  * <p>全部進入點都不需要 Bukkit 伺服器，可在單元測試以臨時目錄實際執行。</p>
  *
- * <p><strong>檔案轉接的 revision 限制</strong>：{@link #fileBackedStore} 回傳的是
- * 檔案後端的轉接（{@code fromDataStore} 包裝），它的 revision 只存在於
- * <strong>該轉接實例的記憶體</strong>，且是 per-player 粗粒計數
+ * <p><strong>可照抄的路徑是 sqlite 後端</strong>（{@link #sqliteStore}）：
+ * 它的 revision 是 per-field 且持久化，跨重開不會誤判。
+ * {@link #fileBackedStore} 的檔案轉接只保留為「不要這樣用」的教材：
+ * 它的 revision 只存在於該轉接實例的記憶體，且是 per-player 粗粒計數
  * （該玩家任一欄位寫入都推進，不分欄位）。重建轉接（例如重啟）後歸零：
  * 對已有資料的玩家以舊 {@code expectedRevision}（例如 0）呼叫
- * {@code applyIfRevision} 會誤判套用、重複寫入，不可用作跨重啟的發放冪等。
- * 需要持久化、per-field 的 revision 條件寫入時，改用
- * {@link PlayerDataStores#sqlite}／{@code jdbc} 後端。</p>
+ * {@code applyIfRevision} 會誤判套用、重複寫入，不可用作跨重啟的發放冪等。</p>
  */
 public final class PlayerStoreV150Example {
 
@@ -50,14 +49,32 @@ public final class PlayerStoreV150Example {
     }
 
     /**
+     * 以 sqlite 後端建立逐玩家 store（已初始化，可直接使用）。
+     *
+     * <p>這是條件寫入的可照抄路徑：revision 是 per-field 且持久化，
+     * 關閉再開同一個檔案後，舊 {@code expectedRevision} 的重複寫入
+     * 會被拒絕並帶回實際值。用畢呼叫回傳 store 的 {@code close()}。</p>
+     *
+     * @param directory 資料目錄；不可為 null
+     * @param fileName 資料庫檔名稱；不可為 null 或空白
+     * @return 已初始化的逐玩家 store；永不為 null
+     */
+    public static PlayerDataStore sqliteStore(Path directory, String fileName) {
+        Objects.requireNonNull(directory, "directory");
+        Objects.requireNonNull(fileName, "fileName");
+        PlayerDataStore store =
+            PlayerDataStores.sqlite(directory.resolve(fileName), SchemaVersion.V1_0);
+        store.init();
+        return store;
+    }
+
+    /**
      * 以檔案後端建立逐玩家 store（已初始化，可直接使用）。
      *
-     * <p>回傳的是檔案轉接：revision 只活在該轉接實例的記憶體，
-     * 重建後歸零（見類別說明）。用畢呼叫回傳 store 的 {@code close()}
-     * 即可；轉接的 {@code close()} 不代關底層檔案 delegate，
-     * 而本範例的 delegate 每次寫入即落盤、不持有開啟中的控制代碼，
-     * 因此無需額外關閉。長駐服務請改用
-     * {@link PlayerDataStores#sqlite}／{@code jdbc} 後端並依其生命週期管理。</p>
+     * <p><strong>教材用途</strong>：展示檔案轉接的 revision 限制
+     * （只活在轉接實例記憶體，重建後歸零），不要拿它做條件寫入。
+     * 轉接的 {@code close()} 不關閉底層檔案 delegate，
+     * delegate 由建立它的呼叫端負責。</p>
      *
      * @param directory 資料目錄；不可為 null
      * @param fileName 資料檔名稱；不可為 null 或空白
@@ -76,9 +93,10 @@ public final class PlayerStoreV150Example {
     /**
      * 為逐玩家 store 建立服務（含定期保存）。
      *
-     * <p>I/O executor 用呼叫端直跑（{@code Runnable::run}），只適用測試與
-     * 開機初始化：呼叫端不等待、不阻塞，因此可在測試主執行緒呼叫。
-     * 實戰（尤其 region 執行緒）要換成真正的背景 I/O 執行緒，
+     * <p>I/O executor 用呼叫端直跑（{@code Runnable::run}）：經
+     * {@code ioExecutor} 送出的工作會在呼叫端執行緒同步執行，
+     * 等待保存完成的路徑（例如 {@code autosaveNow}）會阻塞呼叫端。
+     * 只適用測試與開機初始化；正式環境應傳入真正的背景 I/O 執行緒，
      * 不可在玩家所在執行緒上阻塞等待。</p>
      *
      * @param store 已初始化的逐玩家 store；不可為 null
@@ -95,8 +113,9 @@ public final class PlayerStoreV150Example {
      *
      * <p>{@code expectedRevision} 必須是<strong>同一個轉接實例</strong>回報的
      * {@code currentRevision}（重試時用失敗回傳裡帶回的實際值）。
-     * 檔案轉接重建後 revision 歸零，沿用重啟前的值會誤判套用、重複發放；
-     * 跨重啟的發放冪等請用持久化後端（見類別說明）。</p>
+     * 持久化後端（{@link #sqliteStore}）跨重開仍拒絕舊值；
+     * 檔案轉接（{@link #fileBackedStore}）重建後 revision 歸零，
+     * 沿用重啟前的值會誤判套用、重複發放。</p>
      *
      * @param store 逐玩家 store；不可為 null
      * @param uuid 玩家 UUID；不可為 null
