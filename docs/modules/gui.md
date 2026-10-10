@@ -146,7 +146,9 @@ GuiMask mask = GuiMask.of(
 
 GuiPager<String> pager = GuiPager.of(mask, 'I', 'P', 'N', "名單",
     (builder, slot, name) -> builder.button(slot, "roster-" + slot,
-        click -> { /* 點到 name */ }));
+        click -> { /* 點到 name */ }))
+    .withPrevIcon(new ItemStack(Material.ARROW))
+    .withNextIcon(new ItemStack(Material.ARROW));
 
 GuiPage<String> page = GuiPage.page(allNames, pager.itemCapacity(), pageIndex);
 GuiView view = pager.viewFor(page, new GuiPager.Actions(
@@ -157,6 +159,11 @@ gui.openView(playerId, view);
 
 - 上一頁按鈕只在 `pageIndex > 0` 時出現，下一頁按鈕只在還有後續頁時出現，
   分別放在該符號的第一個欄位；最後一頁沒有下一頁按鈕。
+- `withPrevIcon`／`withNextIcon` 回傳新的分頁描述，保留其他設定；圖示與對應
+  按鈕一起出現或消失。未設定圖示時仍是無物品的點擊區。
+  宣告時只存物品參照，開啟視圖時在玩家所在執行緒放置前複製；宣告後、開啟前
+  修改物品會反映到放置結果。項目要可見時，渲染器也需使用帶 `ItemStack` 的
+  `builder.button(slot, id, icon, handler)` 多載。
 - 標題自動帶頁碼（`名單 — 頁 1/4`）；空資料、載入中、錯誤各有無導覽按鈕的
   替代畫面（錯誤標題帶 `ACELIB-GUI-*` 代碼，說明文字不渲染進標題）。
 - 翻頁由呼叫端驅動，不做自動資料綁定：回呼內自行取新頁，

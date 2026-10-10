@@ -417,14 +417,26 @@ public final class GuiCompatibilityProbePlugin extends JavaPlugin implements Com
         for (int i = 1; i <= 23; i++) {
             allItems.add(String.format("探針項目-%02d", i));
         }
-        GuiPager<String> pager = GuiPager.of(mask, 'I', 'P', 'N', "探針分頁",
+        ItemStack prevIcon = new ItemStack(Material.ARROW);
+        var prevMeta = prevIcon.getItemMeta();
+        prevMeta.displayName(net.kyori.adventure.text.Component.text("上一頁"));
+        prevIcon.setItemMeta(prevMeta);
+        ItemStack nextIcon = new ItemStack(Material.ARROW);
+        var nextMeta = nextIcon.getItemMeta();
+        nextMeta.displayName(net.kyori.adventure.text.Component.text("下一頁"));
+        nextIcon.setItemMeta(nextMeta);
+        GuiPager<String> pager = GuiPager.<String>of(mask, 'I', 'P', 'N', "探針分頁",
             (builder, slot, item) -> {
                 int at = slot;
                 String name = item;
-                builder.button(at, "pager-item-" + name,
+                ItemStack icon = new ItemStack(Material.PAPER);
+                var meta = icon.getItemMeta();
+                meta.displayName(net.kyori.adventure.text.Component.text(name));
+                icon.setItemMeta(meta);
+                builder.button(at, "pager-item-" + name, icon,
                     click -> getLogger().info("[gprobe-pager] item-click item=" + name
                         + " slot=" + at + " player=" + target.getName()));
-            });
+            }).withPrevIcon(prevIcon).withNextIcon(nextIcon);
         openPagerPage(active, target, pager, allItems, 0, true);
         target.sendMessage("分頁探針已開啟：點下一頁到第 2／3 頁再逐頁返回，"
             + "觀察標題與導覽按鈕（結果見 log [gprobe-pager]）。");

@@ -3,6 +3,7 @@ package com.smile.acelib.gui;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * 分頁清單元件（Supported API）。
@@ -86,10 +87,13 @@ public final class GuiPager<T> {
     private final List<Integer> itemSlots;
     private final List<Integer> prevSlots;
     private final List<Integer> nextSlots;
+    private final ItemStack prevIcon;
+    private final ItemStack nextIcon;
 
     private GuiPager(GuiMask mask, char itemSymbol, char prevSymbol, char nextSymbol,
             String titlePrefix, ItemRenderer<T> renderer,
-            List<Integer> itemSlots, List<Integer> prevSlots, List<Integer> nextSlots) {
+            List<Integer> itemSlots, List<Integer> prevSlots, List<Integer> nextSlots,
+            ItemStack prevIcon, ItemStack nextIcon) {
         this.mask = mask;
         this.itemSymbol = itemSymbol;
         this.prevSymbol = prevSymbol;
@@ -99,6 +103,8 @@ public final class GuiPager<T> {
         this.itemSlots = itemSlots;
         this.prevSlots = prevSlots;
         this.nextSlots = nextSlots;
+        this.prevIcon = prevIcon;
+        this.nextIcon = nextIcon;
     }
 
     /**
@@ -152,7 +158,40 @@ public final class GuiPager<T> {
                     + "' 在遮罩無對應欄位");
         }
         return new GuiPager<>(mask, itemSymbol, prevSymbol, nextSymbol,
-            titlePrefix, renderer, items, prev, next);
+            titlePrefix, renderer, items, prev, next, null, null);
+    }
+
+    /**
+     * 回傳帶上一頁圖示的新描述，不改變原描述。
+     *
+     * <p>只保存物品參照，不複製；宣告後、開啟前修改會反映到放置結果。
+     * 開啟時由 GUI 服務在玩家所在執行緒放置前複製。沒有上一頁時，
+     * 圖示與按鈕皆不出現。</p>
+     *
+     * @param icon 上一頁圖示；不可為 null
+     * @return 新的分頁描述；保留其他設定，永不為 null
+     * @throws NullPointerException 當圖示為 null
+     */
+    public GuiPager<T> withPrevIcon(ItemStack icon) {
+        return new GuiPager<>(mask, itemSymbol, prevSymbol, nextSymbol, titlePrefix,
+            renderer, itemSlots, prevSlots, nextSlots,
+            Objects.requireNonNull(icon, "icon"), nextIcon);
+    }
+
+    /**
+     * 回傳帶下一頁圖示的新描述，不改變原描述。
+     *
+     * <p>物品參照與放置時複製的語意同 {@link #withPrevIcon(ItemStack)}。
+     * 沒有下一頁時，圖示與按鈕皆不出現；未設定圖示仍保留無物品按鈕。</p>
+     *
+     * @param icon 下一頁圖示；不可為 null
+     * @return 新的分頁描述；保留其他設定，永不為 null
+     * @throws NullPointerException 當圖示為 null
+     */
+    public GuiPager<T> withNextIcon(ItemStack icon) {
+        return new GuiPager<>(mask, itemSymbol, prevSymbol, nextSymbol, titlePrefix,
+            renderer, itemSlots, prevSlots, nextSlots, prevIcon,
+            Objects.requireNonNull(icon, "icon"));
     }
 
     /** @return 版面遮罩；永不為 null */
@@ -237,12 +276,23 @@ public final class GuiPager<T> {
             renderer.render(builder, itemSlots.get(i), items.get(i));
         }
         if (page.pageIndex() > 0) {
-            builder.button(prevSlots.get(0), PREV_BUTTON_ID, actions.onPrev());
+            addNavigationButton(builder, prevSlots.get(0), PREV_BUTTON_ID,
+                prevIcon, actions.onPrev());
         }
         if (page.pageIndex() + 1 < page.totalPages()) {
-            builder.button(nextSlots.get(0), NEXT_BUTTON_ID, actions.onNext());
+            addNavigationButton(builder, nextSlots.get(0), NEXT_BUTTON_ID,
+                nextIcon, actions.onNext());
         }
         return builder.build();
+    }
+
+    private static void addNavigationButton(GuiView.Builder builder, int slot,
+            String id, ItemStack icon, Consumer<GuiButtonClick> handler) {
+        if (icon == null) {
+            builder.button(slot, id, handler);
+        } else {
+            builder.button(slot, id, icon, handler);
+        }
     }
 
     @Override

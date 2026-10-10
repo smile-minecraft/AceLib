@@ -2,6 +2,8 @@ package com.smile.acelib.gui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -13,6 +15,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -90,6 +94,53 @@ class GuiPagerTest {
             .mapToInt(java.util.Map.Entry::getKey)
             .findFirst()
             .orElseThrow(() -> new AssertionError("找不到按鈕: " + buttonId));
+    }
+
+    @Test
+    void navigationIconsFollowPageAvailabilityAndFirstSymbolSlot() {
+        ItemStack prev = new ItemStack(Material.ARROW);
+        ItemStack next = new ItemStack(Material.SPECTRAL_ARROW);
+        GuiPager<String> original = pager(new ArrayList<>());
+        GuiPager<String> decorated = original.withPrevIcon(prev).withNextIcon(next);
+        GuiPager.Actions actions = new GuiPager.Actions(click -> {}, click -> {});
+        for (int index = 0; index < 3; index++) {
+            GuiPage<String> page = GuiPage.page(range(20), 7, index);
+            GuiView view = decorated.viewFor(page, actions);
+            assertEquals(index > 0, view.buttonIcons().containsKey(18));
+            assertEquals(index < 2, view.buttonIcons().containsKey(24));
+            assertEquals((index > 0 ? 1 : 0) + (index < 2 ? 1 : 0),
+                view.buttonIcons().size());
+            if (index > 0) {
+                assertSame(prev, view.buttonIcons().get(18));
+                assertEquals(18, buttonSlot(view, GuiPager.PREV_BUTTON_ID));
+            }
+            if (index < 2) {
+                assertSame(next, view.buttonIcons().get(24));
+                assertEquals(24, buttonSlot(view, GuiPager.NEXT_BUTTON_ID));
+            }
+            assertTrue(original.viewFor(page, actions).buttonIcons().isEmpty());
+        }
+        assertTrue(decorated.viewFor(GuiPage.empty(), actions).buttonIcons().isEmpty());
+        assertTrue(decorated.viewFor(GuiPage.loading(), actions).buttonIcons().isEmpty());
+    }
+
+    @Test
+    void navigationIconDeclarationsKeepReferencesWithoutCachingViews() {
+        ItemStack icon = new ItemStack(Material.ARROW);
+        GuiPager<String> original = pager(new ArrayList<>());
+        GuiPager<String> decorated = original.withNextIcon(icon);
+        GuiPage<String> page = GuiPage.page(range(20), 7, 0);
+        GuiPager.Actions actions = new GuiPager.Actions(click -> {}, click -> {});
+        GuiView first = decorated.viewFor(page, actions);
+        icon.setAmount(3);
+        GuiView second = decorated.viewFor(page, actions);
+        assertNotSame(first, second);
+        assertSame(icon, first.buttonIcons().get(24));
+        assertSame(icon, second.buttonIcons().get(24));
+        assertEquals(3, second.buttonIcons().get(24).getAmount());
+        assertTrue(original.viewFor(page, actions).buttonIcons().isEmpty());
+        assertThrows(NullPointerException.class, () -> original.withPrevIcon(null));
+        assertThrows(NullPointerException.class, () -> original.withNextIcon(null));
     }
 
     // -----------------------------------------------------------------

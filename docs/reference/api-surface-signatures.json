@@ -1395,7 +1395,9 @@
       "method prevSymbol() : char",
       "method titlePrefix() : java.lang.String",
       "method toString() : java.lang.String",
-      "method viewFor(com.smile.acelib.gui.GuiPage<T>,com.smile.acelib.gui.GuiPager$Actions) : com.smile.acelib.gui.GuiView"
+      "method viewFor(com.smile.acelib.gui.GuiPage<T>,com.smile.acelib.gui.GuiPager$Actions) : com.smile.acelib.gui.GuiView",
+      "method withNextIcon(org.bukkit.inventory.ItemStack) : com.smile.acelib.gui.GuiPager<T>",
+      "method withPrevIcon(org.bukkit.inventory.ItemStack) : com.smile.acelib.gui.GuiPager<T>"
     ],
     "com.smile.acelib.gui.GuiReplacementListener": [
       "method onReplaced(java.util.UUID,com.smile.acelib.gui.GuiSession,com.smile.acelib.gui.GuiSession) : void"
