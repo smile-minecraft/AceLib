@@ -416,6 +416,9 @@
       "method onInvalidReload(java.lang.String,java.lang.String) : void",
       "method onReload(com.smile.acelib.config.ConfigSnapshot) : void"
     ],
+    "com.smile.acelib.config.ConfigCrossFieldValidator": [
+      "method validate(com.smile.acelib.config.ConfigSnapshot) : void"
+    ],
     "com.smile.acelib.config.ConfigException": [
       "ctor(java.lang.String,java.lang.String)",
       "ctor(java.lang.String,java.lang.String,java.lang.Throwable)",
@@ -433,6 +436,7 @@
       "method isReady() : boolean",
       "method isWatching() : boolean",
       "method load() : void",
+      "method registerCrossFieldValidator(com.smile.acelib.config.ConfigCrossFieldValidator) : com.smile.acelib.config.ConfigManager",
       "method registerMigration(com.smile.acelib.config.ConfigMigration) : com.smile.acelib.config.ConfigManager",
       "method reload() : boolean",
       "method save() : void",

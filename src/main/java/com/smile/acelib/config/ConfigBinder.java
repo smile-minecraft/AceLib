@@ -6,11 +6,18 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 快照到 record／一般類別的綁定器。
@@ -30,19 +37,35 @@ import java.util.Optional;
  * <h2>支援的欄位型別</h2>
  * <p>{@code String}、{@code int／Integer}、{@code long／Long}、
  * {@code double／Double}、{@code boolean／Boolean}、列舉、
- * {@code List<String>}、{@code Optional<T>}（缺失時為 empty，
- * T 限上述純量與列舉）與巢狀 record／POJO（該路徑須為 map）。</p>
+ * {@code List<T>}、{@code Set<T>}、{@code Map<String, T>}、
+ * {@code Optional<T>}（缺失時為 empty，T 限上述純量、列舉與集合）與
+ * 巢狀 record／POJO（該路徑須為 map）。集合的元素／值型別 {@code T}
+ * 取自宣告的泛型參數，逐元素驗證。</p>
  *
  * <h2>缺失與型別語意</h2>
  * <ul>
  *   <li>缺失的基本型別（{@code int} 等）報錯；缺失的參考型別
- *      （{@code String}／{@code Integer}／列舉／{@code List}／巢狀型別）
+ *      （{@code String}／{@code Integer}／列舉／集合／巢狀型別）
  *       為 null，由呼叫端決定是否接受</li>
  *   <li>{@code int}／{@code long} 嚴格轉換：小數、NaN／無限大、超出範圍
  *       一律報錯，不靜默截斷或溢位</li>
  *   <li>{@code double} 非有限值（NaN／無限大）一律報錯，不論有無範圍約束</li>
- *   <li>{@code List} 元素逐個轉字串，不做元素型別檢查；
+ *   <li>集合元素逐個依宣告型別驗證：{@code List<String>}、
+ *       元素為 {@code Object} 與未指定泛型的 {@code List}
+ *       維持既有行為（元素逐個轉字串，null 保留）；其他清單元素型別
+ *       （數值、列舉、巢狀型別）走與純量欄位相同的嚴格規則；
  *       YAML 的 null 元素保留為 null</li>
+ *   <li>{@code Map} 只支援 {@code Map<String, T>}（鍵為 YAML 鍵名）；
+ *       {@code Set} 由 YAML 清單建構，依 equals 去重並保留首次出現順序；
+ *       兩者的元素一律嚴格驗證（{@code String} 只接受字串，
+ *       {@code Object} 原值保留），不走清單的相容轉換</li>
+ *   <li>萬用字元／型別變數推斷不出驗證規則時明確報錯，
+ *       不默默轉字串產生錯型別集合</li>
+ *   <li>集合內的數值元素同樣受欄位上的 {@link ConfigRange} 約束</li>
+ *   <li>集合元素／巢狀元素內的錯誤帶完整元素路徑：Map 項目為
+ *       {@code <path>.<key>}、Set 與清單元素為 {@code <path>[i]}、
+ *       巢狀元素內欄位為 {@code <path>[i].<field>}；
+ *       集合元素內的絕對路徑（{@code ConfigKey} 含點）仍從根解析</li>
  *   <li>列舉按名稱精確比對（大小寫敏感）；失敗訊息列出全部合法選項</li>
  * </ul>
  *
@@ -120,15 +143,31 @@ public final class ConfigBinder {
     // record
     // -----------------------------------------------------------------
 
-    private static <T> T bindRecord(ConfigSnapshot snapshot, Class<T> type, String prefix) {
+    /**
+     * 綁定視野：查詢路徑與錯誤路徑分開追蹤。
+     *
+     * <p>根綁定時兩份快照皆為來源快照、兩個前綴皆為空；
+     * 巢狀綁定沿用同一視野、只延伸路徑；集合元素綁定時
+     * {@code view} 換成元素子快照、查詢前綴歸零、錯誤前綴記為元素路徑
+     * （例如 {@code endpoints[0]}），查詢與報錯才不會互相拖累。
+     * 含點的絕對路徑一律在 {@code root} 解析，不受視野影響。</p>
+     *
+     * @param root   根快照（絕對路徑的解析對象）
+     * @param view   相對路徑的解析對象（根綁定與巢狀綁定時即 root）
+     * @param lookup 在 view 內的查詢前綴（元素內為空字串）
+     * @param error  錯誤顯示前綴（元素為元素路徑）
+     */
+    private record BindScope(ConfigSnapshot root, ConfigSnapshot view, String lookup, String error) {
+    }
+
+    private static <T> T bindRecord(BindScope scope, Class<T> type) {
         RecordComponent[] components = type.getRecordComponents();
         Object[] args = new Object[components.length];
         Class<?>[] paramTypes = new Class<?>[components.length];
         for (int i = 0; i < components.length; i++) {
             RecordComponent component = components[i];
             paramTypes[i] = component.getType();
-            String path = join(prefix, configKeyOf(component));
-            args[i] = convert(snapshot, path, component.getType(),
+            args[i] = convert(scope, configKeyOf(component), component.getType(),
                 rangeOf(component), component.getGenericType());
         }
         try {
@@ -136,9 +175,14 @@ public final class ConfigBinder {
             canonical.setAccessible(true);
             return canonical.newInstance(args);
         } catch (ReflectiveOperationException ex) {
-            throw new ConfigBindingException(prefix.isEmpty() ? "(root)" : prefix,
+            String where = scope.error().isEmpty() ? "(root)" : scope.error();
+            throw new ConfigBindingException(where,
                 "無法建立 " + type.getSimpleName() + "：" + ex.getMessage());
         }
+    }
+
+    private static <T> T bindRecord(ConfigSnapshot snapshot, Class<T> type, String prefix) {
+        return bindRecord(new BindScope(snapshot, snapshot, prefix, prefix), type);
     }
 
     private static String configKeyOf(RecordComponent component) {
@@ -171,20 +215,22 @@ public final class ConfigBinder {
     // 一般類別
     // -----------------------------------------------------------------
 
-    private static <T> T bindPojo(ConfigSnapshot snapshot, Class<T> type, String prefix) {
+    private static <T> T bindPojo(BindScope scope, Class<T> type) {
         Constructor<T> noArg;
         try {
             noArg = type.getDeclaredConstructor();
             noArg.setAccessible(true);
         } catch (NoSuchMethodException ex) {
-            throw new ConfigBindingException(prefix.isEmpty() ? "(root)" : prefix,
+            String where = scope.error().isEmpty() ? "(root)" : scope.error();
+            throw new ConfigBindingException(where,
                 "一般類別 " + type.getSimpleName() + " 必須有無參建構子才能綁定");
         }
         T instance;
         try {
             instance = noArg.newInstance();
         } catch (ReflectiveOperationException ex) {
-            throw new ConfigBindingException(prefix.isEmpty() ? "(root)" : prefix,
+            String where = scope.error().isEmpty() ? "(root)" : scope.error();
+            throw new ConfigBindingException(where,
                 "無法建立 " + type.getSimpleName() + "：" + ex.getMessage());
         }
         for (Field field : allFields(type)) {
@@ -192,18 +238,21 @@ public final class ConfigBinder {
             if (key == null) {
                 continue;
             }
-            String path = join(prefix, key.value());
-            Object value = convert(snapshot, path, field.getType(),
+            Object value = convert(scope, key.value(), field.getType(),
                 field.getAnnotation(ConfigRange.class), field.getGenericType());
             try {
                 field.setAccessible(true);
                 field.set(instance, value);
             } catch (ReflectiveOperationException ex) {
-                throw new ConfigBindingException(path,
+                throw new ConfigBindingException(errorPathOf(scope, key.value()),
                     "無法寫入欄位 " + field.getName() + "：" + ex.getMessage());
             }
         }
         return instance;
+    }
+
+    private static <T> T bindPojo(ConfigSnapshot snapshot, Class<T> type, String prefix) {
+        return bindPojo(new BindScope(snapshot, snapshot, prefix, prefix), type);
     }
 
     private static List<Field> allFields(Class<?> type) {
@@ -224,42 +273,54 @@ public final class ConfigBinder {
     // -----------------------------------------------------------------
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object convert(ConfigSnapshot snapshot, String path, Class<?> target,
-                                  ConfigRange range, java.lang.reflect.Type generic) {
+    private static Object convert(BindScope scope, String key,
+                                  Class<?> target, ConfigRange range, Type generic) {
+        // 絕對路徑（含點的 ConfigKey）在根解析；相對路徑在視野內解析。
+        boolean absolute = key.contains(".");
+        String lookupPath = absolute ? key : join(scope.lookup(), key);
+        String errorPath = absolute ? key : join(scope.error(), key);
+        ConfigSnapshot source = absolute ? scope.root() : scope.view();
         // Optional<T>：缺失時為 empty
         if (target == Optional.class) {
-            Class<?> inner = Object.class;
-            if (generic instanceof java.lang.reflect.ParameterizedType parameterized
-                && parameterized.getActualTypeArguments().length == 1
-                && parameterized.getActualTypeArguments()[0] instanceof Class<?> innerClass) {
-                inner = innerClass;
+            Type innerType = firstTypeArgument(generic);
+            Class<?> inner = innerType == null ? Object.class : resolvedClass(innerType);
+            if (inner == null) {
+                throw new ConfigBindingException(errorPath,
+                    "Optional 的元素型別無法推斷（萬用字元／型別變數不支援），請改用具體型別宣告");
             }
-            Object raw = snapshot.get(path);
+            Object raw = source.get(lookupPath);
             if (raw == null) {
                 return Optional.empty();
             }
-            return Optional.of(convertValue(snapshot, path, raw, inner, range));
+            if (isNestedType(inner)) {
+                BindScope child = new BindScope(scope.root(), source, lookupPath, errorPath);
+                return Optional.of(inner.isRecord()
+                    ? bindRecord(child, (Class) inner) : bindPojo(child, (Class) inner));
+            }
+            return Optional.of(convertNonNested(scope, errorPath, raw, inner, range, innerType));
         }
-        Object raw = snapshot.get(path);
+        Object raw = source.get(lookupPath);
         if (raw == null) {
             if (target.isPrimitive()) {
-                throw new ConfigBindingException(path,
+                throw new ConfigBindingException(errorPath,
                     "缺少必填值，目標為基本型別 " + target.getSimpleName());
             }
             // 巢狀 record／POJO 缺失時回傳 null（由呼叫端決定是否接受）
             if (isNestedType(target)) {
                 return null;
             }
-            if (target == String.class || target == List.class || target.isEnum()) {
+            if (target == String.class || target == List.class || target == Set.class
+                || target == Map.class || target.isEnum()) {
                 return null;
             }
             return null;
         }
-        return convertValue(snapshot, path, raw, target, range);
+        return convertValue(scope, lookupPath, errorPath, source, raw, target, range, generic);
     }
 
     private static boolean isNestedType(Class<?> target) {
         return target.isRecord() || (!isSimple(target) && !target.isEnum() && target != List.class
+            && target != Set.class && target != Map.class
             && target != Object.class && !target.isPrimitive()
             && !Number.class.isAssignableFrom(target) && target != String.class
             && target != Boolean.class && target != Optional.class);
@@ -273,34 +334,52 @@ public final class ConfigBinder {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object convertValue(ConfigSnapshot snapshot, String path, Object raw,
-                                       Class<?> target, ConfigRange range) {
+    private static Object convertValue(BindScope scope, String lookupPath, String errorPath,
+                                       ConfigSnapshot source, Object raw,
+                                       Class<?> target, ConfigRange range, Type generic) {
+        // 巢狀 record／POJO：查詢視野沿用 scope，錯誤前綴已由呼叫端換算；
+        // 內層的絕對路徑（含點的 ConfigKey）直接命中根快照，相對名則補上前綴。
+        if (target.isRecord() || isNestedType(target)) {
+            if (!(raw instanceof java.util.Map)) {
+                throw bindingTypeError(errorPath, "節點（map）", raw);
+            }
+            BindScope child = new BindScope(scope.root(), source, lookupPath, errorPath);
+            if (target.isRecord()) {
+                return bindRecord(child, (Class) target);
+            }
+            return bindPojo(child, (Class) target);
+        }
+        return convertNonNested(scope, errorPath, raw, target, range, generic);
+    }
+
+    private static Object convertNonNested(BindScope scope, String errorPath, Object raw,
+                                           Class<?> target, ConfigRange range, Type generic) {
         if (target == String.class) {
             if (raw instanceof String text) {
                 return text;
             }
-            throw bindingTypeError(path, "字串", raw);
+            throw bindingTypeError(errorPath, "字串", raw);
         }
         if (target == int.class || target == Integer.class) {
-            int value = asInt(path, raw);
-            checkRange(path, value, range);
+            int value = asInt(errorPath, raw);
+            checkRange(errorPath, value, range);
             return value;
         }
         if (target == long.class || target == Long.class) {
-            long value = asLong(path, raw);
-            checkRange(path, (double) value, range);
+            long value = asLong(errorPath, raw);
+            checkRange(errorPath, (double) value, range);
             return value;
         }
         if (target == double.class || target == Double.class) {
-            double numeric = asNumber(path, raw, "數值");
-            checkRange(path, numeric, range);
+            double numeric = asNumber(errorPath, raw, "數值");
+            checkRange(errorPath, numeric, range);
             return numeric;
         }
         if (target == boolean.class || target == Boolean.class) {
             if (raw instanceof Boolean flag) {
                 return flag;
             }
-            throw bindingTypeError(path, "布林", raw);
+            throw bindingTypeError(errorPath, "布林", raw);
         }
         if (target.isEnum()) {
             String name = raw.toString();
@@ -313,33 +392,217 @@ public final class ConfigBinder {
             for (Object constant : target.getEnumConstants()) {
                 allowed.add(((Enum<?>) constant).name());
             }
-            throw new ConfigBindingException(path,
+            throw new ConfigBindingException(errorPath,
                 "列舉值非法 " + name + "，允許：" + String.join("、", allowed));
         }
         if (target == List.class) {
-            if (raw instanceof List<?> list) {
-                List<String> out = new ArrayList<>(list.size());
-                for (Object item : list) {
-                    out.add(item == null ? null : item.toString());
-                }
-                // 元素可能為 null：不用 List.copyOf（會 NPE），改 unmodifiable 包裝
-                return java.util.Collections.unmodifiableList(out);
-            }
-            throw bindingTypeError(path, "清單", raw);
+            return convertList(scope, errorPath, raw, range, generic);
         }
-        // 巢狀 record／POJO：沿用同一快照、以前綴遞迴，內層的絕對路徑
-        //（含點的 ConfigKey）直接命中根快照，相對名則補上前綴。
-        if (target.isRecord() || isNestedType(target)) {
-            if (!(raw instanceof java.util.Map)) {
-                throw bindingTypeError(path, "節點（map）", raw);
+        if (target == Set.class) {
+            return convertSet(scope, errorPath, raw, range, generic);
+        }
+        if (target == Map.class) {
+            return convertMap(scope, errorPath, raw, range, generic);
+        }
+        throw new ConfigBindingException(errorPath,
+            isUnresolvable(generic)
+                ? "綁定型別無法推斷（萬用字元／型別變數不支援），請改用具體型別宣告"
+                : "不支援的綁定型別 " + target.getSimpleName() + "（實際值：" + describe(raw) + "）");
+    }
+
+    // -----------------------------------------------------------------
+    // 集合：Map／Set／型別清單
+    // -----------------------------------------------------------------
+
+    /**
+     * 清單綁定：元素型別取自宣告的泛型參數。
+     *
+     * <p>{@code List<String>}、元素為 {@code Object} 與未指定泛型的 {@code List}
+     * 維持既有行為（元素逐個轉字串，null 保留）；其他元素型別逐元素嚴格驗證，
+     * 錯誤帶 {@code <path>[i]}（巢狀元素內欄位再補 {@code .field}）。
+     * 萬用字元／型別變數無法推斷驗證規則，一律明確拒絕。</p>
+     */
+    private static Object convertList(BindScope scope, String errorPath, Object raw,
+                                      ConfigRange range, Type generic) {
+        if (!(raw instanceof List<?> list)) {
+            throw bindingTypeError(errorPath, "清單", raw);
+        }
+        Type elementType = firstTypeArgument(generic);
+        Class<?> element = elementType == null ? Object.class : resolvedClass(elementType);
+        if (element == null) {
+            throw new ConfigBindingException(errorPath,
+                "List 的元素型別無法推斷（萬用字元／型別變數不支援），請改用具體型別宣告");
+        }
+        // 相容路徑只留給既有語意（未指定泛型／String／Object 逐個轉字串）；
+        // 其餘一律嚴格驗證，不默默轉字串。
+        boolean lenient = elementType == null
+            || element == String.class || element == Object.class;
+        List<Object> out = new ArrayList<>(list.size());
+        for (int i = 0; i < list.size(); i++) {
+            String itemPath = elementPath(errorPath, i);
+            out.add(lenient
+                ? lenientStringItem(list.get(i))
+                : strictCollectionElement(scope, itemPath,
+                    list.get(i), element, elementType, range));
+        }
+        // 元素可能為 null：不用 List.copyOf（會 NPE），改 unmodifiable 包裝
+        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * 集合綁定：由 YAML 清單建構，依 equals 去重並保留首次出現順序。
+     *
+     * <p>未宣告元素型別、或元素型別無法推斷（萬用字元／型別變數）的
+     * {@code Set} 直接報錯（過去會掉進巢狀分支或默默轉字串，
+     * 皆非預期行為，不屬於可沿用的語意）。元素一律嚴格驗證，
+     * 與清單的相容轉換分開。</p>
+     */
+    private static Object convertSet(BindScope scope, String errorPath, Object raw,
+                                     ConfigRange range, Type generic) {
+        if (!(raw instanceof List<?> list)) {
+            throw bindingTypeError(errorPath, "清單", raw);
+        }
+        Type elementType = firstTypeArgument(generic);
+        if (elementType == null) {
+            throw new ConfigBindingException(errorPath,
+                "Set 需要宣告元素型別（例如 Set<String>），實際值：" + describe(raw));
+        }
+        Class<?> element = resolvedClass(elementType);
+        if (element == null) {
+            throw new ConfigBindingException(errorPath,
+                "Set 的元素型別無法推斷（萬用字元／型別變數不支援），請改用具體型別宣告");
+        }
+        Set<Object> out = new LinkedHashSet<>();
+        for (int i = 0; i < list.size(); i++) {
+            out.add(strictCollectionElement(scope, elementPath(errorPath, i),
+                list.get(i), element, elementType, range));
+        }
+        return Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * 對映綁定：只支援 {@code Map<String, T>}，鍵為 YAML 鍵名，
+     * 值依 {@code T} 逐筆嚴格驗證，錯誤帶 {@code <path>.<key>}。
+     * 未宣告泛型、鍵非 {@code String}、或值型別無法推斷（萬用字元／
+     * 型別變數）時明確拒絕；與清單的相容轉換分開，不默默轉字串。
+     */
+    private static Object convertMap(BindScope scope, String errorPath, Object raw,
+                                     ConfigRange range, Type generic) {
+        if (!(raw instanceof Map<?, ?> map)) {
+            throw bindingTypeError(errorPath, "節點（map）", raw);
+        }
+        Type[] args = generic instanceof ParameterizedType parameterized
+            ? parameterized.getActualTypeArguments() : null;
+        if (args == null || args.length != 2) {
+            throw new ConfigBindingException(errorPath,
+                "Map 需要宣告泛型參數（例如 Map<String, Integer>），實際值：" + describe(raw));
+        }
+        Class<?> keyType = resolvedClass(args[0]);
+        if (keyType == null || keyType != String.class) {
+            throw new ConfigBindingException(errorPath,
+                "只支援 Map<String, T>（鍵為 YAML 鍵名），實際鍵型別：" + args[0].getTypeName());
+        }
+        Class<?> valueType = resolvedClass(args[1]);
+        if (valueType == null) {
+            throw new ConfigBindingException(errorPath,
+                "Map 的值型別無法推斷（萬用字元／型別變數不支援），請改用具體型別宣告");
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            out.put(key, strictCollectionElement(scope, errorPath + "." + key,
+                entry.getValue(), valueType, args[1], range));
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    /**
+     * 清單相容路徑：沿用既有的逐個轉字串（未指定泛型／String／Object），
+     * null 保留。只給清單用；Map／Set 走嚴格路徑。
+     */
+    private static Object lenientStringItem(Object item) {
+        return item == null ? null : item.toString();
+    }
+
+    /**
+     * Map／Set 嚴格路徑：null 保留；{@code Object} 接受一切且不轉換；
+     * {@code String} 只接受字串（非字串報錯，不轉字串）；
+     * 其餘沿用純量／集合／巢狀規則。
+     */
+    private static Object strictCollectionElement(BindScope scope, String errorPath, Object item,
+                                                  Class<?> element, Type elementType,
+                                                  ConfigRange range) {
+        if (item == null) {
+            return null;
+        }
+        if (element == Object.class) {
+            return item;
+        }
+        if (element == String.class) {
+            if (item instanceof String text) {
+                return text;
             }
+            throw bindingTypeError(errorPath, "字串", item);
+        }
+        return convertElement(scope, errorPath, item, element, elementType, range);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object convertElement(BindScope scope, String errorPath, Object item,
+                                         Class<?> target, Type generic, ConfigRange range) {
+        if (item == null) {
+            return null;
+        }
+        if (isNestedType(target)) {
+            if (!(item instanceof Map)) {
+                throw bindingTypeError(errorPath, "節點（map）", item);
+            }
+            // 元素子快照：相對路徑在元素內解析，錯誤前綴記為元素路徑；
+            // 元素內的絕對路徑仍由 BindScope 回到根解析。
+            BindScope child = new BindScope(scope.root(),
+                new ConfigSnapshot((Map<String, Object>) item), "", errorPath);
             if (target.isRecord()) {
-                return bindRecord(snapshot, target, path);
+                return bindRecord(child, (Class) target);
             }
-            return bindPojo(snapshot, target, path);
+            return bindPojo(child, (Class) target);
         }
-        throw new ConfigBindingException(path,
-            "不支援的綁定型別 " + target.getSimpleName() + "（實際值：" + describe(raw) + "）");
+        return convertNonNested(scope, errorPath, item, target, range, generic);
+    }
+
+    private static String errorPathOf(BindScope scope, String key) {
+        return key.contains(".") ? key : join(scope.error(), key);
+    }
+
+    private static String elementPath(String errorPath, int index) {
+        return errorPath + "[" + index + "]";
+    }
+
+    private static Type firstTypeArgument(Type generic) {
+        if (generic instanceof ParameterizedType parameterized
+            && parameterized.getActualTypeArguments().length >= 1) {
+            return parameterized.getActualTypeArguments()[0];
+        }
+        return null;
+    }
+
+    /**
+     * 把泛型取為執行期類別；萬用字元、型別變數等推斷不出的回傳 null，
+     * 由呼叫端拋 {@code ACELIB-CFG-007} 明說原因，不默默退回轉字串。
+     */
+    private static Class<?> resolvedClass(Type type) {
+        if (type instanceof Class<?> clazz) {
+            return clazz;
+        }
+        if (type instanceof ParameterizedType parameterized
+            && parameterized.getRawType() instanceof Class<?> clazz) {
+            return clazz;
+        }
+        return null;
+    }
+
+    private static boolean isUnresolvable(Type type) {
+        return type instanceof java.lang.reflect.WildcardType
+            || type instanceof java.lang.reflect.TypeVariable;
     }
 
     private static double asNumber(String path, Object raw, String expected) {

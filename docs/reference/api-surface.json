@@ -419,6 +419,15 @@
       "mainCallers": "ConfigManager.startWatching；消費者實作。"
     },
     {
+      "fqcn": "com.smile.acelib.config.ConfigCrossFieldValidator",
+      "package": "com.smile.acelib.config",
+      "simpleName": "ConfigCrossFieldValidator",
+      "kind": "interface",
+      "classification": "Supported",
+      "reason": "消費者實作的跨欄位驗證規則（函式介面）；整份設定通過後才發布新快照，失敗時保留舊快照；1.5.0 新增。",
+      "mainCallers": "ConfigManager.registerCrossFieldValidator；消費者實作。"
+    },
+    {
       "fqcn": "com.smile.acelib.config.ConfigException",
       "package": "com.smile.acelib.config",
       "simpleName": "ConfigException",

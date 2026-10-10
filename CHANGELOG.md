@@ -30,6 +30,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 - 行為變更（破壞性）：`ConfigSnapshot.getInt(path, default)` 改為嚴格轉換：小數、NaN／無限大、超出 int 範圍的數字一律拋 `ACELIB-CFG-007`（訊息含完整路徑），不再靜默截斷或溢位，也不再回傳預設值。缺值、null 與非數字值的預設值語意不變。過去依賴截斷的寫法請改用 `getDouble` 再自行取整，或改走 `bind()` 的範圍約束一次驗證。
 - `ConfigSnapshot` 新增 `getLong(path, default)`／`getDouble(path, default)`：`getLong` 對小數與溢位拋 `ACELIB-CFG-007`；`getDouble` 拒絕 NaN 與正負無限大（例如 YAML 的 `.nan`／`.inf`）；缺值、null 與非數字值回傳預設值。與 `ConfigBinder.bind` 的數值轉換同規則。
 - `ConfigSnapshot` 新增世代與內容相等：`generation()` 為獨立 metadata，`ConfigManager` 每次成功發布（`load`／`reload`／`startup`）世代 +1（同內容也 +1），失敗不發布新世代；`equals`／`hashCode` 只比較深層內容，世代不參與。
+- 設定繫結支援 Map<String, T>、Set<T> 與物件清單（元素依宣告型別驗證，錯誤帶完整元素路徑）；新增跨欄位驗證入口 registerCrossFieldValidator，規則失敗時不發布新快照、不推進世代。
 
 ## [1.4.0] - 2026-10-08
 

@@ -12,8 +12,8 @@
 
 ## 統計
 
-- 總數：225 個 public 頂層型別
-- Supported：174
+- 總數：226 個 public 頂層型別
+- Supported：175
 - SPI：25
 - Internal：26
 
@@ -83,6 +83,7 @@
 | `com.smile.acelib.config.ConfigBindingException` | class | Supported | 設定綁定例外（ACELIB-CFG-007），攜帶完整欄位路徑；v1 契約。 |  | ConfigBinder；ConfigManager.bind。 |
 | `com.smile.acelib.config.ConfigBinder` | class | Supported | 快照到 record／一般類別的綁定器（型別／範圍／列舉驗證，註解以 nested 承載）；v1 穩定。 |  | ConfigManager.bind；消費者。 |
 | `com.smile.acelib.config.ConfigChangeListener` | interface | Supported | 設定檔監看回呼（自動重載成功／無效診斷）；v1 穩定。 |  | ConfigManager.startWatching；消費者實作。 |
+| `com.smile.acelib.config.ConfigCrossFieldValidator` | interface | Supported | 消費者實作的跨欄位驗證規則（函式介面）；整份設定通過後才發布新快照，失敗時保留舊快照；1.5.0 新增。 |  | ConfigManager.registerCrossFieldValidator；消費者實作。 |
 | `com.smile.acelib.config.ConfigException` | class | Supported | 配置載入/遷移例外；v1 契約。 |  | ConfigManager；ConfigMigration。 |
 | `com.smile.acelib.config.ConfigManager` | class | Supported | 配置管理服務（載入/遷移/儲存）；v1 穩定。 |  | AceLibConfig；AceLibPlugin。 |
 | `com.smile.acelib.config.ConfigMigration` | interface | SPI | 消費者實作的配置遷移介面（extension point）；寫明冪等與相容性責任。 |  | ConfigManager.registerMigration；消費者實作。 |

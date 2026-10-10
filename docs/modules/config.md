@@ -91,7 +91,37 @@ public record ServerSettings(
 ServerSettings settings = config.bind(ServerSettings.class);
 ```
 
-不寫 `@ConfigKey` 時以 component／欄位名為路徑；含點的 `@ConfigKey` 視為從根起的絕對路徑。缺失語意：缺失的基本型別報錯，缺失的參考型別（`String`／`Integer`／列舉／`List`／巢狀型別）為 null，由呼叫端決定是否接受；`int`／`long` 嚴格轉換（小數、NaN／無限大、超出範圍一律報錯，不靜默截斷或溢位）；`double` 非有限值（NaN／無限大）一律報錯，不論有無 `@ConfigRange`，有範圍時訊息一併帶出允許範圍；`List` 元素逐個轉字串，不做元素型別檢查，null 元素保留為 null；列舉按名稱精確比對（大小寫敏感），失敗訊息列出全部合法選項。
+不寫 `@ConfigKey` 時以 component／欄位名為路徑；含點的 `@ConfigKey` 視為從根起的絕對路徑。缺失語意：缺失的基本型別報錯，缺失的參考型別（`String`／`Integer`／列舉／集合／巢狀型別）為 null，由呼叫端決定是否接受；`int`／`long` 嚴格轉換（小數、NaN／無限大、超出範圍一律報錯，不靜默截斷或溢位）；`double` 非有限值（NaN／無限大）一律報錯，不論有無 `@ConfigRange`，有範圍時訊息一併帶出允許範圍；列舉按名稱精確比對（大小寫敏感），失敗訊息列出全部合法選項。
+
+## 集合綁定
+
+```java
+public record Limits(
+    @ConfigBinder.ConfigKey("scores") Map<String, Integer> scores,
+    @ConfigBinder.ConfigKey("tags") Set<String> tags,
+    @ConfigBinder.ConfigKey("endpoints") List<Endpoint> endpoints) {}
+
+public record Endpoint(String host, int port) {}
+```
+
+集合的元素／值型別取自宣告的泛型參數，逐元素驗證：`Map` 只支援 `Map<String, T>`（鍵為 YAML 鍵名，值依 `T` 嚴格驗證）；`Set` 由 YAML 清單建構，依 `equals` 去重並保留首次出現順序，元素一律嚴格驗證；`List<T>` 的 `T` 為巢狀 record／POJO 時逐元素綁定。`List<String>`、元素為 `Object` 與未指定泛型的 `List` 維持既有行為（元素逐個轉字串）；其他清單元素型別（數值、列舉、巢狀型別）走與純量欄位相同的嚴格規則，欄位上的 `@ConfigRange` 同樣套用於數值元素。`Map`／`Set` 不走清單的相容轉換：`String` 元素只接受字串（數字、布林等一律報錯），`Object` 元素原值保留。萬用字元／型別變數推斷不出驗證規則時明確報錯，不默默轉字串。YAML 的 null 元素保留為 null，不跳過。錯誤一律 `ACELIB-CFG-007` 並帶完整元素路徑：Map 項目為 `scores.bob`、Set 與清單元素為 `modes[1]`、巢狀元素內欄位為 `endpoints[0].port`；集合元素內的絕對路徑（含點的 `@ConfigKey`）仍從根解析。
+
+## 跨欄位驗證
+
+```java
+config.registerCrossFieldValidator(candidate -> {
+    int min = ((Number) candidate.get("limits.min")).intValue();
+    int max = ((Number) candidate.get("limits.max")).intValue();
+    if (min > max) {
+        throw new ConfigBindingException("limits",
+            "規則 minNotGreaterThanMax 失敗：下限 " + min + " 大於上限 " + max);
+    }
+});
+```
+
+規則在候選快照通過既有驗證（schema 預設補齊、遷移、版本收斂）之後、發布新快照之前執行；多條規則依登記順序執行，前一條失敗就停住。規則讀候選快照的多個路徑，檢查它們之間的關係；通過就直接回傳，失敗拋 `ConfigBindingException`（`ACELIB-CFG-007`），訊息內寫明失敗的規則與相關路徑。失敗時不發布新快照、不推進世代、不改磁碟、不動最後成功副本：`load()` 原樣拋出、`reload()` 回傳 `false` 並保留舊快照、`startup()` 走損壞路徑（原檔不動，沿用最後成功副本）。
+
+> **後備語意**：`startup()` 損壞時的後備快照（最後成功副本、呼叫端指定的保守後備、記憶體舊快照）**不**重新執行這裡登記的規則。後備是當時已驗證通過的狀態；對新規則重新驗證會把可恢復的啟動變成硬失敗，因此管線刻意跳過。後備快照的內容只保證「當時驗證通過」，不保證通過現行全部規則。監看重載走 `reload()` 管線，候選內容仍要過規則，失敗時保留舊快照並以錯誤碼診斷。
 
 ## 檔案監看
 

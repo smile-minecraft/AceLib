@@ -35,7 +35,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>寫回保留既有註解：只改值變了的行、只補缺的 key（含欄位說明），其餘逐位元保留</li>
  *   <li>檔案監看自動重載（{@link #startWatching})；無效新內容保留舊快照並診斷；
  *       reload 不殺監看器，{@link #close()} 徹底清理</li>
- *   <li>必填欄位驗證；型別／範圍／列舉綁定驗證（{@link #bind(Class)}）</li>
+ *   <li>必填欄位驗證；型別／範圍／列舉、集合綁定驗證（{@link #bind(Class)}）</li>
+  *   <li>跨欄位驗證（{@link #registerCrossFieldValidator} 登記規則；
+  *       候選快照通過既有驗證後、發布前執行，失敗不發布也不推進世代）</li>
  * </ul>
  *
  * <h2>錯誤代碼</h2>
@@ -73,6 +75,11 @@ public final class ConfigManager {
     private final ConfigSchema schema;
     private final ConfigVersion currentVersion;
     private final MigrationChain migrationChain = new MigrationChain();
+    /**
+     * 跨欄位驗證規則（依登記順序執行；寫入只在註冊時發生，驗證管線只讀）。
+     */
+    private final List<ConfigCrossFieldValidator> crossFieldValidators =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     /** 欄位說明（路徑→註解）：寫回補缺 key 時附在旁邊；監看執行緒只讀。 */
     private final Map<String, String> descriptions = new ConcurrentHashMap<>();
     /**
@@ -128,6 +135,27 @@ public final class ConfigManager {
      */
     public ConfigManager registerMigration(ConfigMigration migration) {
         migrationChain.add(migration);
+        return this;
+    }
+
+    /**
+     * 登記一條跨欄位驗證規則。
+     *
+     * <p>規則在候選快照通過既有驗證（schema 預設補齊、遷移、版本收斂）之後、
+     * 發布新快照之前執行；多條規則依登記順序執行，前一條失敗就停住，
+     * 後面的不再執行。失敗（拋 {@link ConfigBindingException}，
+     * {@code ACELIB-CFG-007}）時不發布新快照、不推進世代、不改磁碟、
+     * 不動最後成功副本；呼叫端依 {@code load}／{@code reload}／
+     * {@code startup} 各自的約定拿到錯誤（拋出／回傳 {@code false}／
+     * 損壞分類）。規則本身抛出的非綁定例外原樣傳播，不包裝。</p>
+     *
+     * @param validator 跨欄位驗證規則；不可為 null
+     * @return this（鏈式 API）
+     * @throws NullPointerException 當 {@code validator} 為 null
+     * @since 1.5.0
+     */
+    public ConfigManager registerCrossFieldValidator(ConfigCrossFieldValidator validator) {
+        crossFieldValidators.add(Objects.requireNonNull(validator, "validator"));
         return this;
     }
 
@@ -802,6 +830,14 @@ public final class ConfigManager {
 
         // 確保 version 欄位存在且為當前版本
         config.set(VERSION_KEY, currentVersion.toString());
+
+        // 跨欄位驗證：候選快照在既有驗證之後、發布與落盤之前先過規則。
+        // 失敗直接傳播（ACELIB-CFG-007）：快照不換、世代不推進、磁碟不動、
+        // 最後成功副本不動（sidecar 只在成功發布後才寫）。
+        ConfigSnapshot candidate = new ConfigSnapshot(config.getValues(false));
+        for (ConfigCrossFieldValidator validator : crossFieldValidators) {
+            validator.validate(candidate);
+        }
 
         String merged = writeToDisk(config, file, migrationRemoved);
 
