@@ -539,10 +539,12 @@ public final class MessageService {
     /**
      * 以目前全域 locale 渲染一次，並回傳帶狀態的結果。
      *
-     * <p>與 {@link #render(String, Map)} 讀取同一份模板、產生同一份
-     * {@link RenderedMessage}（內容、診斷字串與記錄完全一致），外加
+     * <p>與 {@link #render(String, Map)} 讀取同一份模板；模板找得到時，
+     * 兩者的 {@link RenderedMessage}（內容、診斷字串與記錄）完全一致，外加
      * {@link RenderStatus} 分類與缺 key／未載入時的 enriched 診斷
-     * （完整 key 與可用語系）。</p>
+     * （完整 key 與可用語系）。模板找不到且語言檔損壞時，兩者語意不同：
+     * 一般路徑維持 1.4.0 語意（缺 key，{@code ACELIB-MSG-001}），
+     * 診斷路徑回報渲染失敗（{@code ACELIB-MSG-003}）；診斷語意只由本方法提供。</p>
      *
      * @param key 訊息 key；不可為 null
      * @param vars 變數替換表；可為 null
@@ -551,7 +553,7 @@ public final class MessageService {
      */
     public DetailedRender renderDetailed(String key, Map<String, Object> vars) {
         Objects.requireNonNull(key, "key");
-        return renderDetailedPipeline(key, vars, null, false, 0);
+        return renderDetailedPipeline(key, vars, null, false, 0, true);
     }
 
     /**
@@ -571,7 +573,7 @@ public final class MessageService {
      */
     public DetailedRender renderDetailed(String key, Map<String, Object> vars, Locale locale) {
         Objects.requireNonNull(key, "key");
-        return renderDetailedPipeline(key, vars, locale, false, 0);
+        return renderDetailedPipeline(key, vars, locale, false, 0, true);
     }
 
     /**
@@ -582,17 +584,24 @@ public final class MessageService {
      */
     private RenderedMessage renderInternal(String key, Map<String, Object> vars, Locale locale,
                                            boolean clickHints, int maxLength) {
-        return renderDetailedPipeline(key, vars, locale, clickHints, maxLength).rendered();
+        return renderDetailedPipeline(key, vars, locale, clickHints, maxLength, false).rendered();
     }
 
     /**
-     * 帶狀態的單一渲染管線：本體邏輯與 {@link #renderInternal} 共用，
-     * 保證 {@link RenderedMessage} 的內容、診斷字串與記錄完全一致，
+     * 帶狀態的單一渲染管線：模板找得到時，本體邏輯與 {@link #renderInternal} 共用，
+     * 兩者的 {@link RenderedMessage} 內容、診斷字串與記錄完全一致，
      * 外加 {@link RenderStatus} 分類與 enriched 診斷。
+     *
+     * <p>模板找不到時依 {@code diagnostic} 分流：一般路徑（false）維持 1.4.0
+     * 輕量語意（缺 key，不做任何磁碟驗證）；診斷路徑（true）先驗證載入失敗，
+     * 再區分缺 key／語系未載入並附可用語系。</p>
+     *
+     * @param diagnostic 是否為診斷路徑；一般渲染傳 false，renderDetailed 傳 true
      */
     private DetailedRender renderDetailedPipeline(String key, Map<String, Object> vars,
                                                   Locale locale,
-                                                  boolean clickHints, int maxLength) {
+                                                  boolean clickHints, int maxLength,
+                                                  boolean diagnostic) {
         // mock 情境下 getCurrentLocale()/getDefaultLocale() 可能回傳 null；
         // 真實 LangManager 建構時即設預設語系，不受影響。此處逐層退回，永不 NPE。
         Locale effective = locale != null ? locale : lang.getCurrentLocale();
@@ -622,6 +631,16 @@ public final class MessageService {
             RenderedMessage missing = new RenderedMessage(key, effective, Component.empty(), "", "",
                 true, "[" + ERR_KEY_MISSING + "] message key missing: " + key
                     + " (locale=" + effective + ")");
+            if (!diagnostic) {
+                // 一般渲染路徑：維持 1.4.0 輕量語意。缺 key 直接回報，
+                // 不做驗證性讀取、不列目錄、不探測內建資源，避免在呼叫端
+                // 執行緒（例如 Folia region 執行緒）上觸發磁碟 I/O。
+                // 語言檔損壞的診斷語意只由 renderDetailed 提供。
+                safeLog(Level.WARNING,
+                    "[" + ERR_KEY_MISSING + "] message key missing: {0}", key);
+                return new DetailedRender(missing, RenderStatus.KEY_MISSING, List.of(),
+                    missing.diagnosis());
+            }
             Locale requested = locale != null ? locale : lang.getCurrentLocale();
             Locale def = lang.getDefaultLocale();
             // LangManager 的 per-locale 讀取會把「檔案損壞」吞成空（負向快取），

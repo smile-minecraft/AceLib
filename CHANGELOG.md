@@ -23,7 +23,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 ### 新增內容（第四階段 訊息、設定與資料的新增介面）
 
-- 訊息渲染現在可以分辨失敗原因：`MessageService#renderDetailed` 回傳 `DetailedRender`，以 `RenderStatus` 區分語系尚未載入（`LOCALE_NOT_LOADED`，整條查找鏈皆無內容）、缺 key（`KEY_MISSING`）與渲染失敗（`RENDER_FAILED`）。缺 key 的診斷帶完整 key 與可用語系；`RenderedMessage` 本身的內容、診斷字串與記錄維持不變。
+- 訊息渲染現在可以分辨失敗原因：`MessageService#renderDetailed` 回傳 `DetailedRender`，以 `RenderStatus` 區分語系尚未載入（`LOCALE_NOT_LOADED`，整條查找鏈皆無內容）、缺 key（`KEY_MISSING`）與渲染失敗（`RENDER_FAILED`）。缺 key 的診斷帶完整 key 與可用語系；一般渲染（`render`／`format`／`formatComponent`／`formatFormText`）維持 1.4.0 語意（缺 key 回 `missingKey=true`＋`ACELIB-MSG-001`，不做磁碟驗證），診斷三態與 `RENDER_FAILED` 由 `renderDetailed` 提供（此路徑在語言檔損壞時回 `missingKey=false`＋`ACELIB-MSG-003`）。
 - 發送訊息新增回傳結果的入口：`sendChatWithFallbackResult`、`sendActionBarWithFallbackResult`、`sendTitleWithFallbackResult`、`broadcastWithFallbackResult` 回傳 `SendResult`（是否送達、是否確實套用基岩降級）。舊的 void 入口改為委派，行為不變；`fallbackApplied` 只代表降級已套用到送出的 Component，不代表客戶端已經看見。
 - 基岩降級新增 `BedrockFallbackStyle.PLAIN_TEXT` 攤平選項（整體轉純文字）；預設仍為 `HINTS` 提示風格。
 - 新增 `MessageService#formatPlain`：給 console 與外部頻道用的純文字輸出，去除全部 MiniMessage 標記只留可讀文字，可選是否帶 `message.prefix`（預設不帶）。
@@ -38,7 +38,7 @@ AceLib 使用語意化版本。安裝與取得方式請看[如何取得 AceLib](
 
 ### 新增內容（第五階段 介面版面）
 
-- GUI 版面：新增字元遮罩 GuiMask（列數 1～6、每列等長、總格須為合法箱子尺寸）與按鈕物品（宣告時複製，開啟時於玩家所在執行緒放入同欄；純回呼按鈕不變）。
+- GUI 版面：新增字元遮罩 GuiMask（列數 1～6、每列等長、總格須為合法箱子尺寸）與按鈕物品（宣告時只存參照，開啟時於玩家所在執行緒放入同欄前複製；純回呼按鈕不變）。
 - GUI 分頁清單：新增 `GuiPager`（遮罩三符號＋標題前綴＋項目渲染器的不可變描述子），以 `GuiPage` 資料組出上一頁／下一頁／頁碼與空／載入中／錯誤三種畫面；翻頁由呼叫端在回呼內取新頁再開（不做資料綁定、不記狀態）。按鈕宣告可帶基岩可見文字（label，可為 null＝不進表單），`GuiView#buttonLabels` 讀取標籤表，`GuiFlowStep#labeled` 依欄位升序把有標籤的按鈕排成簡單表單（轉移表索引對應該順序；全無標籤時退回純 Java 步驟）。既有建構子與兩份宣告模式不變；consumer 範例新增名單翻頁與標籤步驟。
 - 分頁元件新增可選的上一頁／下一頁物品圖示；圖示只在有目標頁時出現，未設定圖示的既有點擊行為不變。GUI 相容性探針的分頁導覽與項目改用可見物品，方便觀察與操作。
 

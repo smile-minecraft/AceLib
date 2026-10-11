@@ -108,7 +108,7 @@ switch (detailed.status()) {
 }
 ```
 
-- `rendered()` 與 `render` 的結果完全一致（同一份 Component、字串與診斷）；`diagnosis()` 是 enriched 版本：缺 key 時含完整 key 與可用語系（例如 `availableLocales=[en_US, zh_TW]`），語系未載入時含請求語系與預設語系。指定語系檔損壞且其他層也沒有該 key 時為渲染失敗（`RENDER_FAILED`），診斷保留解析錯誤的原因；其他層有該 key 時仍正常回退。
+- `rendered()` 與 `render` 的結果在模板找得到時完全一致（同一份 Component、字串與診斷）；模板找不到且語言檔健康時也一致（同為缺 key）。語言檔損壞時兩者不同：一般路徑維持缺 key（`ACELIB-MSG-001`），診斷路徑為渲染失敗（`RENDER_FAILED`，`ACELIB-MSG-003`）；`diagnosis()` 是 enriched 版本：缺 key 時含完整 key 與可用語系（例如 `availableLocales=[en_US, zh_TW]`），語系未載入時含請求語系與預設語系。指定語系檔損壞且其他層也沒有該 key 時為渲染失敗（`RENDER_FAILED`），診斷保留解析錯誤的原因；其他層有該 key 時仍正常回退。
 - 「語系未載入」指整條查找鏈都沒有內容：請求語系與預設語系的磁碟檔都不存在，且內建資源也沒有。任一層有內容但 key 不存在時，屬於缺 key。
 - `availableLocales()` 只掃描磁碟 `lang/` 目錄下的檔案；plugin JAR 內的內建資源無法枚舉，不列入。若服上只有內建資源而沒有磁碟檔，清單為空不代表沒有語系。
 - 指定語系的版本是 `renderDetailed(key, vars, locale)`；`locale` 為 `null` 時跟隨全域目前語系。
